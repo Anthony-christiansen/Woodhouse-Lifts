@@ -19,7 +19,7 @@ let authReturn = (() => {
 let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
 export const APP_VERSION = '1.5.0'; // keep in sync with CHANGELOG.md
 const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
-const DOC_URL = 'https://docs.google.com/document/d/1uapOKm5cu_q5ykxgIZLQbqdjSkGrRUGiy3Zc838VOa8';
+const DOC_URL = 'https://docs.google.com/document/d/1lVTXsfzhUqOJ4bQRp0rp8nKUJsZa62Uasf7cR_FITlE';
 
 const app = document.getElementById('app');
 const titleEl = document.getElementById('title');
