@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+# personal training data stays out of this public repo
+supabase/seed/rp_*
