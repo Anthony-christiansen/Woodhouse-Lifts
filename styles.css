@@ -164,3 +164,17 @@ svg.chart { width: 100%; height: 160px; display: block; }
 .set .dir.good { color: var(--accent); }
 .set .dir.back { color: var(--warn); }
 .set .dir.level { color: var(--muted); }
+/* Learn */
+.kv { display: grid; grid-template-columns: minmax(96px, 34%) 1fr; gap: 6px 12px; margin: 6px 0; }
+.kv .k { color: var(--muted); font-size: 13px; }
+.kv .v { overflow-wrap: anywhere; }
+.prose p { line-height: 1.5; margin: 0 0 10px; }
+.example { background: #12301d; border: 1px solid #1f5c36; border-radius: 10px; padding: 10px 12px; }
+.example p { margin: 4px 0 0; }
+.srcs { display: grid; gap: 6px; }
+.srcs a { display: block; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 13px; color: var(--info); text-decoration: none; overflow-wrap: anywhere; }
+table.goals { font-size: 13px; }
+table.goals th { text-align: left; color: var(--muted); font-weight: 500; font-size: 12px; padding: 4px 6px 6px 0; }
+table.goals td { padding: 8px 6px 8px 0; vertical-align: top; border-top: 1px solid var(--line); cursor: pointer; }
+@media (max-width: 380px) { table.goals { font-size: 12px; } table.goals th:nth-child(4), table.goals td:nth-child(4) { display: none; } }
+.set .range, .range { margin-top: 2px; }

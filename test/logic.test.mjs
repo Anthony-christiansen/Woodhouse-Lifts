@@ -101,3 +101,24 @@ console.log('ALL LOGIC TESTS PASSED');
   assert.deepEqual(L.slipWarnings({ exercises: [{ name: 'A', muscle: 'Chest', weeks: [wk(1, 100, 10), wk(2, 100, 11)] }] }), []);
 }
 console.log('SLIP TESTS PASSED');
+
+// Equivalent-effort reps when the weight changes (doc §4.1)
+{
+  const ex = { load_type: 'weighted', rep_min: 8, rep_max: 30 };
+  const prev = { weight: 200, reps: 15, rir: 2 };              // e1RM ≈ 313
+  const same = L.repsAtLoad({ prev, ex, weight: 200, targetRir: 2 });
+  assert.deepEqual([same.lo, same.hi], [15, 16]);              // same load, same RIR → match 15, aim 16
+  const drop = L.repsAtLoad({ prev, ex, weight: 180, targetRir: 2 });
+  assert.ok(drop.lo >= 19 && drop.lo <= 21 && !drop.outside);  // lighter → more reps
+  const closer = L.repsAtLoad({ prev, ex, weight: 200, targetRir: 1 });
+  assert.equal(closer.lo, 16);                                 // 1 RIR closer to failure → +1 rep
+  assert.equal(L.repsAtLoad({ prev, ex, weight: 290, targetRir: 2 }).outside, 'heavy');
+  assert.equal(L.repsAtLoad({ prev, ex, weight: 100, targetRir: 2 }).outside, 'light');
+  const wr = L.weightRange({ prev, ex, targetRir: 2, unit: 'lb' });
+  assert.ok(wr.light < 200 && wr.heavy > 200 && wr.heavy % 5 === 0 && wr.light % 5 === 0);
+  // round-trip: the ends of the window land inside the rep range
+  assert.ok(L.repsAtLoad({ prev, ex, weight: wr.heavy, targetRir: 2 }).lo >= 8);
+  assert.ok(L.repsAtLoad({ prev, ex, weight: wr.light, targetRir: 2 }).lo <= 30);
+  assert.equal(L.weightRange({ prev, ex: { load_type: 'bodyweight' }, targetRir: 2 }), null);
+}
+console.log('RANGE TESTS PASSED');

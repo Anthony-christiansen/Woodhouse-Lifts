@@ -1,5 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import * as L from './logic.js?v=7';
+import * as L from './logic.js?v=9';
+import * as LEARN from './learn.js?v=9';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -40,6 +41,14 @@ function toast(msg, err = false) {
   document.body.appendChild(t); setTimeout(() => t.remove(), err ? 4500 : 1800);
 }
 function check(res) { if (res.error) { console.error(res.error); toast(res.error.message, true); throw res.error; } return res.data; }
+// Supabase returns at most 1,000 rows per request; page through everything. build() must return a fresh, fully ordered query.
+async function fetchAll(build, page = 1000) {
+  const out = [];
+  for (let from = 0; ; from += page) {
+    const rows = check(await build().range(from, from + page - 1));
+    out.push(...rows); if (rows.length < page) return out;
+  }
+}
 function setHeader(title, back, tab) {
   titleEl.textContent = title;
   backBtn.hidden = !back; backBtn.onclick = () => go(back);
@@ -78,7 +87,7 @@ const routes = {
   '': renderHome, mesos: renderMesos, train: renderMesos, new: renderBuilder, meso: renderMeso, workout: renderWorkout,
   explore: renderExplore, history: renderHistory, progress: renderProgress, volume: renderVolume,
   cardio: renderCardio, library: renderLibrary, exercises: () => renderLibrary('exercises'), templates: () => renderLibrary('templates'),
-  settings: renderSettings,
+  settings: renderSettings, learn: renderLearn,
 };
 async function route() {
   closeSheet();
@@ -244,8 +253,8 @@ async function renderHome() {
   const ws = weekStart(); const eightAgo = new Date(ws); eightAgo.setDate(eightAgo.getDate() - 7 * 7);
   const [cSess, cSets, allSets, warnings, mesoCount] = await Promise.all([
     cardioSince(isoDay(eightAgo)), workoutCardioSince(eightAgo.toISOString()),
-    sb.from('sets').select('weight, reps, rir, completed_at, workout_exercises!inner(id, exercise_id, target_rir, exercises(id, name, muscle_group, load_type))')
-      .not('completed_at', 'is', null).is('duration_min', null).order('completed_at').limit(10000).then(check),
+    fetchAll(() => sb.from('sets').select('weight, reps, rir, set_type, completed_at, workout_exercises!inner(id, exercise_id, target_rir, exercises(id, name, muscle_group, load_type))')
+      .not('completed_at', 'is', null).is('duration_min', null).order('completed_at').order('id')),
     meso ? slipFor(meso) : Promise.resolve([]),
     sb.from('mesocycles').select('id', { count: 'exact', head: true }).then(x => x.count || 0),
   ]);
@@ -259,9 +268,11 @@ async function renderHome() {
   const lift = allSets.filter(s => s.workout_exercises.exercises.load_type !== 'cardio');
   const setsPerWeek = weeks.map(s => lift.filter(x => inWeek(x.completed_at.slice(0, 10), s)).length);
   const cardioPerWeek = weeks.map(s => cardio.filter(c => inWeek(c.date, s)).reduce((a, c) => a + c.minutes, 0));
-  // Strength movers & PRs by exercise (best e1RM per session).
+  // Strength movers & PRs by exercise (best e1RM per session). Like-for-like only: deload sessions (≈4 RIR, lighter
+  // on purpose) and myo-rep mini-sets (short rest) would otherwise read as strength loss.
   const byEx = {};
   for (const x of lift) {
+    if (x.reps == null || x.set_type === 'myorep' || (x.workout_exercises.target_rir ?? 0) >= 4) continue;
     const ex = x.workout_exercises.exercises, sid = x.workout_exercises.id;
     const e = byEx[ex.id] = byEx[ex.id] || { ex, sessions: new Map() };
     const s = e.sessions.get(sid) || { date: x.completed_at, sets: [] };
@@ -274,8 +285,9 @@ async function renderHome() {
     if (ss.length < 2) continue;
     const last = ss[ss.length - 1], prevBest = Math.max(...ss.slice(0, -1).map(s => s.e));
     if (new Date(last.date) > twoWeeksAgo && last.e > prevBest) prs.push({ name: ex.name, pct: (last.e - prevBest) / prevBest * 100, date: last.date });
-    const base = ss.find(s => new Date(s.date) > eightWeeksAgo) || ss[0];
-    if (base !== last) movers.push({ name: ex.name, pct: (last.e - base.e) / base.e * 100 });
+    // Only exercises trained at least twice in the last 8 weeks, compared within that window.
+    const base = ss.find(s => new Date(s.date) > eightWeeksAgo);
+    if (base && base !== last) movers.push({ name: ex.name, pct: (last.e - base.e) / base.e * 100 });
   }
   movers.sort((a, b) => b.pct - a.pct);
   const totalWorkouts = new Set(allSets.map(x => x.completed_at.slice(0, 10))).size;
@@ -326,6 +338,8 @@ async function renderHome() {
     <div class="grid2">
       <button class="tile" data-go="#/cardio"><span class="ico">♥︎</span><b>Log cardio</b><span class="muted small">Time + intensity</span></button>
       <button class="tile" data-go="#/volume"><span class="ico">📊</span><b>Volume</b><span class="muted small">Sets per muscle</span></button>
+      <button class="tile" data-go="#/learn"><span class="ico">🎓</span><b>Learn</b><span class="muted small">Sets, reps &amp; why</span></button>
+      <button class="tile" data-go="#/progress"><span class="ico">📈</span><b>Progress</b><span class="muted small">Strength per lift</span></button>
     </div>`;
   $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
 }
@@ -646,9 +660,9 @@ async function renderWorkout(dayId) {
   } else {
     // Week 1 carries over from your last finished mesocycle: its final working week for the same exercise.
     const ids = [...new Set(wes.map(w => w.exercise_id))];
-    const hist = ids.length ? check(await sb.from('workout_exercises')
+    const hist = ids.length ? await fetchAll(() => sb.from('workout_exercises')
       .select('exercise_id, target_rir, sets(set_index, weight, reps, rir, duration_min, rpe), workout_days!inner(week, completed_at, mesocycle_id, mesocycles(weeks))')
-      .in('exercise_id', ids).neq('workout_days.mesocycle_id', meso.id).not('workout_days.completed_at', 'is', null)) : [];
+      .in('exercise_id', ids).neq('workout_days.mesocycle_id', meso.id).not('workout_days.completed_at', 'is', null).order('id')) : [];
     for (const h of hist) {
       const d = h.workout_days; if (!h.sets.length || L.rirForWeek(d.week, d.mesocycles?.weeks || 99).deload) continue;
       const cur = prev[h.exercise_id];
@@ -663,9 +677,15 @@ async function renderWorkout(dayId) {
   }
 
   const wLabel = ex => ex.load_type === 'bodyweight' ? `+${unit()}` : ex.load_type === 'assisted' ? `assist ${unit()}` : unit();
+  const baseFor = (we, i) => { const p = prev[we.exercise_id]; return p?.sets.length ? (p.sets[i] || p.sets[p.sets.length - 1]) : null; };
+  // Doc §4.1: if you pick a different weight, re-target reps to match (lo) or beat (hi) last time's effort.
+  const repsFor = (we, i, weight) => deload ? null : L.repsAtLoad({ prev: baseFor(we, i), ex: we.exercises, weight,
+    targetRir: we.target_rir, prevTargetRir: prev[we.exercise_id]?.rir, bodyweight: profile?.bodyweight });
+  const windowFor = we => deload ? null : L.weightRange({ prev: baseFor(we, 0), ex: we.exercises, targetRir: we.target_rir,
+    prevTargetRir: prev[we.exercise_id]?.rir, bodyweight: profile?.bodyweight, unit: unit() });
   const suggestionFor = (we, i) => {
     const p = prev[we.exercise_id]; if (!p?.sets.length) return null;
-    const base = p.sets[i] || p.sets[p.sets.length - 1];
+    const base = baseFor(we, i);
     return L.suggestSet({ prev: base, ex: we.exercises, targetRir: we.target_rir, prevTargetRir: p.rir, deload,
       jointHold: (prevFb[we.exercises.muscle_group]?.joint_pain ?? 0) >= 2, unit: unit() });
   };
@@ -697,7 +717,8 @@ async function renderWorkout(dayId) {
       const p = prev[we.exercise_id];
       return `<div class="card" data-we="${we.id}" data-muscle="${esc(ex.muscle_group)}">
         <div class="row"><div class="grow"><h3>${esc(ex.name)} <span class="trend" data-trend="${we.id}"></span></h3>
-          <div class="muted small">${esc(ex.muscle_group)} · ${we.target_sets} sets · ${deload ? 'deload' : `${we.target_rir} RIR`} · ${ex.rep_min}–${ex.rep_max} reps</div></div>
+          <div class="muted small">${esc(ex.muscle_group)} · ${we.target_sets} sets · ${deload ? 'deload' : `${we.target_rir} RIR`} · ${ex.rep_min}–${ex.rep_max} reps</div>
+          ${(w => w ? `<div class="muted tiny range">Weight window ${fmt(w.light)}–${fmt(w.heavy)} ${unit()} · change the weight and the reps re-target to match last time</div>` : '')(windowFor(we))}</div>
           <button class="ghost sm" data-edit="${esc(ex.muscle_group)}" aria-label="Edit ratings" title="Edit ratings">✎</button></div>
         ${we.flag ? `<div class="pill bad" style="margin-top:6px">${esc(we.flag)}</div>` : ''}
         <div class="sets"><div class="set-head"><div>#</div><div>${wLabel(ex)}</div><div>reps</div><div></div></div>
@@ -829,7 +850,23 @@ async function renderWorkout(dayId) {
       if (markDone && done) enforceRatings();
     };
     row.querySelector('.check').onclick = () => save(true);
-    row.querySelectorAll('input').forEach(i => { i.oninput = () => { i.classList.remove('sug'); updateDirs(we, row); }; i.onchange = () => save(false); });
+    row.querySelectorAll('input').forEach(i => { i.oninput = () => { i.classList.remove('sug'); if (i.dataset.f === 'weight') retarget(we, row); updateDirs(we, row); }; i.onchange = () => save(false); });
+    row.querySelector('[data-f="weight"]').addEventListener('change', () => {
+      const wIn = row.querySelector('[data-f="weight"]'), r = repsFor(we, +row.dataset.idx - 1, wIn.value);
+      if (r?.outside) toast(r.outside === 'heavy' ? `Heavy for this lift — matching last time needs only ~${r.lo} reps (range ${we.exercises.rep_min}–${we.exercises.rep_max})`
+        : `Light for this lift — you'd need ~${r.lo} reps to match last time (range ${we.exercises.rep_min}–${we.exercises.rep_max})`, true);
+      // carry the new weight to later sets that are still on the suggested weight
+      let n = row.nextElementSibling;
+      for (; n; n = n.nextElementSibling) { const nw = n.querySelector('[data-f="weight"]');
+        if (!n.classList.contains('done') && nw?.classList.contains('sug')) { nw.value = wIn.value; retarget(we, n); updateDirs(we, n); } }
+    });
+  }
+  // New weight → new reps target ("lo–hi") in the reps box placeholder; the ✓ button fills in lo if left empty.
+  function retarget(we, row) {
+    const wIn = row.querySelector('[data-f="weight"]'), rIn = row.querySelector('[data-f="reps"]');
+    if (row.classList.contains('done') || wIn.value === '') return;
+    const r = repsFor(we, +row.dataset.idx - 1, wIn.value); if (!r) return;
+    rIn.placeholder = `${r.lo}–${r.hi}`; rIn.dataset.sug = r.lo;
   }
   function wireCardio(we, row) {
     const save = async markDone => {
@@ -981,6 +1018,7 @@ async function renderCardio() {
 function renderExplore() {
   setHeader('Explore', null, 'explore');
   const items = [
+    ['#/learn', '🎓', 'Learn', 'Sets, reps and effort for size, strength, athleticism and cardio — with the research'],
     ['#/history', '🗂', 'History', 'Every workout and cardio session'],
     ['#/progress', '📈', 'Exercise progress', 'Estimated strength per exercise over time'],
     ['#/volume', '📊', 'Muscle volume', 'Weekly sets per muscle vs. productive range'],
@@ -993,6 +1031,48 @@ function renderExplore() {
   app.innerHTML = items.map(([h, i, t, d]) => `<button class="list-btn" data-go="${h}"><span style="font-size:22px">${i}</span>
     <div class="grow"><b>${t}</b><div class="muted small">${d}</div></div>›</button>`).join('') +
     `<div class="card small muted">How the app decides weights, sets and RIR: <a href="${DOC_URL}" target="_blank" rel="noopener">Training Logic & Evidence</a></div>`;
+  $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
+}
+
+// ---------- Learn ----------
+function renderLearn(sub) {
+  const srcLinks = ids => `<div class="srcs">${ids.map(k => { const s = LEARN.SOURCES[k];
+    return `<a href="https://doi.org/${s.doi}" target="_blank" rel="noopener">${esc(s.t)}</a>`; }).join('')}</div>`;
+  const goal = LEARN.GOALS.find(g => g.id === sub), art = LEARN.ARTICLES.find(a => a.id === sub);
+  if (goal) {
+    setHeader(goal.name, '#/learn', 'explore');
+    const rows = [['Sets / muscle / week', goal.weekly], ['Per session', goal.session], ['Reps & load', goal.reps], ['Effort', goal.effort], ['Rest', goal.rest], ['Frequency', goal.freq]];
+    app.innerHTML = `<div class="card"><div class="kv">${rows.map(([k, v]) => `<div class="k">${k}</div><div class="v">${esc(v)}</div>`).join('')}</div></div>
+      <div class="card"><b>Why</b><p>${esc(goal.why)}</p></div>
+      <h2>Research</h2>${srcLinks(goal.src)}`;
+  } else if (art) {
+    setHeader(art.title, '#/learn', 'explore');
+    app.innerHTML = `<div class="card prose">${art.body.map(p => `<p>${esc(p)}</p>`).join('')}
+      ${art.example ? `<div class="example"><b>Example</b><p>${esc(art.example)}</p></div>` : ''}</div>
+      <h2>Research</h2>${srcLinks(art.src)}`;
+  } else if (sub === 'muscles') {
+    setHeader('Per muscle', '#/learn', 'explore');
+    const d = LEARN.APP_DEFAULTS;
+    app.innerHTML = `<div class="card small muted">Hypertrophy ranges for most people: <b>10–20 hard sets per muscle per week</b>, 2–8 per session, each muscle 2×/week.
+        The app starts lower (numbers below) and adds sets only when your recovery feedback says you can handle them — up to 12 per session and 22 per week.</div>
+      ${LEARN.MUSCLE_GUIDE.map(g => `<div class="card"><div class="row"><b class="grow">${g.m}</b>
+          <span class="pill">start ${d[g.size].focus} focus · ${d[g.size].whole} whole · ${d[g.size].maintain} hold</span></div>
+        <div class="kv small"><div class="k">Reps</div><div class="v">${esc(g.reps)}</div><div class="k">Go-to exercises</div><div class="v">${esc(g.ex)}</div></div>
+        <div class="muted small">${esc(g.note)}</div></div>`).join('')}
+      <div class="card small muted">“start” = weekly sets in week 1 of a new mesocycle: <b>focus</b> on an upper/lower focus plan, <b>whole</b> on a whole-body plan, <b>hold</b> for maintained muscles.</div>`;
+  } else {
+    setHeader('Learn', '#/explore', 'explore');
+    app.innerHTML = `<div class="card small muted">Short, plain-language guides to what the research says — and how the app uses it. Every page links its sources.</div>
+      <h2>By goal</h2>
+      <div class="card"><table class="goals"><thead><tr><th>Goal</th><th>Sets/muscle/wk</th><th>Reps</th><th>Effort</th></tr></thead><tbody>
+        ${LEARN.GOALS.map(g => `<tr data-go="#/learn/${g.id}"><td><b>${g.ico} ${esc(g.name.split(' (')[0])}</b></td><td>${esc(g.weekly.replace(' per muscle', ''))}</td>
+          <td>${esc(g.reps.split(';')[0].split(' at ')[0])}</td><td>${esc(g.effort.split(' — ')[0].split(' (')[0])}</td></tr>`).join('')}
+      </tbody></table><div class="muted tiny" style="margin-top:6px">Tap a row for sessions, rest, frequency and the why.</div></div>
+      <button class="list-btn" data-go="#/learn/muscles"><span style="font-size:22px">🧍</span><div class="grow"><b>Per muscle</b><div class="muted small">Sets, reps and go-to exercises for each muscle</div></div>›</button>
+      <h2>Read</h2>
+      ${LEARN.ARTICLES.map(a => `<button class="list-btn" data-go="#/learn/${a.id}"><div class="grow"><b>${esc(a.title)}</b><div class="muted small">${esc(a.body[0].slice(0, 90))}…</div></div>›</button>`).join('')}
+      <div class="card small muted">The full rules the app follows: <a href="${DOC_URL}" target="_blank" rel="noopener">Training Logic &amp; Evidence</a></div>`;
+  }
   $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
 }
 
@@ -1014,8 +1094,10 @@ async function renderHistory() {
 
 async function renderProgress(exId) {
   setHeader('Exercise progress', exId ? '#/progress' : '#/explore', 'explore');
-  const rows = check(await sb.from('sets').select('weight, reps, rir, completed_at, workout_exercises!inner(id, exercise_id, exercises(*))')
-    .not('completed_at', 'is', null).order('completed_at').limit(5000));
+  const rows = (await fetchAll(() => sb.from('sets').select('weight, reps, rir, set_type, completed_at, workout_exercises!inner(id, exercise_id, target_rir, exercises(*))')
+    .not('completed_at', 'is', null).order('completed_at').order('id')))
+    .filter(r => r.set_type !== 'myorep' && (r.workout_exercises.target_rir ?? 0) < 4)
+    .map(r => ({ ...r, rir: r.rir ?? r.workout_exercises.target_rir }));
   const bw = profile?.bodyweight;
   const byEx = {};
   for (const r of rows) {

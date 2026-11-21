@@ -239,6 +239,38 @@ export function suggestSet({ prev, ex, targetRir, prevTargetRir, deload, jointHo
 }
 
 /**
+ * Doc §4.1 — equivalent-effort reps when you pick a different weight than suggested.
+ * Uses last time's set as the strength benchmark (same e1RM model as §1.7: load × (1 + (reps + RIR)/30))
+ * and solves for the reps at the new load and this week's target RIR.
+ * Returns { lo, hi, outside } — lo = match last time, hi = beat it by one rep;
+ * outside = 'heavy' | 'light' when the matching reps fall outside the exercise's effective rep range.
+ */
+export function repsAtLoad({ prev, ex, weight, targetRir, prevTargetRir, bodyweight }) {
+  if (!prev || prev.reps == null || weight == null || weight === '') return null;
+  const bench = e1rm({ ...prev, rir: prev.rir ?? prevTargetRir ?? targetRir }, ex, bodyweight);
+  const load = effectiveLoad(weight, ex?.load_type, bodyweight);
+  if (!bench || load <= 0) return null;
+  const reps = 30 * (bench / load - 1) - (targetRir ?? 0);
+  const lo = Math.max(1, Math.round(reps)), hi = lo + 1;
+  const min = ex?.rep_min ?? 5, max = ex?.rep_max ?? 30;
+  return { lo, hi, outside: lo < min ? 'heavy' : lo > max ? 'light' : null };
+}
+
+/**
+ * Doc §4.1 — the weight window that keeps the matching reps inside the exercise's rep range
+ * (heaviest = rep_min, lightest = rep_max), rounded to the load increment. Weighted lifts only.
+ */
+export function weightRange({ prev, ex, targetRir, prevTargetRir, bodyweight, unit }) {
+  if (!prev || prev.reps == null || ex?.load_type !== 'weighted') return null;
+  const bench = e1rm({ ...prev, rir: prev.rir ?? prevTargetRir ?? targetRir }, ex, bodyweight);
+  if (!bench) return null;
+  const inc = increment(ex, unit), min = ex?.rep_min ?? 5, max = ex?.rep_max ?? 30, t = targetRir ?? 0;
+  const heavy = Math.floor(bench / (1 + (min + t) / 30) / inc) * inc;
+  const light = Math.ceil(bench / (1 + (max + t) / 30) / inc) * inc;
+  return light <= heavy ? { light, heavy } : null;
+}
+
+/**
  * Doc §5 — next week's set change for one muscle in one session.
  * R recovery, L workload, J joint pain, P pump (0–3), F performance (−1/0/1). Missing → treated as neutral.
  */

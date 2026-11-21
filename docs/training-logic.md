@@ -168,6 +168,21 @@ The app uses double progression anchored to RIR. It works from last week's same 
 
 The weight is prefilled in grey and the target reps show as the placeholder. Tapping ✓ accepts both.
 
+### 4.1 Choosing a different weight: equivalent-effort reps and the weight window
+
+If you type a weight other than the suggestion, the app re-targets the reps so the effort still matches last time. It uses the same strength estimate as §1.7, e1RM = load × (1 + (reps + RIR) / 30), from last week's same set, and solves for reps at your new load and this week's target RIR.
+
+- The reps box shows a range **lo–hi**: lo matches last time's estimated strength, hi beats it by one rep. Tapping ✓ with the box empty logs lo.
+- Later sets that are still on the suggested weight take the new weight too, and are re-targeted the same way.
+- The small ▲ / = / ▼ next to weight and reps compares each to the same set last time. Green means progress, amber means backed off. For assisted lifts, less assistance counts as progress.
+- Example: last week 200 lb × 15 at 2 RIR (e1RM ≈ 313). This week, same 2 RIR, you pick 180 lb → **20–21 reps**. Pick 220 lb → **11–12 reps**.
+
+**Weight window.** Under each weighted exercise the app shows the span of weights for which those matched reps stay inside the exercise's rep range. The heaviest end lands at the rep minimum, the lightest at the rep maximum, both rounded to the load increment. If you go outside it, you get a warning:
+- **Too heavy** turns a hypertrophy set into a low-rep strength set.
+- **Too light** needs so many reps that the set becomes an endurance grind and RIR is hard to judge.
+
+Light and heavy loads build similar muscle when sets end near failure (Schoenfeld 2017, ACSM 2026), so any weight in the window is a valid choice. The window just keeps the effort comparable week to week. Deload weeks skip re-targeting.
+
 ---
 
 ## 5. Set (volume) adjustment, per muscle per session
@@ -286,3 +301,12 @@ In week 1 of a new mesocycle, each exercise's weight is auto-matched from your l
 
 23. Reed JL, Pipe AL. The talk test: a useful tool for prescribing and monitoring exercise intensity. *Curr Opin Cardiol* 2014. https://doi.org/10.1097/HCO.0000000000000097
 24. Foster C et al. The talk test as a marker of exercise training intensity. *J Cardiopulm Rehabil Prev* 2008. https://doi.org/10.1097/01.HCR.0000311504.41775.78
+25. Currier BS et al. American College of Sports Medicine Position Stand: Resistance Training Prescription for Muscle Function, Hypertrophy, and Physical Performance in Healthy Adults. *Med Sci Sports Exerc* 2026. https://doi.org/10.1249/MSS.0000000000003897
+26. Ralston GW et al. The Effect of Weekly Set Volume on Strength Gain: A Meta-Analysis. *Sports Med* 2017. https://doi.org/10.1007/s40279-017-0762-7
+27. Schoenfeld BJ et al. Longer Interset Rest Periods Enhance Muscle Strength and Hypertrophy in Resistance-Trained Men. *J Strength Cond Res* 2016. https://doi.org/10.1519/JSC.0000000000001272
+28. Bull FC et al. World Health Organization 2020 guidelines on physical activity and sedentary behaviour. *Br J Sports Med* 2020. https://doi.org/10.1136/bjsports-2020-102955
+29. Milanović Z et al. Effectiveness of High-Intensity Interval Training (HIT) and Continuous Endurance Training for VO2max Improvements. *Sports Med* 2015. https://doi.org/10.1007/s40279-015-0365-0
+30. Oliver JL et al. The Effects of Strength, Plyometric and Combined Training on Strength, Power and Speed Characteristics in High-Level Male Youth Soccer Players. *Sports Med* 2024. https://doi.org/10.1007/s40279-023-01944-8
+31. Zheng T et al. Effects of plyometric training on jump, sprint, and change of direction performance in adolescent soccer players. *PLoS One* 2025. https://doi.org/10.1371/journal.pone.0319548
+
+Sources 25–31 back the in-app **Learn** pages (goal guides for strength, athleticism, maintenance and cardio).

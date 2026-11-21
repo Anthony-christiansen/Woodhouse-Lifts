@@ -1,0 +1,140 @@
+// Learn: plain-language, evidence-based guidance behind the app's programming.
+// Numbers are ranges from the research (sources at the bottom, all on PubMed); the app's own defaults are called out as such.
+
+export const SOURCES = {
+  acsm26: { t: 'Currier et al. ACSM Position Stand: Resistance Training Prescription for Muscle Function, Hypertrophy, and Physical Performance in Healthy Adults (overview of 137 reviews). Med Sci Sports Exerc 2026', doi: '10.1249/MSS.0000000000003897' },
+  schoen17v: { t: 'Schoenfeld et al. Dose-response of weekly training volume and muscle growth. J Sports Sci 2017', doi: '10.1080/02640414.2016.1210197' },
+  pelland26: { t: 'Pelland et al. The resistance training dose response: weekly volume and frequency meta-regressions. Sports Med 2026', doi: '10.1007/s40279-025-02344-w' },
+  ralston17: { t: 'Ralston et al. The effect of weekly set volume on strength gain: a meta-analysis. Sports Med 2017', doi: '10.1007/s40279-017-0762-7' },
+  schoen17l: { t: 'Schoenfeld et al. Strength and hypertrophy adaptations between low- vs. high-load training. J Strength Cond Res 2017', doi: '10.1519/JSC.0000000000002200' },
+  robinson24: { t: 'Robinson et al. Proximity to failure, strength gain and hypertrophy: dose-response meta-regression. Sports Med 2024', doi: '10.1007/s40279-024-02069-2' },
+  refalo24: { t: 'Refalo et al. Similar hypertrophy training to failure or with reps in reserve. J Sports Sci 2024', doi: '10.1080/02640414.2024.2321021' },
+  schoen19f: { t: 'Schoenfeld et al. How many times per week should a muscle be trained? J Sports Sci 2019', doi: '10.1080/02640414.2018.1555906' },
+  schoen16r: { t: 'Schoenfeld et al. Longer inter-set rest periods enhance strength and hypertrophy in trained men. J Strength Cond Res 2016', doi: '10.1519/JSC.0000000000001272' },
+  bickel11: { t: 'Bickel et al. Exercise dosing to retain resistance training adaptations. Med Sci Sports Exerc 2011', doi: '10.1249/MSS.0b013e318207c15d' },
+  oliver24: { t: 'Oliver et al. Strength, plyometric and combined training on strength, power and speed: meta-analysis. Sports Med 2024', doi: '10.1007/s40279-023-01944-8' },
+  zheng25: { t: 'Zheng et al. Plyometric training on jump, sprint and change of direction: meta-analysis. PLoS One 2025', doi: '10.1371/journal.pone.0319548' },
+  who20: { t: 'Bull et al. World Health Organization 2020 guidelines on physical activity and sedentary behaviour. Br J Sports Med 2020', doi: '10.1136/bjsports-2020-102955' },
+  milan15: { t: 'Milanović et al. HIIT vs continuous endurance training for VO2max: meta-analysis. Sports Med 2015', doi: '10.1007/s40279-015-0365-0' },
+  held26: { t: 'Held et al. Maximizing adaptations in concurrent training: umbrella review. Sports Med 2026', doi: '10.1007/s40279-026-02401-y' },
+  lundberg22: { t: 'Lundberg et al. Concurrent aerobic and strength training and muscle fiber hypertrophy. Sports Med 2022', doi: '10.1007/s40279-022-01688-x' },
+  reed14: { t: 'Reed & Pipe. The talk test for prescribing and monitoring exercise intensity. Curr Opin Cardiol 2014', doi: '10.1097/HCO.0000000000000097' },
+  coleman24: { t: 'Coleman et al. Effects of a one-week deload period during resistance training. PeerJ 2024', doi: '10.7717/peerj.16777' },
+  hotfiel18: { t: 'Hotfiel et al. Advances in delayed-onset muscle soreness (DOMS). Sportverletz Sportschaden 2018', doi: '10.1055/a-0753-1884' },
+};
+
+// Goal cheat sheet. Each cell is "what the research supports" — not a hard rule.
+export const GOALS = [
+  { id: 'hypertrophy', name: 'Muscle size (hypertrophy)', ico: '💪',
+    weekly: '10–20 hard sets per muscle', session: '2–8 sets per muscle (gains flatten past ~8–10)',
+    reps: '5–30 reps; 6–15 is the practical sweet spot', effort: '0–3 RIR (close to, not always at, failure)',
+    rest: '2–3 min on big lifts, 1–2 min on small ones', freq: 'Each muscle 2×+ per week',
+    why: 'Volume is the main dial: more weekly hard sets → more growth, with diminishing returns. Light and heavy loads build similar muscle when sets are taken close to failure; heavier loads build more 1-rep strength.',
+    src: ['acsm26', 'schoen17v', 'pelland26', 'schoen17l', 'robinson24', 'schoen19f', 'schoen16r'] },
+  { id: 'strength', name: 'Maximal strength', ico: '🏋️',
+    weekly: '~5–10+ hard sets per main lift pattern', session: '2–3+ sets per main lift, done early in the session',
+    reps: '1–6 reps at ≥80% of 1RM for the main lifts; accessories 6–12', effort: '1–3 RIR — strength doesn’t need failure',
+    rest: '3–5 min between heavy sets', freq: '2+ sessions per week per lift',
+    why: 'Strength is specific: practice the lift heavy, full range of motion, when you’re fresh. More weekly sets help up to a point; very low volume (≤4 sets/wk) gains least. Going all the way to failure adds fatigue but little extra strength.',
+    src: ['acsm26', 'ralston17', 'robinson24', 'schoen17l', 'schoen16r'] },
+  { id: 'athletic', name: 'Athleticism (power, speed, jumping)', ico: '⚡',
+    weekly: '2–3 power/plyo sessions + 1–2 heavy strength sessions', session: 'Low volume: ~≤24 total fast reps per exercise',
+    reps: 'Power lifts 1–5 reps at 30–70% 1RM, moved as fast as possible; jumps/throws 3–6 per set', effort: 'Far from failure — stop when speed drops',
+    rest: 'Full rest, 2–3+ min; quality over fatigue', freq: '2–3× per week, before tiring work',
+    why: 'Power improves most with moderate loads lifted explosively, Olympic-style lifts and plyometrics. Strength, plyometric and combined training all improve jump, sprint and change-of-direction; heavy strength work is the base under it.',
+    src: ['acsm26', 'oliver24', 'zheng25'] },
+  { id: 'maintain', name: 'Maintenance (busy weeks, cuts, other focus)', ico: '⚖️',
+    weekly: '~⅓ of your normal volume (≈3–6 sets per muscle)', session: '1–3 sets per muscle',
+    reps: 'Same loads as usual — keep the intensity, cut the volume', effort: '1–3 RIR',
+    rest: 'As usual', freq: '1–2× per week per muscle',
+    why: 'Adaptations are easy to keep: about a third of the volume, once a week, holds size and strength in younger adults as long as the loads stay heavy. Older adults need a bit more.',
+    src: ['bickel11'] },
+  { id: 'cardio', name: 'Cardio & heart health', ico: '♥︎',
+    weekly: '150–300 min moderate, or 75–150 min vigorous (or a mix)', session: '20–60 min easy/steady, or 10–25 min of intervals',
+    reps: 'Intervals: e.g. 4–6 × 2–4 min hard / equal easy', effort: 'Easy = can talk in sentences; hard = only a few words',
+    rest: 'Interval recoveries ~1:1 with the work', freq: '3–5 days per week, plus 2+ strength days',
+    why: 'WHO minimums for health. Both steady cardio and intervals raise VO₂max a lot; intervals a little more per minute. Mixed with lifting, cardio costs little muscle if it’s moderate, low-impact (bike, incline walk) and kept apart from leg days.',
+    src: ['who20', 'milan15', 'held26', 'lundberg22', 'reed14'] },
+];
+
+// Per-muscle quick reference. App defaults are what new mesocycles start from (doc §2); feedback grows them.
+export const MUSCLE_GUIDE = [
+  { m: 'Chest', size: 'large', reps: '6–15', ex: 'Presses (flat/incline, machine), flyes', note: 'Presses also train front delts and triceps.' },
+  { m: 'Back', size: 'large', reps: '6–15', ex: 'Rows, pulldowns/pull-ups, pullovers', note: 'Pulling also trains biceps and rear delts.' },
+  { m: 'Quads', size: 'large', reps: '6–15 (squats), 10–20 (extensions)', ex: 'Squat/hack/leg press, lunges, leg extension', note: 'Most fatiguing per set — keep 1–3 RIR on big compound sets.' },
+  { m: 'Hamstrings', size: 'large', reps: '6–12 (hinges), 10–20 (curls)', ex: 'RDL/stiff-leg deadlift + a leg curl', note: 'Train both a hip hinge and a knee-flexion curl.' },
+  { m: 'Glutes', size: 'large', reps: '8–20', ex: 'Hip thrust, lunges/split squats, abduction', note: 'Squats and lunges already add a lot of glute work.' },
+  { m: 'Shoulders', size: 'small', reps: '10–25', ex: 'Lateral raises, rear-delt flyes, overhead press', note: 'Side and rear delts need direct work; front delts get plenty from pressing.' },
+  { m: 'Biceps', size: 'small', reps: '8–20', ex: 'Curls (preacher, incline, cable), hammer curls', note: 'Rows and pull-ups count partly — adjust if recovery lags.' },
+  { m: 'Triceps', size: 'small', reps: '8–20', ex: 'Pushdowns, overhead extensions, close-grip press', note: 'Overhead work trains the long head through a longer stretch.' },
+  { m: 'Calves', size: 'small', reps: '8–20 with a full stretch and pause', ex: 'Standing and seated calf raises, leg-press calves', note: 'Use full range; bouncing short reps shortchanges them.' },
+  { m: 'Traps', size: 'minor', reps: '10–20', ex: 'Shrugs, upright rows', note: 'Deadlifts and rows give them indirect work.' },
+  { m: 'Abs', size: 'minor', reps: '10–20', ex: 'Machine/cable crunch, hanging leg raise', note: 'Treat like any muscle: load it and progress it.' },
+  { m: 'Forearms', size: 'minor', reps: '12–25', ex: 'Wrist curls, hammer curls', note: 'Heavy pulling and carries cover a lot of grip work.' },
+];
+export const APP_DEFAULTS = { large: { focus: 10, whole: 8, maintain: 4 }, small: { focus: 8, whole: 6, maintain: 4 }, minor: { focus: 6, whole: 3, maintain: 3 } };
+
+// Short articles. Each block: paragraphs, optional bullets/example, sources.
+export const ARTICLES = [
+  { id: 'volume', title: 'Hard sets: the number that matters most',
+    body: [
+      'A “hard set” is a working set taken within about 0–4 reps of failure. Warm-ups don’t count. For muscle growth, weekly hard sets per muscle is the strongest dial you control.',
+      'More sets → more growth, but each extra set buys a little less. Most people do well between 10 and 20 sets per muscle per week. Per session, returns flatten past roughly 8–10 sets for one muscle — after that, spreading sets onto another day works better than piling them on.',
+      'This is why the app starts each mesocycle at a modest volume and only adds sets when your feedback (recovery, workload, joints, performance) says you can handle more, with caps of 12 sets per muscle per session and 22 per week.',
+    ],
+    example: 'Chest at 12 sets/week, 2 sessions: 6 + 6 beats 12 in one day. Week 1 might be 3 sets of press + 3 sets of flyes on each day.',
+    src: ['schoen17v', 'pelland26', 'acsm26'] },
+  { id: 'rir', title: 'Reps in reserve (RIR) and why week 1 is “easy”',
+    body: [
+      'RIR is how many more clean reps you could have done. 0 RIR = failure. Growth is similar anywhere from failure out to ~3 RIR; strength gains don’t depend much on how close you go. Going to failure on every set mostly adds fatigue.',
+      'So the app starts a mesocycle at 3 RIR and steps down toward 0–1 by the last hard week, then deloads. Early weeks set your baseline; later weeks push. If a muscle’s recovery or joints struggle, the app holds RIR instead of stepping closer to failure.',
+    ],
+    example: 'Last week 100 lb × 12 at 3 RIR. This week the target is 2 RIR → about 13 reps at 100 lb, or 105 lb × ~11.',
+    src: ['robinson24', 'refalo24'] },
+  { id: 'reps', title: 'Rep ranges and the “weight window”',
+    body: [
+      'For size, almost any rep range from ~5 to 30 works when sets end near failure. Heavier sets (lower reps) build more max strength; very light sets get painful and are harder to judge. That’s why each exercise in the app has a rep range (e.g. 8–15).',
+      'Your strength on a lift can be estimated from any set: weight × (1 + (reps + RIR) ÷ 30). The app uses this to keep you honest when you change the weight: drop the weight and it asks for more reps; go heavier and it asks for fewer — so the effort matches (or beats) last time.',
+      'The “weight window” under each exercise is the span of weights where those matched reps still land inside that exercise’s rep range. Outside it, the app warns you: too heavy turns a hypertrophy set into a strength single; too light turns it into a long, painful endurance set.',
+    ],
+    example: 'Last time: 200 lb × 15 at 2 RIR. Want 180 today (same 2 RIR)? Matching reps ≈ 20 — aim for 21 to beat it. At 220 you’d need only ~11.',
+    src: ['schoen17l', 'acsm26'] },
+  { id: 'frequency', title: 'How often to train each muscle',
+    body: [
+      'With weekly sets held equal, training a muscle 2× vs 3× a week grows about the same. Frequency matters mostly as a way to fit in volume without bloated sessions. Twice a week per muscle is the practical minimum when you’re trying to grow it.',
+      'For strength, practicing a lift 2–3× a week helps, because skill is part of strength.',
+    ],
+    src: ['schoen19f', 'pelland26', 'acsm26'] },
+  { id: 'rest', title: 'Rest between sets',
+    body: [
+      'In trained lifters, 3-minute rests beat 1-minute rests for both strength and size on the same program — short rests made later sets worse. Rest until you can repeat a quality set: ~2–3 min on compound lifts, 1–2 min on small isolation moves, 3–5 min for heavy strength work.',
+    ],
+    src: ['schoen16r'] },
+  { id: 'feedback', title: 'Soreness, pump and what the app asks you',
+    body: [
+      'Soreness is a poor growth signal: it fades as you adapt even while you keep growing. Pump is a short-lived sign of a good stimulus, not proof of growth. Neither should be chased.',
+      'The app still asks about them because, combined with workload, joint pain and whether your reps went up, they tell it whether you recovered — and recovery is what decides if you can handle more sets next week.',
+    ],
+    src: ['hotfiel18', 'robinson24'] },
+  { id: 'deload', title: 'Deloads',
+    body: [
+      'A deload is a planned easy week: about half the sets, same or slightly lighter weights, far from failure. It clears fatigue so the next mesocycle starts fresh. In research on one-week deloads, muscle size was kept; any effect on strength was small.',
+      'The app makes the last week of each mesocycle a deload automatically, with sets based on your final hard week.',
+    ],
+    src: ['coleman24'] },
+  { id: 'cardio', title: 'Cardio with lifting — and the talk test',
+    body: [
+      'For health, aim for 150–300 minutes of moderate cardio a week (or 75–150 vigorous) plus 2+ strength days.',
+      'Intensity without gadgets: the talk test. If you can talk in full sentences it’s easy/moderate (zone 2); a few words at a time is hard; no talking is all-out. The app’s “breathing” rating for cardio uses this scale.',
+      'Cardio and lifting mix well. The small interference effect on muscle growth shows up mainly with lots of running. Prefer cycling or incline walking on lifting weeks, keep hard intervals away from leg day, and leave a few hours (ideally a day) between hard cardio and heavy legs.',
+    ],
+    example: 'A lifting-first week: 4 lifting days + 3× 40 min zone-2 bike + 1× intervals (5 × 3 min hard / 3 min easy). That’s 120 min moderate + 15 min vigorous; vigorous counts double, so ≈ 150 min — the minimum.',
+    src: ['who20', 'milan15', 'held26', 'lundberg22', 'reed14'] },
+  { id: 'athletic', title: 'Training to be more athletic',
+    body: [
+      'Power is force × speed. Heavy strength work raises the force; explosive work (jumps, throws, fast lifts at 30–70% 1RM) teaches you to use it quickly. Do the fast stuff first in a session while fresh, keep reps low, and stop a set when speed visibly drops.',
+      'Plyometrics like box jumps, broad jumps and bounds reliably improve jumping, sprinting and changing direction — combine them with strength training rather than replacing it.',
+    ],
+    example: 'Session start: 3 × 5 box jumps, 3 × 3 trap-bar jumps at ~40% (full rest). Then 3 × 4 heavy squats at 2 RIR. Then normal accessories.',
+    src: ['acsm26', 'oliver24', 'zheng25'] },
+];
