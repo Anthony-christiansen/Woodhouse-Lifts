@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import * as L from './logic.js?v=16';
-import * as LEARN from './learn.js?v=16';
+import * as L from './logic.js?v=17';
+import * as LEARN from './learn.js?v=17';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -17,7 +17,7 @@ let authReturn = (() => {
   return null;
 })();
 let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
-export const APP_VERSION = '1.1.1'; // keep in sync with CHANGELOG.md
+export const APP_VERSION = '1.1.2'; // keep in sync with CHANGELOG.md
 const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
 const DOC_URL = 'https://docs.google.com/document/d/1xmQZBADV2rPUuvHmO5EMTR1TJ7N5u9UpKg66dUMV3FI';
 
@@ -837,12 +837,15 @@ async function renderWorkout(dayId) {
     const hist = ids.length ? await fetchAll(() => sb.from('workout_exercises')
       .select('exercise_id, target_rir, sets(set_index, weight, reps, rir, duration_min, rpe), workout_days!inner(week, completed_at, mesocycle_id, mesocycles(weeks))')
       .in('exercise_id', ids).neq('workout_days.mesocycle_id', meso.id).not('workout_days.completed_at', 'is', null).order('id')) : [];
-    // Only carry over from the last 6 months (doc §5.6). Older history (e.g. a post-surgery rehab block at
-    // light weight × 30) says little about today's strength, so it's shown for reference but not used.
-    const horizon = new Date(Date.now() - L.CARRY_DAYS * 864e5).toISOString();
+    // Week 1 progresses from your PREVIOUS meso only (the one you trained most recently, finished or not) — doc §5.6.
+    // An exercise that wasn't in it gets no auto weight: older history (e.g. a 2025 rehab block) can't be translated,
+    // so it's shown for reference only.
+    const last = check(await sb.from('workout_days').select('mesocycle_id, completed_at').neq('mesocycle_id', meso.id)
+      .not('completed_at', 'is', null).order('completed_at', { ascending: false }).limit(1).maybeSingle());
+    const prevMesoId = last?.mesocycle_id || null;
     for (const h of hist) {
       const d = h.workout_days; if (!h.sets.length || L.rirForWeek(d.week, d.mesocycles?.weeks || 99).deload) continue;
-      const into = d.completed_at >= horizon ? prev : staleCarry;
+      const into = d.mesocycle_id === prevMesoId ? prev : staleCarry;
       const cur = into[h.exercise_id];
       if (!cur || d.completed_at > cur.at) into[h.exercise_id] = { rir: h.target_rir, at: d.completed_at, carried: true, sets: h.sets.sort((a, b) => a.set_index - b.set_index).map(z => ({ ...z, weight: W(z.weight) })) };
     }
@@ -852,6 +855,11 @@ async function renderWorkout(dayId) {
   const liftIdsToday = [...new Set(wes.filter(w => !isCardio(w)).map(w => w.exercise_id))];
   const insights = await liftInsights(liftIdsToday, { excludeSessions: wes.map(w => w.id),
     rirFor: Object.fromEntries(wes.map(w => [w.exercise_id, w.target_rir])) }).catch(() => ({}));
+  // Reference only: how last week compares with your all-time best. Never changes today's targets (those come from last week).
+  const histNote = we => { const x = insights[we.exercise_id]; if (!x || deload || day.completed_at) return '';
+    const lastE = x.weeks.at(-1)?.e, best = Math.max(x.prior || 0, ...x.weeks.map(w => w.e));
+    if (!lastE || !(best > lastE * 1.05)) return '';
+    return `<div class="muted tiny hist-note">📌 ${Math.round((1 - lastE / best) * 100)}% below your all-time best estimate — for reference only; today's targets come from last week.</div>`; };
   const FLAG = { stalled: '⚠️', regressing: '📉', pr: '🏆' };
   const liftFlag = we => { const x = insights[we.exercise_id]; if (!x || !FLAG[x.status.status] || day.completed_at) return '';
     const st = x.status, head = st.status === 'pr' ? `New best last week (+${st.pct.toFixed(1)}%)` : st.status === 'stalled' ? 'Stalled — no progress in 3 weeks' : `Down ${Math.abs(st.pct).toFixed(1)}% for 2 weeks`;
@@ -919,7 +927,7 @@ async function renderWorkout(dayId) {
           ${(w => w ? `<div class="muted tiny range">Weight window ${fmt(w.light)}–${fmt(w.heavy)} ${unit()} · change the weight and the reps re-target to match last time</div>` : '')(windowFor(we))}</div>
           ${infoBtn(we)}<button class="ghost sm" data-edit="${esc(ex.muscle_group)}" aria-label="Edit ratings" title="Edit ratings">✎</button></div>
         ${we.flag ? `<div class="pill bad" style="margin-top:6px">${esc(we.flag)}</div>` : ''}
-        ${liftFlag(we)}
+        ${liftFlag(we)}${histNote(we)}
         <div class="sets"><div class="set-head"><div>#</div><div>${wLabel(ex)}</div><div>reps</div><div></div></div>
           ${Array.from({ length: n }, (_, i) => {
             const s = we.sets.find(x => x.set_index === i + 1) || {}; const sg = suggestionFor(we, i);
@@ -933,7 +941,7 @@ async function renderWorkout(dayId) {
         </div>
         <div class="row" style="margin-top:8px"><button class="ghost sm" data-addset>+ set</button><button class="ghost sm" data-rmset>− set</button>
           <span class="grow muted tiny right">${p?.sets.length ? (p.carried ? 'last meso: ' : 'last wk: ') + p.sets.map(s => `${fmt(s.weight)}×${s.reps ?? '–'}`).join(', ')
-            : staleCarry[we.exercise_id] ? `last done ${new Date(staleCarry[we.exercise_id].at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })} (${staleCarry[we.exercise_id].sets.map(s => `${fmt(s.weight)}×${s.reps ?? '–'}`).join(', ')}) — too long ago to use; pick a fresh weight for ${deload ? 'deload' : `${we.target_rir} RIR`}`
+            : staleCarry[we.exercise_id] ? `last done ${new Date(staleCarry[we.exercise_id].at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })} (${staleCarry[we.exercise_id].sets.map(s => `${fmt(s.weight)}×${s.reps ?? '–'}`).join(', ')}) — not in your last meso, so not used. Pick a fresh weight for ${deload ? 'deload' : `${we.target_rir} RIR`}`
             : 'first week — pick weights for ' + (deload ? '' : `${we.target_rir} RIR`)}</span></div>
         ${lastOfMuscle[ex.muscle_group] === we.id ? `<div data-rate="${esc(ex.muscle_group)}" style="margin-top:8px">${rateLine(ex.muscle_group, feedback[ex.muscle_group])}</div>` : ''}
       </div>`;

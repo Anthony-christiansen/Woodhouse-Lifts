@@ -242,3 +242,4 @@ button.lift-row .chev { color: var(--muted); }
 .goal-tile .tiny { color: var(--muted); }
 .tiny-pill { font-size: 11px; padding: 2px 6px; vertical-align: middle; }
 input.odd { border-color: #f59e0b !important; box-shadow: 0 0 0 1px #f59e0b inset; }
+.hist-note { margin-top: 6px; }

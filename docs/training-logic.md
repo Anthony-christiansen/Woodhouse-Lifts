@@ -324,9 +324,12 @@ The cardio **progression indicator** compares session load (minutes × RPE) with
 
 ### 5.6 Carry-over between mesocycles
 
-In week 1 of a new mesocycle, each exercise's weight is auto-matched from your last finished mesocycle's final working week for that same exercise. The reps are set back to the new week-1 RIR target (3 RIR). This is how your imported RP history (AC IV, AC V) feeds your next block.
+**Progression always comes from the meso before.**
+- **Weeks 2+** progress week over week inside the current meso: each set's target comes from the same set last week (§4).
+- **Week 1** of a new meso progresses from your **previous meso** only — the one you trained most recently, finished or not — using its last working (non-deload) week for that exercise. The reps are set back to the new week-1 RIR target. Example: AC VII ends with bent-over row 70 × 12 at 0 RIR → AC VIII week 1 starts from that.
+- **An exercise that wasn't in the previous meso gets no auto weight.** If a meso changes completely there is no reliable way to translate one exercise into another, so you pick the weight. Older history for that exact exercise is shown for reference only, e.g. "last done Sep 2025 (70×30, 70×30) — not in your last meso, so not used".
+- **Historical notice.** If last week's strength estimate is more than 5% below your all-time best for that lift, the exercise shows "📌 N% below your all-time best estimate — for reference only". It never changes the targets. Example: Incline press last week ≈106, all-time best ≈130 → "18% below".
 
-- **6-month limit.** Carry-over only uses sessions from the last 6 months (182 days, the same horizon as the lift status in §6.1). Older history is shown under the exercise for reference ("last done Sep 2025 (70×30, 70×30) — too long ago to use") but does not set the weight. Example: a post-surgery rehab block of 70 lb × 30 on chest-supported rows says little about today's strength.
 - **Far outside the rep range.** If the carried-over reps are more than 3 outside the exercise's range (e.g. 30 reps on an 8–15 lift), adding one weight step isn't enough. The app re-solves the weight so the reps land at the edge of the range, using the strength estimate from §1.7 with reps + RIR capped at 20, because that formula overstates strength from very high-rep sets. Example: 70 × 30 → **75 × 15** at 3 RIR (not 75 × 26). It errs light; your first session's feedback corrects it.
 
 **Limits on changes:**

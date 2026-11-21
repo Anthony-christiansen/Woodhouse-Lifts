@@ -320,6 +320,5 @@ console.log('GUARDRAIL TESTS PASSED');
   assert.deepEqual([c.weight, c.reps], [70, 12], 'normal week unchanged');
   const d = L.suggestSet({ prev: { weight: 100, reps: 17, rir: 2 }, ex, targetRir: 1, unit: 'lb' });
   assert.ok(!d.note, 'small overshoot still uses the one-step rule');
-  assert.equal(L.CARRY_DAYS, 182);
   console.log('RE-SOLVE TESTS PASSED');
 }

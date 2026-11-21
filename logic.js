@@ -413,8 +413,6 @@ export function suggestSet({ prev, ex, targetRir, prevTargetRir, deload, jointHo
   return r && r.weight != null ? { ...r, weight: Math.max(barFloor(ex, unit), r.weight) } : r;
 }
 // Guardrail: barbell suggestions never go below the empty bar.
-// Week-1 carry-over only looks back this far (doc §5.6).
-export const CARRY_DAYS = 182;
 export const barFloor = (ex, unit) => (ex?.equipment === 'Barbell' && ex?.load_type === 'weighted' ? (unit === 'kg' ? 20 : 45) : 0);
 /**
  * Guardrail: likely typo when a typed weight is 1.5× or more, or half or less, of the same set last time

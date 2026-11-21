@@ -12,10 +12,19 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
-## 1.1.1 — 2026-11-20 (22:40 MT) · "Carry-over fix"
+## 1.1.2 — 2026-11-20 (21:45 MT) · "Progress from the meso before"
+
+**Changed**
+- **Week 1 of a new meso now progresses only from your previous meso** (the one you trained most recently), not from any older meso. This replaces 1.1.1's 6-month rule. Weeks 2+ were already week-over-week and are unchanged.
+- **Exercises that weren't in the previous meso get no auto weight.** You pick it; older history shows for reference only.
+- **New: historical notice.** When last week is more than 5% below your all-time best for a lift, a small 📌 note says so. It's information only and never changes today's targets.
+
+---
+
+## 1.1.1 — 2026-11-20 (21:25 MT) · "Carry-over fix"
 
 **Fixed**
-- **Week-1 weights no longer come from very old or rehab sessions.** A new meso's first-week weights only carry over from the last 6 months. Found because chest-supported rows suggested 70 × 30 — the numbers from the Sept 2025 post-surgery block — while today's row was 70 × 12, 12, 8. Older history is still shown under the exercise for reference, marked "too long ago to use".
+- **Week-1 weights no longer come from very old or rehab sessions.** A new meso's first-week weights only carried over from the last 6 months (replaced in 1.1.2 by "previous meso only"). Found because a chest-supported row suggestion showed 70 × 30 — the numbers from the Sept 2025 post-surgery block.
 - **Suggestions far outside the rep range are re-solved.** If last time was way above or below the exercise's rep range (e.g. 30 reps on an 8–15 lift), the app now picks a weight that puts you back in range (70 × 30 → 75 × 15) instead of one small weight bump (which gave 75 × 26).
 
 **Docs**
