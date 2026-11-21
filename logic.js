@@ -473,7 +473,34 @@ export function increment(ex, unit) {
  * prev: { weight, reps, rir }, prevTargetRir used when RIR wasn't logged.
  * Returns { weight, reps } or null when there's no history.
  */
-export function suggestSet({ prev, ex, targetRir, prevTargetRir, deload, jointHold, unit }) {
+/**
+ * Doc §4.0 — how a lift progresses week to week. RP-style programs move some lifts by adding WEIGHT at the same reps
+ * (machines, cables, sleds: pec dec 175×8 → 180×8 → 185×8) and others by adding REPS at the same weight (dumbbells,
+ * barbells: row 70×9 → 70×10 → 70×11). Learned from this lift's own last week-to-week change in the meso; with no
+ * history yet, machines and cables default to weight, everything else to reps.
+ * trail: [{ weight, reps }] top sets by meso week, oldest first. Returns { mode: 'load'|'reps', step }.
+ */
+export function progressionMode(trail, ex, unit) {
+  const inc = increment(ex, unit);
+  const t = (trail || []).filter(x => x && x.weight != null && x.reps != null);
+  for (let i = t.length - 1; i > 0; i--) {
+    const dw = Number(t[i].weight) - Number(t[i - 1].weight), dr = Number(t[i].reps) - Number(t[i - 1].reps);
+    if (dw > 0) return { mode: 'load', step: dw };
+    if (dw === 0 && dr > 0) return { mode: 'reps', step: inc };
+  }
+  const byEquip = ['Machine', 'Cable'].includes(ex?.equipment) || /sled/i.test(ex?.name || '');
+  return { mode: ex?.load_type === 'weighted' && byEquip ? 'load' : 'reps', step: inc };
+}
+export function suggestSet({ prev, ex, targetRir, prevTargetRir, deload, jointHold, unit, mode = null }) {
+  // Load progression: the week's RIR drop is taken as more weight at the same reps (RP style), not +1 rep.
+  if (mode?.mode === 'load' && prev && prev.reps != null && prev.weight != null && !deload && !jointHold && ex?.load_type === 'weighted') {
+    const loggedRir = prev.rir != null ? Number(prev.rir) : (prevTargetRir ?? targetRir);
+    const drop = loggedRir - targetRir, min = ex?.rep_min ?? 5, max = ex?.rep_max ?? 30;
+    if (drop > 0 && Number(prev.reps) >= min && Number(prev.reps) <= max) {
+      const step = mode.step > 0 ? mode.step : increment(ex, unit);
+      return { weight: Math.max(barFloor(ex, unit), Number(prev.weight) + step * drop), reps: Number(prev.reps), note: `+${step * drop} ${unit || 'lb'}, same reps` };
+    }
+  }
   const r = suggestSetRaw({ prev, ex, targetRir, prevTargetRir, deload, jointHold, unit });
   return r && r.weight != null ? { ...r, weight: Math.max(barFloor(ex, unit), r.weight) } : r;
 }

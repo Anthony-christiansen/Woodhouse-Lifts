@@ -350,3 +350,22 @@ console.log('GUARDRAIL TESTS PASSED');
   assert.equal(L.prsInMeso([...row, ...mk('VII', [[5, 80, 12, 0]])], null, 'VII').count, 2);
   console.log('MESO STATUS TESTS PASSED');
 }
+
+// --- Load vs rep progression (doc §4.0), from Anthony's AC VII ---
+{
+  const sled = { name: 'Sled push', load_type: 'weighted', equipment: 'Barbell', rep_min: 5, rep_max: 30 };
+  const m = L.progressionMode([{ weight: 305, reps: 27 }, { weight: 315, reps: 27 }], sled, 'lb');
+  assert.deepEqual(m, { mode: 'load', step: 10 });
+  const a = L.suggestSet({ prev: { weight: 315, reps: 27, rir: 1 }, ex: sled, targetRir: 0, unit: 'lb', mode: m });
+  assert.deepEqual([a.weight, a.reps], [325, 27], 'sled: 315×27 → 325×27 (range 27–28), like RP 325×28 — not 315×28');
+  const row = { name: 'Barbell Bent Over Row', load_type: 'weighted', equipment: 'Barbell', rep_min: 6, rep_max: 20 };
+  const r = L.suggestSet({ prev: { weight: 70, reps: 11, rir: 1 }, ex: row, targetRir: 0, unit: 'lb', mode: L.progressionMode([{ weight: 70, reps: 10 }, { weight: 70, reps: 11 }], row, 'lb') });
+  assert.deepEqual([r.weight, r.reps], [70, 12], 'row keeps adding reps');
+  const pd = { name: 'Pec Dec Flye', load_type: 'weighted', equipment: 'Machine', rep_min: 8, rep_max: 15 };
+  const p = L.suggestSet({ prev: { weight: 185, reps: 8, rir: 1 }, ex: pd, targetRir: 0, unit: 'lb', mode: L.progressionMode([{ weight: 180, reps: 8 }, { weight: 185, reps: 8 }], pd, 'lb') });
+  assert.deepEqual([p.weight, p.reps], [190, 8], 'pec dec: 185×8 → 190×8 (what he did)');
+  assert.equal(L.progressionMode([], pd, 'lb').mode, 'load'); assert.equal(L.progressionMode([], row, 'lb').mode, 'reps');
+  const d = L.suggestSet({ prev: { weight: 315, reps: 27, rir: 0 }, ex: sled, targetRir: 4, deload: true, unit: 'lb', mode: m });
+  assert.equal(d.weight, 315, 'deload never adds weight');
+  console.log('PROGRESSION MODE TESTS PASSED');
+}

@@ -218,6 +218,24 @@ The app uses double progression anchored to RIR. It works from last week's same 
 
 The weight is prefilled in grey and the target reps show as the placeholder. Tapping ✓ accepts both.
 
+### 4.0 Two ways a lift progresses: by weight or by reps
+
+Each week the target RIR drops by one, so each week asks for one rep's worth more effort. RP-style programs take that in one of two ways, per lift — and your imported mesos show both:
+
+| Style | What changes week to week | Examples from AC VII |
+|---|---|---|
+| **By weight** | +1 load step, **same reps** | Pec dec 175×8 → 180×8 → 185×8 → 190×8 · Sled push 305×27 → 315×27 → 325 · Leg press 290 → 295 → 300 |
+| **By reps** | **+1 rep**, same weight | Bent-over row 70×9 → 70×10 → 70×11 → 70×12 · Preacher curl 35×7 → 35×8 → 35×9 → 35×10 |
+
+**How the app picks the style:** it looks at how *this lift* moved in the most recent week-to-week change of the meso.
+- The weight went up → by weight, and the step is the jump you actually took (sled: +10 lb; pec dec: +5 lb).
+- Same weight and the reps went up → by reps.
+- No history yet (week 1 with nothing to carry) → machines, cables and sleds start by weight; barbells, dumbbells and bodyweight start by reps. Week 1 of a new meso uses the previous meso's pattern.
+
+**By weight:** suggestion = last week's weight + step × (RIR drop), same reps; the reps box shows **reps to reps + 1** so the top of the range is the stretch goal. Example (Nov 2026): sled push 315×27 at 1 RIR → week 4 at 0 RIR → **325 × 27–28** (RP had 325×28). Before this change the app always added a rep (→ 315×28).
+
+The exercise line shows the style, e.g. "progresses +10 lb" or "progresses by reps". Change the weight yourself and the reps re-target as in §4.1. Deloads and joint-pain holds never add weight.
+
 ### 4.2 Warm-ups (never logged, never counted)
 
 Warm-up sets are not hard sets. The app doesn't log them, and they never count toward weekly sets, PRs or strength trends.

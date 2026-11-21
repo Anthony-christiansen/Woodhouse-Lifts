@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import * as L from './logic.js?v=21';
-import * as LEARN from './learn.js?v=21';
+import * as L from './logic.js?v=22';
+import * as LEARN from './learn.js?v=22';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -17,7 +17,7 @@ let authReturn = (() => {
   return null;
 })();
 let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
-export const APP_VERSION = '1.4.1'; // keep in sync with CHANGELOG.md
+export const APP_VERSION = '1.5.0'; // keep in sync with CHANGELOG.md
 const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
 const DOC_URL = 'https://docs.google.com/document/d/1uapOKm5cu_q5ykxgIZLQbqdjSkGrRUGiy3Zc838VOa8';
 
@@ -861,7 +861,14 @@ async function renderWorkout(dayId) {
 
   // Last week's same session → auto-matched weights and rep targets.
   const prev = {}, staleCarry = {}; let prevFb = {};
+  const trail = {};   // exercise_id → [{ week, weight, reps }] first working set per earlier meso week (doc §4.0)
+  const addTrail = (id, week, sets) => { const f = (sets || []).filter(z => z.reps != null && z.duration_min == null).sort((a, b) => a.set_index - b.set_index)[0];
+    if (!f) return; const t = trail[id] = trail[id] || []; if (!t.some(x => x.week === week)) t.push({ week, weight: Number(f.weight), reps: Number(f.reps) }); };
   if (day.week > 1) {
+    const ids0 = [...new Set(wes.map(w => w.exercise_id))];
+    if (ids0.length) check(await sb.from('workout_exercises').select('exercise_id, sets(set_index, weight, reps, duration_min), workout_days!inner(week, mesocycle_id)')
+      .in('exercise_id', ids0).eq('workout_days.mesocycle_id', meso.id).lt('workout_days.week', day.week).order('id'))
+      .forEach(x => addTrail(x.exercise_id, x.workout_days.week, x.sets));
     const pd = check(await sb.from('workout_days').select('id').eq('mesocycle_id', meso.id).eq('week', day.week - 1).eq('day_index', day.day_index).maybeSingle());
     if (pd) {
       check(await sb.from('workout_exercises').select('exercise_id, target_rir, sets(set_index, weight, reps, rir, duration_min, rpe)').eq('workout_day_id', pd.id))
@@ -884,6 +891,7 @@ async function renderWorkout(dayId) {
     for (const h of hist) {
       const d = h.workout_days; if (!h.sets.length || L.rirForWeek(d.week, d.mesocycles?.weeks || 99).deload) continue;
       if (meso.carry_week && d.mesocycle_id === meso.carry_meso_id && d.week !== meso.carry_week) continue;
+      if (d.mesocycle_id === prevMesoId) addTrail(h.exercise_id, d.week, h.sets);
       const into = d.mesocycle_id === prevMesoId ? prev : staleCarry;
       const cur = into[h.exercise_id];
       if (!cur || d.completed_at > cur.at) into[h.exercise_id] = { rir: h.target_rir, at: d.completed_at, carried: true, wk: d.week, mname: d.mesocycles?.name || 'earlier meso', sets: h.sets.sort((a, b) => a.set_index - b.set_index).map(z => ({ ...z, weight: W(z.weight) })) };
@@ -917,11 +925,13 @@ async function renderWorkout(dayId) {
     targetRir: we.target_rir, prevTargetRir: prev[we.exercise_id]?.rir, bodyweight: bwD() });
   const windowFor = we => deload ? null : L.weightRange({ prev: baseFor(we, 0), ex: we.exercises, targetRir: we.target_rir,
     prevTargetRir: prev[we.exercise_id]?.rir, bodyweight: bwD(), unit: unit() });
+  Object.values(trail).forEach(t => t.sort((a, b) => a.week - b.week));
+  const modeFor = we => L.progressionMode((trail[we.exercise_id] || []).map(x => ({ ...x, weight: W(x.weight) })), we.exercises, unit());
   const suggestionFor = (we, i) => {
     const p = prev[we.exercise_id]; if (!p?.sets.length) return null;
     const base = baseFor(we, i);
     return L.suggestSet({ prev: base, ex: we.exercises, targetRir: we.target_rir, prevTargetRir: p.rir, deload,
-      jointHold: (prevFb[we.exercises.muscle_group]?.joint_pain ?? 0) >= 2, unit: unit() });
+      jointHold: (prevFb[we.exercises.muscle_group]?.joint_pain ?? 0) >= 2, unit: unit(), mode: modeFor(we) });
   };
   const lastOfMuscle = {}; wes.filter(w => !isCardio(w)).forEach(w => lastOfMuscle[w.exercises.muscle_group] = w.id);
   const firstOfMuscle = {}; wes.filter(w => !isCardio(w)).forEach(w => { firstOfMuscle[w.exercises.muscle_group] ??= w.id; });
@@ -962,7 +972,7 @@ async function renderWorkout(dayId) {
       const p = prev[we.exercise_id];
       return `<div class="card" data-we="${we.id}" data-muscle="${esc(ex.muscle_group)}">
         <div class="row"><div class="grow"><h3>${esc(ex.name)} <span class="trend" data-trend="${we.id}"></span></h3>
-          <div class="muted small">${esc(ex.muscle_group)} · ${we.target_sets} sets · ${deload ? 'deload' : `${we.target_rir} RIR`} · ${ex.rep_min}–${ex.rep_max} reps</div>
+          <div class="muted small">${esc(ex.muscle_group)} · ${we.target_sets} sets · ${deload ? 'deload' : `${we.target_rir} RIR`} · ${ex.rep_min}–${ex.rep_max} reps${!deload && !isCardio(we) && prev[we.exercise_id]?.sets.length && ex.load_type === 'weighted' ? (m => ` · <span class="prog-mode" title="How this lift progresses week to week">${m.mode === 'load' ? `progresses +${fmt(m.step)} ${unit()}` : 'progresses by reps'}</span>`)(modeFor(we)) : ''}</div>
           ${(w => w ? `<div class="muted tiny range">Weight window ${fmt(w.light)}–${fmt(w.heavy)} ${unit()} · change the weight and the reps re-target to match last time</div>` : '')(windowFor(we))}</div>
           ${infoBtn(we)}<button class="ghost sm" data-edit="${esc(ex.muscle_group)}" aria-label="Edit ratings" title="Edit ratings">✎</button></div>
         ${we.flag ? `<div class="pill bad" style="margin-top:6px">${esc(we.flag)}</div>` : ''}
@@ -974,7 +984,7 @@ async function renderWorkout(dayId) {
             return `<div class="set ${s.completed_at ? 'done' : ''} ${s._queued ? 'queued' : ''}" data-idx="${i + 1}" data-key="${we.id}:${i + 1}" data-at="${s.completed_at || ''}">
               <div class="n">${i + 1}</div>
               <div class="fld"><input type="number" inputmode="decimal" step="any" data-f="weight" aria-label="Set ${i + 1} weight (${wLabel(ex)})" value="${wVal ?? ''}" class="${s.weight == null && sg?.weight != null ? 'sug' : ''}" placeholder="${ex.load_type === 'weighted' ? unit() : '0'}"><span class="dir" data-dir="weight"></span></div>
-              <div class="fld"><input type="number" inputmode="numeric" data-f="reps" aria-label="Set ${i + 1} reps" value="${s.reps ?? ''}" placeholder="${sg?.reps ?? ex.rep_min + '–' + ex.rep_max}" data-sug="${sg?.reps ?? ''}"><span class="dir" data-dir="reps"></span></div>
+              <div class="fld"><input type="number" inputmode="numeric" data-f="reps" aria-label="Set ${i + 1} reps" value="${s.reps ?? ''}" placeholder="${sg?.reps != null ? (sg.note?.includes('same reps') ? `${sg.reps}–${sg.reps + 1}` : sg.reps) : ex.rep_min + '–' + ex.rep_max}" data-sug="${sg?.reps ?? ''}"><span class="dir" data-dir="reps"></span></div>
               <button class="check" aria-label="Set ${i + 1} done">✓</button></div>`;
           }).join('')}
         </div>

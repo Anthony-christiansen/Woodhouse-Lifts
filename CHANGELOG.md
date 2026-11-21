@@ -12,6 +12,19 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.5.0 — 2026-11-20 (23:15 MT) · "Weight or reps, like RP"
+
+**Fixed — suggestions always added a rep, even on lifts that progress by weight.**
+- Found on sled push: last week 315×27 at 1 RIR. RP had 325×28 for week 4; the app had 315 (+1 rep).
+- RP-style programs move some lifts by **weight** at the same reps (machines, cables, sleds — pec dec 180×8 → 185×8) and others by **reps** at the same weight (row 70×10 → 70×11). The app now learns which one each lift uses from its last week-to-week change in the meso, and the size of the weight jump you actually took.
+- Sled push week 4 now suggests **325 × 27–28** (+10 lb, same reps, one extra rep as the stretch). Row still suggests 70×12; pec dec 190×8; leg press 300×10 — matching what you did.
+- With no history (week 1, nothing to carry): machines, cables and sleds start by weight; barbells, dumbbells and bodyweight by reps.
+- Each exercise shows its style under the name ("progresses +10 lb" / "progresses by reps").
+
+Docs: Training Logic §4.0.
+
+---
+
 ## 1.4.1 — 2026-11-20 (22:55 MT) · "Orange notice every time"
 
 **Fixed**
