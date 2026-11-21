@@ -12,6 +12,16 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.4.1 — 2026-11-20 (22:55 MT) · "Orange notice every time"
+
+**Fixed**
+- **The "under last week" notice now shows on every orange set, not just the first.** When you tick ✓ on a set where reps or weight is below the same set last week (orange ▼), you get a notice each time. Example: "Set 2: Reps down vs last week (6 → 4). One set under last week is fine — rest a little longer and aim to match it next set."
+- On the last set of an exercise, the set notice and the exercise summary show together (e.g. "Set 3: Reps down vs last week (6 → 5). Standing Knee Drive: ▲ up +1.2% vs last week").
+- **Tap any ▲ / = / ▼ arrow** to see what it's comparing (e.g. "Reps down vs last week (6 → 4)").
+- Notices no longer stack on top of each other: a new one replaces the one on screen, so a second notice can't be hidden behind the first or vanish early.
+
+---
+
 ## 1.4.0 — 2026-11-20 (22:45 MT) · "Stalled means stalled"
 
 **Fixed — lifts were flagged Stalled for hitting the plan.**

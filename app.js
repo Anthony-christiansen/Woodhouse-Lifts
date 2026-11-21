@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import * as L from './logic.js?v=20';
-import * as LEARN from './learn.js?v=20';
+import * as L from './logic.js?v=21';
+import * as LEARN from './learn.js?v=21';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -17,7 +17,7 @@ let authReturn = (() => {
   return null;
 })();
 let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
-export const APP_VERSION = '1.4.0'; // keep in sync with CHANGELOG.md
+export const APP_VERSION = '1.4.1'; // keep in sync with CHANGELOG.md
 const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
 const DOC_URL = 'https://docs.google.com/document/d/1BZSK0EmweDp_jYM8nuwyU0cyHtYjwz1ZIExWKkJcuwI';
 
@@ -44,9 +44,12 @@ const fmt = n => (n == null ? '–' : Number(n) % 1 ? Number(n).toFixed(1) : Str
 const today = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
 const dayName = d => d.label || 'Day ' + d.day_index;
 const order = d => d.week * 100 + d.day_index;
-function toast(msg, err = false) {
-  const t = document.createElement('div'); t.className = 'toast' + (err ? ' err' : ''); t.textContent = msg;
-  document.body.appendChild(t); setTimeout(() => t.remove(), err ? 4500 : 1800);
+// One toast at a time: a new message replaces the one showing (stacked toasts sat exactly on top of each other,
+// so a second notice could be hidden or vanish early with the first one's timer).
+function toast(msg, err = false, ms = null) {
+  document.querySelectorAll('.toast').forEach(x => x.remove());
+  const t = document.createElement('div'); t.className = 'toast' + (err ? ' err' : ''); t.textContent = msg; t.setAttribute('role', 'status');
+  document.body.appendChild(t); setTimeout(() => t.remove(), ms ?? (err ? 4500 : 1800));
 }
 function check(res) { if (res.error) { console.error(res.error); toast(res.error.message, true); throw res.error; } return res.data; }
 // Supabase returns at most 1,000 rows per request; page through everything. build() must return a fresh, fully ordered query.
@@ -1105,10 +1108,18 @@ async function renderWorkout(dayId) {
       updateDirs(we, row);
       const m = we.exercises.muscle_group;
       refreshTrend(we);
-      if (markDone && done && exComplete(we)) { const tr = exerciseTrend(we); if (tr && !muscleComplete(m)) toast(`${we.exercises.name}: ${tr.t > 0 ? '▲ up' : tr.t < 0 ? '▼ down' : '● same'} ${tr.pct > 0 ? '+' : ''}${tr.pct.toFixed(1)}% vs ${tr.vs}`); }
+      // Notice every time a finished set is under last week (orange ▼) — not just the first time.
+      const behind = markDone && done ? [...row.querySelectorAll('.dir.back')].map(el => el.title).filter(Boolean) : [];
+      const setNote = behind.length ? `Set ${row.dataset.idx}: ${behind.join(' · ')}.` : '';
+      if (markDone && done && exComplete(we)) { const tr = exerciseTrend(we);
+        const exNote = tr ? `${we.exercises.name}: ${tr.t > 0 ? '▲ up' : tr.t < 0 ? '▼ down' : '● same'} ${tr.pct > 0 ? '+' : ''}${tr.pct.toFixed(1)}% vs ${tr.vs}` : '';
+        if ((setNote || exNote) && !muscleComplete(m)) toast([setNote, exNote].filter(Boolean).join(' '), false, setNote ? 4000 : 1800);
+        else if (setNote) toast(setNote, false, 4000); }
+      else if (setNote) toast(`${setNote} One set under last week is fine — rest a little longer and aim to match it next set.`, false, 4000);
       if (markDone && done) enforceRatings();
     };
     row.querySelector('.check').onclick = () => save(true);
+    row.querySelectorAll('.dir').forEach(el => el.onclick = e => { if (!el.title) return; e.preventDefault(); e.stopPropagation(); toast(el.title, false, 3000); });
     row.querySelectorAll('input').forEach(i => { i.oninput = () => { i.classList.remove('sug'); if (i.dataset.f === 'weight') retarget(we, row); updateDirs(we, row); }; i.onchange = () => save(false); });
     row.querySelector('[data-f="weight"]').addEventListener('change', () => {
       const wIn = row.querySelector('[data-f="weight"]'), r = repsFor(we, +row.dataset.idx - 1, wIn.value);

@@ -241,6 +241,7 @@ If you type a weight other than the suggestion, the app re-targets the reps so t
 - The reps box shows a range **lo–hi**: lo matches last time's estimated strength, hi beats it by one rep. Tapping ✓ with the box empty logs lo.
 - Later sets that are still on the suggested weight take the new weight too, and are re-targeted the same way.
 - The small ▲ / = / ▼ next to weight and reps compares each to the same set last time. Green means progress, amber means backed off. For assisted lifts, less assistance counts as progress.
+- Tap an arrow to see the comparison (e.g. "Reps down vs last week (6 → 4)"). Every time you tick ✓ on an amber set you get a short notice — one set under last week is normal; rest a little longer and aim to match it on the next set.
 - Example: last week 200 lb × 15 at 2 RIR (e1RM ≈ 313). This week, same 2 RIR, you pick 180 lb → **20–21 reps**. Pick 220 lb → **11–12 reps**.
 
 **Weight window.** Under each weighted exercise the app shows the span of weights for which those matched reps stay inside the exercise's rep range. The heaviest end lands at the rep minimum, the lightest at the rep maximum, both rounded to the load increment. If you go outside it, you get a warning:
