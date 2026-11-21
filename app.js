@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import * as L from './logic.js?v=18';
-import * as LEARN from './learn.js?v=18';
+import * as L from './logic.js?v=19';
+import * as LEARN from './learn.js?v=19';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -17,7 +17,7 @@ let authReturn = (() => {
   return null;
 })();
 let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
-export const APP_VERSION = '1.2.0'; // keep in sync with CHANGELOG.md
+export const APP_VERSION = '1.3.0'; // keep in sync with CHANGELOG.md
 const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
 const DOC_URL = 'https://docs.google.com/document/d/1XJsLNVzaPmJV2vmZnfjRLWXNYK1tMXSK5f2qp0C7vVs';
 
@@ -171,7 +171,7 @@ const routes = {
   '': renderHome, mesos: renderMesos, train: renderMesos, new: renderBuilder, meso: renderMeso, workout: renderWorkout,
   explore: renderExplore, history: renderHistory, progress: renderProgress, volume: renderVolume,
   cardio: renderCardio, library: renderLibrary, exercises: () => renderLibrary('exercises'), templates: () => renderLibrary('templates'),
-  settings: renderSettings, learn: renderLearn,
+  settings: renderSettings, learn: renderLearn, stats: renderStats,
 };
 async function route() {
   closeSheet();
@@ -433,10 +433,10 @@ async function renderHome() {
   const totalWorkouts = stats.workouts || 0, totalSets = stats.sets || 0;
   const doneDays = days.filter(d => d.completed_at || d.skipped_at).length;
   const maxSets = Math.max(1, ...setsPerWeek), maxC = Math.max(1, ...cardioPerWeek);
-  const bars = (vals, max, color) => `<svg class="chart" viewBox="0 0 320 110" style="height:110px">${vals.map((v, i) => { const h = Math.round(v / max * 88);
-    return `<rect x="${i * 40 + 6}" y="${92 - h}" width="28" height="${h}" rx="4" fill="${i === 7 ? color : '#3a4150'}"></rect>
+  const bars = (vals, max, color, kind) => `<svg class="chart" viewBox="0 0 320 110" style="height:110px">${vals.map((v, i) => { const h = Math.round(v / max * 88);
+    return `<g class="bar-hit" data-go="#/stats/${kind}/${isoDay(weeks[i])}" role="button" tabindex="0" aria-label="Week of ${weeks[i].getMonth() + 1}/${weeks[i].getDate()}: ${Math.round(v)}"><rect x="${i * 40 + 2}" y="0" width="36" height="110" fill="transparent"></rect><rect x="${i * 40 + 6}" y="${92 - h}" width="28" height="${h}" rx="4" fill="${i === 7 ? color : '#3a4150'}"></rect>
       <text x="${i * 40 + 20}" y="${88 - h}" font-size="9" fill="#8b93a3" text-anchor="middle">${v ? Math.round(v) : ''}</text>
-      <text x="${i * 40 + 20}" y="106" font-size="8" fill="#8b93a3" text-anchor="middle">${weeks[i].getMonth() + 1}/${weeks[i].getDate()}</text>`; }).join('')}</svg>`;
+      <text x="${i * 40 + 20}" y="106" font-size="8" fill="#8b93a3" text-anchor="middle">${weeks[i].getMonth() + 1}/${weeks[i].getDate()}</text></g>`; }).join('')}</svg>`;
 
   app.innerHTML = `
     <div class="muted small">Hi ${esc(profile?.display_name || '')} 👋</div><div class="spacer"></div>
@@ -449,35 +449,35 @@ async function renderHome() {
       : `<div class="card"><h3>${meso ? 'Mesocycle finished 🎉' : 'No active mesocycle'}</h3>
         <p class="muted">Start from a base template or one of your saved ones.</p>
         <div class="grid2"><button class="primary" data-go="#/new">+ New mesocycle</button><button data-go="#/templates">Templates</button></div></div>`}
-    ${warnings.length ? `<div class="card warn"><div class="row"><b class="grow">Watch list</b><span class="pill warn">${warnings.length}</span></div>
+    ${warnings.length ? `<div class="card warn drill" tabindex="0" role="link" data-go="#/meso/${meso.id}"><div class="row"><b class="grow">Watch list</b><span class="pill warn">${warnings.length}</span><span class="chev">›</span></div>
         ${warnList(warnings, 4)}${warnings.length > 4 ? `<button class="ghost sm" data-go="#/meso/${meso.id}">See all ${warnings.length}</button>` : ''}</div>`
       : meso && doneDays ? '<div class="card good small">✓ No slip signals — reps, sets and recovery are on track.</div>' : ''}
-    ${meso ? `<div class="card"><div class="row"><div class="grow"><div class="muted small">Mesocycle</div><b>${esc(meso.name)}</b></div>
+    ${meso ? `<div class="card drill" tabindex="0" role="link" data-go="#/meso/${meso.id}"><div class="row"><div class="grow"><div class="muted small">Mesocycle</div><b>${esc(meso.name)}</b></div>
         <span class="pill ${r?.deload ? 'warn' : 'on'}">${r ? (r.deload ? 'Deload' : `Wk ${curWeek} · ${r.rir} RIR`) : ''}</span></div>
         <div class="prog"><i style="width:${Math.round(doneDays / Math.max(1, days.length) * 100)}%"></i></div>
         <div class="muted tiny" style="margin-top:4px">${doneDays}/${days.length} workouts · week ${curWeek} of ${meso.weeks}</div></div>` : ''}
     <div class="grid2">
-      <div class="card stat"><span class="muted small">Workouts this week</span><span class="big">${wk.filter(d => d.completed_at).length}/${wk.length || 0}</span></div>
-      <div class="card stat"><span class="muted small">Sets this week</span><span class="big">${setsPerWeek[7]}</span></div>
-      <div class="card stat"><span class="muted small">Cardio this week</span><span class="big">${fmt(cMin)}<span class="muted small"> min</span></span><span class="muted tiny">load ${fmt(cLoad)}</span></div>
-      <div class="card stat"><span class="muted small">${meso ? 'PRs this meso' : 'PRs (14 days)'}</span><span class="big">${prCount}</span></div>
+      <button class="card stat drill" data-go="${meso ? `#/stats/workouts/${curWeek}` : '#/history'}"><span class="muted small">Workouts this week</span><span class="big">${wk.filter(d => d.completed_at).length}/${wk.length || 0}</span><span class="chev">›</span></button>
+      <button class="card stat drill" data-go="#/stats/sets/${isoDay(ws)}"><span class="muted small">Sets this week</span><span class="big">${setsPerWeek[7]}</span><span class="chev">›</span></button>
+      <button class="card stat drill" data-go="#/stats/cardio/${isoDay(ws)}"><span class="muted small">Cardio this week</span><span class="big">${fmt(cMin)}<span class="muted small"> min</span></span><span class="muted tiny">load ${fmt(cLoad)}</span><span class="chev">›</span></button>
+      <button class="card stat drill" data-go="#/stats/prs"><span class="muted small">${meso ? 'PRs this meso' : 'PRs (14 days)'}</span><span class="big">${prCount}</span><span class="chev">›</span></button>
     </div>
-    <div class="card"><b>Hard sets per week</b>${bars(setsPerWeek, maxSets, 'var(--accent)')}</div>
-    <div class="card"><b>Cardio minutes per week</b> <span class="muted tiny">sessions + in-workout</span>${bars(cardioPerWeek, maxC, 'var(--info)')}</div>
+    <div class="card"><div class="row"><b class="grow">Hard sets per week</b><span class="muted tiny">tap a week</span></div>${bars(setsPerWeek, maxSets, 'var(--accent)', 'sets')}</div>
+    <div class="card"><div class="row"><b class="grow">Cardio minutes per week</b><span class="muted tiny">tap a week</span></div>${bars(cardioPerWeek, maxC, 'var(--info)', 'cardio')}</div>
     ${meso && lifts.length ? `<div class="card"><div class="row"><b class="grow">This meso’s lifts</b><span class="muted tiny">tap a lift for its chart</span></div>
         ${lifts.filter(x => ['regressing', 'stalled'].includes(x.status.status)).length ? `<div class="muted small" style="margin:4px 0 2px">${lifts.filter(x => ['regressing', 'stalled'].includes(x.status.status)).length} need attention — you’ll see what to do on that lift in your next workout.</div>` : ''}
         ${lifts.map((x, i) => `<button class="mover lift-row ${i >= 8 ? 'more' : ''}" data-go="#/progress/${x.id}" ${i >= 8 ? 'hidden' : ''}><span>${esc(x.name)}</span>${statusPill(x.status)}<span class="chev">›</span></button>`).join('')}
         ${lifts.length > 8 ? `<button class="ghost sm" id="moreLifts">Show all ${lifts.length}</button>` : ''}</div>` : ''}
     ${mesoPrs.length ? `<div class="card"><b>PRs this meso 🏆</b>${mesoPrs.slice(0, 5).map(p => `<button class="mover lift-row" data-go="#/progress/${p.id}"><span>${esc(p.name)}${p.n > 1 ? ` <span class="muted tiny">×${p.n}</span>` : ''}</span><span class="pill on">+${p.pct.toFixed(1)}%</span><span class="chev">›</span></button>`).join('')}</div>` : ''}
-    ${!meso && prs.length ? `<div class="card"><b>Recent PRs 🏆</b>${prs.slice(0, 5).map(p => `<div class="mover"><span>${esc(p.name)}</span><span class="pill on">+${Number(p.pct).toFixed(1)}%</span></div>`).join('')}</div>` : ''}
+    ${!meso && prs.length ? `<div class="card"><b>Recent PRs 🏆</b>${prs.slice(0, 5).map(p => `<button class="mover lift-row" data-go="#/stats/prs"><span>${esc(p.name)}</span><span class="pill on">+${Number(p.pct).toFixed(1)}%</span><span class="chev">›</span></button>`).join('')}</div>` : ''}
     ${!meso && movers.length ? `<div class="card"><b>Strength trend · last 8 weeks</b>
-        ${[...movers.slice(0, 3), ...movers.slice(-2).filter(m => m.pct < 0 && !movers.slice(0, 3).includes(m))].map(m => `<div class="mover"><span>${esc(m.name)}</span>
-          <span class="pill ${m.pct > 0 ? 'on' : m.pct < 0 ? 'bad' : ''}">${m.pct > 0 ? '+' : ''}${Number(m.pct).toFixed(1)}%</span></div>`).join('')}
+        ${[...movers.slice(0, 3), ...movers.slice(-2).filter(m => m.pct < 0 && !movers.slice(0, 3).includes(m))].map(m => `<button class="mover lift-row" data-go="#/progress"><span>${esc(m.name)}</span>
+          <span class="pill ${m.pct > 0 ? 'on' : m.pct < 0 ? 'bad' : ''}">${m.pct > 0 ? '+' : ''}${Number(m.pct).toFixed(1)}%</span><span class="chev">›</span></button>`).join('')}
         <button class="ghost sm" data-go="#/progress">All exercises ›</button></div>` : ''}
     <div class="grid3 keep">
-      <div class="card stat center"><span class="big">${totalWorkouts}</span><span class="muted tiny">workouts finished</span></div>
-      <div class="card stat center"><span class="big">${totalSets}</span><span class="muted tiny">sets logged</span></div>
-      <div class="card stat center"><span class="big">${mesoCount}</span><span class="muted tiny">mesocycles</span></div>
+      <button class="card stat center drill" data-go="#/stats/totals"><span class="big">${totalWorkouts}</span><span class="muted tiny">workouts finished</span><span class="chev">›</span></button>
+      <button class="card stat center drill" data-go="#/stats/totals"><span class="big">${totalSets}</span><span class="muted tiny">sets logged</span><span class="chev">›</span></button>
+      <button class="card stat center drill" data-go="#/mesos"><span class="big">${mesoCount}</span><span class="muted tiny">mesocycles</span><span class="chev">›</span></button>
     </div>
     <h2>Quick actions</h2>
     <div class="grid2">
@@ -486,8 +486,9 @@ async function renderHome() {
       <button class="tile" data-go="#/learn"><span class="ico">🎓</span><b>Learn</b><span class="muted small">Sets, reps &amp; why</span></button>
       <button class="tile" data-go="#/progress"><span class="ico">📈</span><b>Progress</b><span class="muted small">Strength per lift</span></button>
     </div>`;
-  $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
-  $('#moreLifts') && ($('#moreLifts').onclick = e => { $$('.lift-row.more').forEach(r => r.hidden = false); e.target.remove(); });
+  $$('[data-go]').forEach(b => { b.onclick = e => { e.stopPropagation(); go(b.dataset.go); };
+    if (b.tagName === 'g' || b.classList.contains('drill')) b.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(b.dataset.go); } }; });
+  $('#moreLifts') && ($('#moreLifts').onclick = e => { e.stopPropagation(); $$('.lift-row.more').forEach(r => r.hidden = false); e.target.remove(); });
 }
 
 // ---------- mesocycles ----------
@@ -1322,6 +1323,111 @@ function renderExplore() {
     <div class="grow"><b>${t}</b><div class="muted small">${d}</div></div>›</button>`).join('') +
     `<div class="card small muted">How the app decides weights, sets and RIR: <a href="${DOC_URL}" target="_blank" rel="noopener">Training Logic & Evidence</a></div>`;
   $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
+}
+
+// ---------- Home drill-downs (#/stats/<kind>/<arg>) ----------
+async function renderStats(kind, arg) {
+  const wkNav = (base, startIso) => { const d = new Date(startIso + 'T12:00'); const p = new Date(d), n = new Date(d); p.setDate(p.getDate() - 7); n.setDate(n.getDate() + 7);
+    const cur = isoDay(weekStart()); return `<div class="row wk-nav"><button class="ghost sm" data-go="${base}/${isoDay(p)}">‹ Prev week</button><b class="grow center">Week of ${d.getMonth() + 1}/${d.getDate()}${startIso === cur ? ' (this week)' : ''}</b>${isoDay(n) <= cur ? `<button class="ghost sm" data-go="${base}/${isoDay(n)}">Next week ›</button>` : '<span style="width:84px"></span>'}</div>`; };
+  const wire = () => $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
+  const range = iso => { const a = new Date(iso + 'T00:00'); const b = new Date(a); b.setDate(b.getDate() + 7); return [a, b]; };
+  const isIso = x => /^\d{4}-\d{2}-\d{2}$/.test(x || '');
+
+  if (kind === 'workouts') {
+    const meso = await activeMeso(); if (!meso) return go('#/history');
+    const days = await mesoDays(meso.id); const weeksAll = [...new Set(days.map(d => d.week))];
+    const w = Number(arg) || (openDays(days)[0]?.week ?? weeksAll.at(-1));
+    setHeader(`Week ${w} workouts`, '#/', 'home');
+    const wd = days.filter(d => d.week === w);
+    const wes = wd.length ? check(await sb.from('workout_exercises').select('workout_day_id, target_sets, exercises(name, muscle_group, load_type), sets(completed_at, duration_min, set_type)').in('workout_day_id', wd.map(d => d.id))) : [];
+    const r = L.targetRir(w, meso.weeks, meso.goal, 'compound');
+    const st = d => d.completed_at ? ['done', 'on', 'Done'] : d.skipped_at ? ['skipped', '', 'Skipped'] : d.started_at ? ['live', 'warn', 'In progress'] : ['open', '', 'Not started'];
+    app.innerHTML = `<div class="row wk-nav">${w > 1 ? `<button class="ghost sm" data-go="#/stats/workouts/${w - 1}">‹ Week ${w - 1}</button>` : '<span></span>'}
+        <b class="grow center">${esc(meso.name)} · ${r.deload ? 'deload' : r.rir + ' RIR'}</b>${w < meso.weeks ? `<button class="ghost sm" data-go="#/stats/workouts/${w + 1}">Week ${w + 1} ›</button>` : '<span></span>'}</div>
+      <div class="card"><div class="big">${wd.filter(d => d.completed_at).length}/${wd.length}</div><div class="muted small">workouts finished in week ${w}${wd.some(d => d.skipped_at) ? ` · ${wd.filter(d => d.skipped_at).length} skipped` : ''}</div></div>
+      ${wd.map(d => { const [cls, pill, txt] = st(d); const ex = wes.filter(x => x.workout_day_id === d.id);
+        const lifts = ex.filter(x => x.exercises?.load_type !== 'cardio');
+        const done = lifts.reduce((a, x) => a + x.sets.filter(z => z.completed_at && z.set_type !== 'warmup').length, 0), planned = lifts.reduce((a, x) => a + (x.target_sets || 0), 0);
+        const muscles = [...new Set(lifts.map(x => x.exercises?.muscle_group).filter(Boolean))];
+        return `<button class="list-btn" data-go="#/workout/${d.id}"><div class="grow"><b>${esc(dayName(d))}</b> <span class="pill ${pill}">${txt}</span>
+          <div class="muted small">${done}/${planned} sets · ${ex.length} exercises${muscles.length ? ' · ' + esc(muscles.join(', ')) : ''}</div></div>›</button>`; }).join('')}
+      <button class="ghost block" data-go="#/meso/${meso.id}">Whole meso ›</button>`;
+    return wire();
+  }
+
+  if (kind === 'sets') {
+    const iso = isIso(arg) ? arg : isoDay(weekStart()); const [a, b] = range(iso);
+    setHeader('Hard sets', '#/', 'home');
+    const rows = await fetchAll(() => sb.from('sets').select('id, weight, reps, rir, set_type, completed_at, workout_exercises!inner(id, exercise_id, exercises!inner(name, muscle_group, load_type), workout_days(id, week, label, day_index, mesocycles(name)))')
+      .not('completed_at', 'is', null).is('duration_min', null).gte('completed_at', a.toISOString()).lt('completed_at', b.toISOString()).order('id'));
+    const hard = rows.filter(x => x.workout_exercises.exercises.load_type !== 'cardio' && x.set_type !== 'warmup');
+    const byM = {}; for (const x of hard) { const m = x.workout_exercises.exercises.muscle_group; const e = x.workout_exercises.exercises.name;
+      (byM[m] = byM[m] || { n: 0, ex: {} }).n++; const q = byM[m].ex[e] = byM[m].ex[e] || { n: 0, id: x.workout_exercises.exercise_id, top: null };
+      q.n++; if (!q.top || L.e1rm(x, x.workout_exercises.exercises, profile?.bodyweight) > L.e1rm(q.top, x.workout_exercises.exercises, profile?.bodyweight)) q.top = x; }
+    const muscles = Object.entries(byM).sort((p, q) => q[1].n - p[1].n), max = Math.max(1, ...muscles.map(m => m[1].n));
+    const byDay = {}; for (const x of hard) { const d = x.workout_exercises.workout_days; if (!d) continue; (byDay[d.id] = byDay[d.id] || { d, n: 0 }).n++; }
+    app.innerHTML = wkNav('#/stats/sets', iso) + `
+      <div class="card"><div class="big">${hard.length}</div><div class="muted small">hard sets (warm-ups and cardio not counted)</div></div>
+      ${muscles.length ? `<div class="card"><b>By muscle</b><div class="muted tiny">tap a muscle for its exercises</div>
+        ${muscles.map(([m, v]) => `<details class="drill-m"><summary><span class="mname">${esc(m)}</span><span class="hbar"><i style="width:${Math.round(v.n / max * 100)}%"></i></span><b>${v.n}</b></summary>
+          ${Object.entries(v.ex).map(([e, q]) => `<button class="mover lift-row" data-go="#/progress/${q.id}"><span>${esc(e)} <span class="muted tiny">${q.n} set${q.n > 1 ? 's' : ''} · best ${fmt(W(q.top.weight))}×${q.top.reps}</span></span><span class="chev">›</span></button>`).join('')}</details>`).join('')}</div>` : '<p class="muted center">No hard sets this week.</p>'}
+      ${Object.keys(byDay).length ? `<div class="card"><b>By workout</b>${Object.values(byDay).map(({ d, n }) => `<button class="mover lift-row" data-go="#/workout/${d.id}"><span>${esc(d.mesocycles?.name || '')} · wk ${d.week} · ${esc(dayName(d))}</span><span class="pill">${n} sets</span><span class="chev">›</span></button>`).join('')}</div>` : ''}
+      <button class="ghost block" data-go="#/volume">Sets per muscle vs targets (Volume) ›</button>`;
+    return wire();
+  }
+
+  if (kind === 'cardio') {
+    const iso = isIso(arg) ? arg : isoDay(weekStart()); const [a, b] = range(iso);
+    setHeader('Cardio', '#/', 'home');
+    const [cs, ws] = await Promise.all([cardioSince(iso), workoutCardioSince(a.toISOString())]);
+    const items = cardioItems(cs, ws).filter(c => c.date >= iso && c.date < isoDay(b)).sort((p, q) => q.date.localeCompare(p.date));
+    const mins = items.reduce((t, c) => t + c.minutes, 0), load = items.reduce((t, c) => t + L.cardioLoad(c), 0);
+    const byA = {}; for (const c of items) { const k = c.name; (byA[k] = byA[k] || { n: 0, min: 0 }); byA[k].n++; byA[k].min += c.minutes; }
+    app.innerHTML = wkNav('#/stats/cardio', iso) + `
+      <div class="grid2"><div class="card stat"><span class="muted small">Minutes</span><span class="big">${fmt(mins)}</span></div><div class="card stat"><span class="muted small">Load (RPE × min)</span><span class="big">${fmt(load)}</span></div></div>
+      ${items.length ? `<div class="card"><b>By activity</b>${Object.entries(byA).map(([k, v]) => `<div class="mover"><span>${esc(k)}</span><span class="muted small">${v.n}× · ${fmt(v.min)} min</span></div>`).join('')}</div>
+      <div class="card"><b>Sessions</b>${items.map(c => `<div class="mover"><span>${esc(c.name)} <span class="muted tiny">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][(new Date(c.date + 'T12:00').getDay() + 6) % 7]}</span></span><span class="muted small">${fmt(c.minutes)} min${c.rpe ? ` · RPE ${c.rpe}` : ''}</span></div>`).join('')}</div>` : '<p class="muted center">No cardio this week.</p>'}
+      <button class="ghost block" data-go="#/cardio">Log cardio / all cardio ›</button>`;
+    return wire();
+  }
+
+  if (kind === 'prs') {
+    setHeader('PRs', '#/', 'home');
+    const meso = await activeMeso();
+    if (!meso) { const st = await sb.rpc('dashboard_stats', { p_tz: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' }).then(check);
+      app.innerHTML = `<div class="card"><b>PRs in the last 14 days</b>${(st.prs || []).map(p => `<div class="mover"><span>${esc(p.name)}</span><span class="pill on">+${Number(p.pct).toFixed(1)}%</span></div>`).join('') || '<p class="muted">None yet.</p>'}</div><button class="ghost block" data-go="#/progress">All exercises ›</button>`;
+      return wire(); }
+    const ids = [...new Set(check(await sb.from('workout_exercises').select('exercise_id, exercises!inner(load_type), workout_days!inner(mesocycle_id)').eq('workout_days.mesocycle_id', meso.id))
+      .filter(x => x.exercises.load_type !== 'cardio').map(x => x.exercise_id))];
+    const ins = Object.values(await liftInsights(ids, { since: meso.started_on || null }));
+    const prs = ins.filter(x => x.prs.count).sort((p, q) => q.prs.count - p.prs.count || q.prs.last.pct - p.prs.last.pct);
+    const none = ins.filter(x => !x.prs.count).sort((p, q) => p.name.localeCompare(q.name));
+    app.innerHTML = `<div class="card"><div class="big">${prs.reduce((t, x) => t + x.prs.count, 0)}</div><div class="muted small">PRs this meso across ${prs.length} lift${prs.length === 1 ? '' : 's'} · a PR = best weekly strength estimate beats every earlier one by more than 1%</div></div>
+      ${prs.length ? `<div class="card"><b>Lifts with PRs 🏆</b>${prs.map(x => `<button class="mover lift-row" data-go="#/progress/${x.id}/meso"><span>${esc(x.name)} <span class="muted tiny">${x.prs.count}× · latest +${x.prs.last.pct.toFixed(1)}%</span></span>${statusPill(x.status)}<span class="chev">›</span></button>`).join('')}</div>` : ''}
+      ${none.length ? `<div class="card"><b>No PR yet this meso</b>${none.map(x => `<button class="mover lift-row" data-go="#/progress/${x.id}/meso"><span>${esc(x.name)}</span>${statusPill(x.status)}<span class="chev">›</span></button>`).join('')}</div>` : ''}`;
+    return wire();
+  }
+
+  if (kind === 'totals') {
+    setHeader('All-time totals', '#/', 'home');
+    const [mesos, days, sets] = await Promise.all([
+      sb.from('mesocycles').select('id, name, status, weeks, created_at').order('created_at', { ascending: false }).then(check),
+      fetchAll(() => sb.from('workout_days').select('id, mesocycle_id, completed_at, skipped_at').not('completed_at', 'is', null).order('id')),
+      fetchAll(() => sb.from('sets').select('id, set_type, workout_exercises!inner(exercises!inner(load_type), workout_days!inner(mesocycle_id))')
+        .not('completed_at', 'is', null).is('duration_min', null).order('id')),
+    ]);
+    const per = {}; for (const m of mesos) per[m.id] = { m, w: 0, s: 0 };
+    for (const d of days) if (!d.skipped_at && per[d.mesocycle_id]) per[d.mesocycle_id].w++;
+    for (const x of sets) { if (x.set_type === 'warmup' || x.workout_exercises.exercises.load_type === 'cardio') continue; const k = x.workout_exercises.workout_days?.mesocycle_id; if (per[k]) per[k].s++; }
+    const list = Object.values(per).filter(x => x.w || x.s);
+    app.innerHTML = `<div class="grid2"><div class="card stat"><span class="muted small">Workouts finished</span><span class="big">${list.reduce((t, x) => t + x.w, 0)}</span></div>
+        <div class="card stat"><span class="muted small">Hard sets logged</span><span class="big">${list.reduce((t, x) => t + x.s, 0)}</span></div></div>
+      <div class="card"><b>By mesocycle</b><div class="muted tiny">newest first · tap to open</div>
+        ${list.map(x => `<button class="mover lift-row" data-go="#/meso/${x.m.id}"><span>${esc(x.m.name)} <span class="muted tiny">${x.m.weeks} wks</span></span><span class="muted small">${x.w} workouts · ${x.s} sets</span><span class="chev">›</span></button>`).join('')}</div>
+      <button class="ghost block" data-go="#/history">Workout history ›</button>`;
+    return wire();
+  }
+  go('#/');
 }
 
 // ---------- Learn ----------

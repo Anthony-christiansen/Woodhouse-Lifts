@@ -352,6 +352,16 @@ The cardio **progression indicator** compares session load (minutes × RPE) with
 
 ---
 
+### 6.0 Home drill-downs
+
+Every number on Home opens the data behind it, counted the same way as the tile:
+- **Hard sets** = completed lifting sets, not warm-ups and not cardio, grouped by Mon–Sun week.
+- **Workouts** = finished workout days, skipped days not counted.
+- **Cardio minutes** = cardio sessions plus cardio done inside workouts; load = RPE × minutes.
+- **PRs this meso** = the §6.1 rule (a week's best strength estimate beats every earlier one by more than 1%).
+
+Example: Home shows "Sets this week 42" → tap → Quads 12, Back 10, … → tap Quads → Hack Squat 4 sets, best 230×10 → tap → its chart.
+
 ### 6.1 Lift status flags (home screen, chart, and in the workout)
 
 Each lift in your current mesocycle gets a status from its best estimated strength per session (§1.7). Deload sessions, myo-rep mini-sets and warm-ups are left out, and ±1% counts as "the same". Each lift is judged on its **best session per week**, so a heavier day and a lighter day in the same week don't read as ups and downs. Only the **last 6 months** count. The current week counts only once it's at least as good as the week before. The rules are checked in this order:

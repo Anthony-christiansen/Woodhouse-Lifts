@@ -12,6 +12,20 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.3.0 — 2026-11-20 (22:10 MT) · "Tap anything on Home"
+
+**New — every number and chart on Home opens a drill-down:**
+- **Workouts this week (e.g. 3/5)** → that meso week's workouts: each day's status (Done / In progress / Not started / Skipped), sets done vs planned, and the muscles trained. Tap a day to open it; ‹ › moves between meso weeks.
+- **Sets this week** → hard sets for the Mon–Sun week, by muscle (tap a muscle to see its exercises, set count and best set; tap an exercise for its chart) and by workout. ‹ › moves between weeks.
+- **Hard sets per week chart** → tap any bar to open that week the same way.
+- **Cardio this week** and **each bar of the cardio chart** → minutes, load, totals by activity, and every session with day, minutes and RPE.
+- **PRs this meso** → every lift with a PR this meso (how many, latest %), then the lifts without one yet, each with its status; tap for the chart.
+- **Mesocycle card** and **Watch list** → the meso page.
+- **Workouts finished / sets logged** → all-time totals by mesocycle (workouts and hard sets each); tap a meso to open it. **Mesocycles** → the meso list.
+- Without an active meso: Recent PRs and Strength trend rows open the PR list and Progress.
+
+---
+
 ## 1.2.0 — 2026-11-20 (21:55 MT) · "Run it again from an earlier week"
 
 **New**

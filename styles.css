@@ -243,3 +243,18 @@ button.lift-row .chev { color: var(--muted); }
 .tiny-pill { font-size: 11px; padding: 2px 6px; vertical-align: middle; }
 input.odd { border-color: #f59e0b !important; box-shadow: 0 0 0 1px #f59e0b inset; }
 .hist-note { margin-top: 6px; }
+/* home drill-downs */
+button.card.stat { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; margin-bottom: 12px; display: flex; flex-direction: column; align-items: stretch; min-height: 0; width: 100%; text-align: left; font: inherit; color: inherit; position: relative; cursor: pointer; }
+button.card.stat.center { text-align: center; }
+.drill { cursor: pointer; position: relative; }
+.drill:active { transform: scale(.99); }
+.card.stat .chev { position: absolute; top: 10px; right: 12px; color: var(--muted); }
+.bar-hit { cursor: pointer; }
+.bar-hit:focus { outline: none; } .bar-hit:focus rect:last-of-type { stroke: var(--accent); stroke-width: 1.5; }
+.wk-nav { align-items: center; gap: 8px; margin-bottom: 10px; } .wk-nav b { font-size: 14px; }
+details.drill-m { border-top: 1px solid var(--line); padding: 8px 0; }
+details.drill-m summary { display: grid; grid-template-columns: 110px 1fr 32px; gap: 8px; align-items: center; cursor: pointer; list-style: none; min-height: 32px; }
+details.drill-m summary::-webkit-details-marker { display: none; }
+.hbar { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; } .hbar i { display: block; height: 100%; background: var(--accent); }
+details.drill-m b { text-align: right; }
+button.card.stat.center .chev { top: 6px; right: 8px; font-size: 12px; }
