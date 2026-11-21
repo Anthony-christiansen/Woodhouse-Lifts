@@ -358,7 +358,11 @@ When rule 1, 2, 3 or 5 fires (joint pain 3, still sore, performance down with sl
 
 ### 5.3 Order of days
 
-You can't start a day while an earlier day in the mesocycle is still open. The app tells you which day comes first and lets you go to it or skip it. If a workout is already in progress, the app sends you back to resume it.
+**Inside a week, do the days in any order.** Want legs today instead of back? Home → "Do a different day this week", or tap the day on the meso page. Each day still progresses from the **same day last week** (legs from last week's legs), so the order you do them in doesn't change the numbers. Recovery questions ("how sore are you?") are about the session you **finished most recently** for that muscle.
+
+**Weeks go in order.** A day in a later week can't be started while an earlier week still has open days — you can log those or skip them. You can still **look** at any later day: "Just look at…" opens a read-only preview (nothing can be logged and the day isn't started).
+
+**One workout at a time.** If another day is in progress with nothing logged yet, you can switch to the day you want instead; if sets are already logged there, finish or skip it first (or preview the other day).
 
 ### 5.4 Slip warnings (week over week)
 

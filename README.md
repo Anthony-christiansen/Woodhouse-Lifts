@@ -16,3 +16,4 @@ cd test && npm i @electric-sql/pglite && cd .. && node test/db.test.mjs
                              # create_mesocycle (atomic, idempotent), dashboard math, e1RM parity with
                              # logic.js, preferences, and that users can't see each other's data
 ```
+- Browser end-to-end tests (real Chromium, mocked Supabase, simulated network failures): see `test/e2e/README.md`.

@@ -4,3 +4,4 @@ __pycache__/
 supabase/seed/rp_*
 test/node_modules
 node_modules
+test/e2e/shots/

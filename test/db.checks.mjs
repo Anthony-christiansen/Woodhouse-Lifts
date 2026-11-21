@@ -107,5 +107,23 @@ export async function runChecks(db) {
   assert.ok(lr.every(r => r.prior_best === null), 'no older sessions yet');
   assert.equal((await as(db, B, `select * from public.lift_recent($1, 12)`, [[ex.press.id]])).length, 0, 'B sees none of A\'s sessions');
   console.log('LIFT_RECENT OK');
+  // ---- apply_feedback_adjustment: one transaction, at most once per feedback entry (retries can't double it)
+  const [{ id: dF }] = await as(db, A, `select id from public.workout_days where mesocycle_id = $1 and week = 1 limit 1`, [m1]);
+  const [{ id: we2, target_sets: ts0 }] = await as(db, A, `select we.id, we.target_sets from public.workout_exercises we join public.workout_days d on d.id = we.workout_day_id where d.mesocycle_id = $1 and d.week = 2 limit 1`, [m1]);
+  const [{ id: fb }] = await as(db, A, `insert into public.muscle_feedback (workout_day_id, muscle_group, pump, workload, joint_pain) values ($1, 'Chest', 1, 1, 0) returning id`, [dF]);
+  const ch = JSON.stringify([{ id: we2, target_sets: ts0 + 1, flag: '' }]);
+  const r1 = await as(db, A, `select public.apply_feedback_adjustment($1, 1, $2::jsonb) ok`, [fb, ch]);
+  const r2 = await as(db, A, `select public.apply_feedback_adjustment($1, 1, $2::jsonb) ok`, [fb, JSON.stringify([{ id: we2, target_sets: ts0 + 2 }])]);
+  const r3 = await as(db, A, `select public.apply_feedback_adjustment($1, 1, $2::jsonb) ok`, [fb, JSON.stringify([{ id: we2, target_sets: ts0 + 3 }])]);
+  assert.deepEqual([r1[0].ok, r2[0].ok, r3[0].ok], [true, false, false], 'applies once, retries are no-ops');
+  assert.equal((await as(db, A, `select target_sets from public.workout_exercises where id = $1`, [we2]))[0].target_sets, ts0 + 1, 'set added exactly once');
+  const [{ adjusted, soreness }] = await as(db, A, `select adjusted, soreness from public.muscle_feedback where id = $1`, [fb]);
+  assert.equal(adjusted, true); assert.equal(soreness, 1);
+  await assert.rejects(as(db, B, `select public.apply_feedback_adjustment($1, 1, $2::jsonb)`, [fb, ch]), /not found/i, 'other users cannot touch it');
+  // a failure part-way rolls back everything (bad target_sets violates the check constraint)
+  const [{ id: fb2 }] = await as(db, A, `insert into public.muscle_feedback (workout_day_id, muscle_group) values ($1, 'Back') returning id`, [dF]);
+  await assert.rejects(as(db, A, `select public.apply_feedback_adjustment($1, 1, $2::jsonb)`, [fb2, JSON.stringify([{ id: we2, target_sets: 99 }])]), /check/i);
+  assert.equal((await as(db, A, `select adjusted from public.muscle_feedback where id = $1`, [fb2]))[0].adjusted, false, 'rolled back: not marked adjusted');
+  console.log('FEEDBACK ADJUSTMENT: atomic + once only OK');
   console.log('ALL DB TESTS PASSED');
 }

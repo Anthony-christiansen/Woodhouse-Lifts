@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import * as L from './logic.js?v=24';
-import * as LEARN from './learn.js?v=24';
+import * as L from './logic.js?v=25';
+import * as LEARN from './learn.js?v=25';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -17,7 +17,7 @@ let authReturn = (() => {
   return null;
 })();
 let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
-export const APP_VERSION = '1.7.0'; // keep in sync with CHANGELOG.md
+export const APP_VERSION = '1.8.0'; // keep in sync with CHANGELOG.md
 const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
 const DOC_URL = 'https://docs.google.com/document/d/1kiVM5erQV6yO5V_wkhE73bevwtp_H2WAu6EvgMGPiws';
 
@@ -92,16 +92,30 @@ const segHtml = (key, val, attrs = '') => `<div class="seg">${RATINGS[key].opts.
 // Every set save is an idempotent upsert keyed by (workout_exercise_id, set_index), so the database can never
 // hold a duplicate set. If the network drops (gym basements), the save is kept on the phone and retried
 // automatically — when the connection returns, when the app comes back to the foreground, and every 20 s.
+// The queue is per account (review #2): switching accounts on the same phone can't send one person's sets as another's.
 const QKEY = 'wl_pending_sets_v1';
-const qLoad = () => { try { return JSON.parse(localStorage.getItem(QKEY) || '{}'); } catch { return {}; } };
-const qStore = q => { try { localStorage.setItem(QKEY, JSON.stringify(q)); } catch { /* private mode: retry still works this session */ } };
+const qKey = () => session?.user?.id ? `${QKEY}:${session.user.id}` : null;
+const qLoad = () => { const k = qKey(); if (!k) return {}; try { return JSON.parse(localStorage.getItem(k) || '{}'); } catch { return {}; } };
+const qStore = q => { const k = qKey(); if (!k) return; try { localStorage.setItem(k, JSON.stringify(q)); } catch { /* private mode: retry still works this session */ } };
+// Sets the server rejected for good (not a network problem) are kept here instead of being thrown away.
+const qFailedKey = () => session?.user?.id ? `${QKEY}:failed:${session.user.id}` : null;
+const qFailed = () => { const k = qFailedKey(); try { return k ? JSON.parse(localStorage.getItem(k) || '[]') : []; } catch { return []; } };
+const qAddFailed = (p, msg) => { const k = qFailedKey(); if (!k) return; try { localStorage.setItem(k, JSON.stringify([...qFailed(), { ...p, _error: msg, _at: new Date().toISOString() }].slice(-50))); } catch {} };
+// One-time move of the old shared queue (before 1.8.0) into the signed-in account's queue; the database's row-level
+// security rejects anything that isn't this user's, and those land in the failed list rather than being lost.
+function qMigrateLegacy() {
+  try { const old = localStorage.getItem(QKEY); if (!old || !qKey()) return;
+    const q = { ...JSON.parse(old), ...qLoad() }; qStore(q); localStorage.removeItem(QKEY); } catch {}
+}
+// Permanent = the database refused the row (constraint, permission); anything else (network, 5xx, timeouts) is retried.
+const isPermanentErr = e => /^(22|23|42)/.test(e?.code || '') || e?.code === 'PGRST116';
 const isNetErr = e => !navigator.onLine || /failed to fetch|network|load failed|timeout|fetch/i.test(e?.message || '');
 const setKey = p => p.workout_exercise_id + ':' + p.set_index;
 async function saveSet(payload) {
   const { error } = await sb.from('sets').upsert(payload, { onConflict: 'workout_exercise_id,set_index' });
   const q = qLoad();
   if (!error) { delete q[setKey(payload)]; qStore(q); syncBadge(); return 'saved'; }    // newest value is on the server
-  if (isNetErr(error)) { q[setKey(payload)] = payload; qStore(q); syncBadge(); return 'queued'; }
+  if (!isPermanentErr(error)) { q[setKey(payload)] = payload; qStore(q); syncBadge(); return 'queued'; }   // network or server hiccup → keep & retry
   toast(`Couldn’t save that set: ${error.message}`, true); return 'failed';
 }
 let flushing = false;
@@ -112,8 +126,8 @@ async function flushQueue() {
     for (const [k, p] of Object.entries(q)) {
       const { error } = await sb.from('sets').upsert(p, { onConflict: 'workout_exercise_id,set_index' });
       if (!error) { const cur = qLoad(); if (JSON.stringify(cur[k]) === JSON.stringify(p)) delete cur[k]; qStore(cur); }
-      else if (isNetErr(error)) break;
-      else { const cur = qLoad(); delete cur[k]; qStore(cur); toast(`A saved-offline set couldn’t be stored: ${error.message}`, true); }
+      else if (isPermanentErr(error)) { const cur = qLoad(); delete cur[k]; qStore(cur); qAddFailed(p, error.message); toast(`A saved-offline set was refused by the server and kept aside: ${error.message}`, true); }
+      else break;   // network / server hiccup: keep it queued and try again later
     }
   } finally { flushing = false; syncBadge(); }
   const left = Object.keys(qLoad()).length;
@@ -198,6 +212,7 @@ async function route() {
   }
   if (!session) { tabs.hidden = true; return renderAuth(); }
   if (awaitingNewPassword) return renderNewPassword(true);
+  qMigrateLegacy();
   if (Object.keys(qLoad()).length) { syncBadge(); flushQueue(); }
   if (!profile) profile = (await sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle()).data;
   const [name, ...args] = location.hash.replace(/^#\/?/, '').split('/');
@@ -459,7 +474,8 @@ async function renderHome() {
       : next ? `<div class="card"><div class="muted small">Next workout · ${esc(meso.name)}</div>
         <h3>Week ${next.week} · ${esc(dayName(next))}</h3>
         <div class="muted small">${r.deload ? 'Deload week — half sets, easy effort' : `Target ${r.rir} RIR this week`}</div>
-        <div class="spacer"></div><button class="primary block" data-go="#/workout">Start workout</button></div>`
+        <div class="spacer"></div><button class="primary block" data-go="#/workout">Start workout</button>
+        ${wk.filter(d => !d.completed_at && !d.skipped_at).length > 1 ? `<button class="ghost block" id="pickDay" style="margin-top:6px">Do a different day this week ›</button>` : ''}</div>`
       : `<div class="card"><h3>${meso ? 'Mesocycle finished 🎉' : 'No active mesocycle'}</h3>
         <p class="muted">Start from a base template or one of your saved ones.</p>
         <div class="grid2"><button class="primary" data-go="#/new">+ New mesocycle</button><button data-go="#/templates">Templates</button></div></div>`}
@@ -502,6 +518,14 @@ async function renderHome() {
     </div>`;
   $$('[data-go]').forEach(b => { b.onclick = e => { e.stopPropagation(); go(b.dataset.go); };
     if (b.tagName === 'g' || b.classList.contains('drill')) b.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(b.dataset.go); } }; });
+  // Pick any open day in the current week (e.g. legs today instead of back) — doc §5.3.
+  $('#pickDay') && ($('#pickDay').onclick = e => { e.stopPropagation();
+    const opts = wk.filter(d => !d.completed_at && !d.skipped_at);
+    openSheet(`<h3>Week ${curWeek} — which day today?</h3><p class="muted small">Any order is fine inside a week; each day still progresses from the same day last week.</p>
+      ${opts.map(d => `<button class="list-btn" data-day="${d.id}"><div class="grow"><b>${esc(dayName(d))}</b>${d.id === next.id ? ' <span class="pill on tiny-pill">next in order</span>' : ''}</div>›</button>`).join('')}
+      <button class="ghost block" data-meso="${meso.id}">See every day of the meso</button>`,
+      panel => { panel.querySelectorAll('[data-day]').forEach(b => b.onclick = () => { closeSheet(); go('#/workout/' + b.dataset.day); });
+        panel.querySelector('[data-meso]').onclick = () => { closeSheet(); go('#/meso/' + meso.id); }; }); });
   $('#moreLifts') && ($('#moreLifts').onclick = e => { e.stopPropagation(); $$('.lift-row.more').forEach(r => r.hidden = false); e.target.remove(); });
 }
 
@@ -755,8 +779,9 @@ async function pendingRecovery(day, muscles) {
   const best = {};
   for (const r of rows) {
     const src = r.workout_days;
-    if (!src.completed_at || order(src) >= order(day) || src.id === day.id) continue;
-    if (!best[r.muscle_group] || order(src) > order(best[r.muscle_group].workout_days)) best[r.muscle_group] = r;
+    // days can be done in any order inside a week, so "last time" = the most recently FINISHED session for that muscle
+    if (!src.completed_at || src.id === day.id || src.week > day.week) continue;
+    if (!best[r.muscle_group] || src.completed_at > best[r.muscle_group].workout_days.completed_at) best[r.muscle_group] = r;
   }
   return Object.values(best);
 }
@@ -774,31 +799,37 @@ async function applyAdjustment(fb, R, meso) {
     const sess = weekWes.filter(w => w.workout_day_id === target.id).sort((a, b) => a.position - b.position);
     const changes = L.distributeDelta(sess, adj.delta, {
       sessionTotal: sess.reduce((a, w) => a + w.target_sets, 0), weeklyTotal: weekWes.reduce((a, w) => a + w.target_sets, 0) });
-    for (const c of changes) check(await sb.from('workout_exercises').update({ target_sets: c.target_sets }).eq('id', c.id));
     const srcWes = check(await sb.from('workout_exercises').select('target_rir, exercises!inner(muscle_group)').eq('workout_day_id', src.id).eq('exercises.muscle_group', fb.muscle_group));
     const srcRir = srcWes[0]?.target_rir;
-    for (const w of sess) {
-      const patch = { flag: adj.flag || null };
+    // Everything below goes to the database as ONE call that runs at most once per feedback entry
+    // (apply_feedback_adjustment) — a retry after a dropped connection can't add the sets twice.
+    const pChanges = sess.map(w => { const c = changes.find(x => x.id === w.id), patch = { id: w.id, flag: adj.flag || '' };
+      if (c) patch.target_sets = c.target_sets;
       if (adj.holdRir && srcRir != null && srcRir > w.target_rir) patch.target_rir = srcRir;
-      check(await sb.from('workout_exercises').update(patch).eq('id', w.id));
-    }
-    // Deload volume follows the last accumulation week (doc §1.8).
-    if (target.week === meso.weeks - 1 && meso.weeks >= 3) {
+      return patch; });
+    let pDeload = [];
+    if (target.week === meso.weeks - 1 && meso.weeks >= 3) {   // deload volume follows the last accumulation week (doc §1.8)
       const dl = check(await sb.from('workout_days').select('id').eq('mesocycle_id', meso.id).eq('week', meso.weeks).eq('day_index', src.day_index).maybeSingle());
-      if (dl) for (const w of sess) {
-        const sets = changes.find(c => c.id === w.id)?.target_sets ?? w.target_sets;
-        check(await sb.from('workout_exercises').update({ target_sets: L.deloadSets(sets) }).eq('workout_day_id', dl.id).eq('exercise_id', w.exercise_id));
-      }
+      if (dl) pDeload = sess.map(w => ({ workout_day_id: dl.id, exercise_id: w.exercise_id, target_sets: L.deloadSets(changes.find(c => c.id === w.id)?.target_sets ?? w.target_sets) }));
     }
-    update.adjusted = true;
+    let applied;
+    const rr = await sb.rpc('apply_feedback_adjustment', { p_feedback_id: fb.id, p_soreness: R, p_changes: pChanges, p_deload: pDeload });
+    if (rr.error && /PGRST202|could not find the function/i.test((rr.error.code || '') + ' ' + rr.error.message)) {
+      // Database not upgraded yet (migration 20261121070000 pending): fall back to the old step-by-step writes.
+      for (const c of pChanges) check(await sb.from('workout_exercises').update({ ...(c.target_sets != null ? { target_sets: c.target_sets } : {}), ...(c.target_rir != null ? { target_rir: c.target_rir } : {}), flag: c.flag || null }).eq('id', c.id));
+      for (const d of pDeload) check(await sb.from('workout_exercises').update({ target_sets: d.target_sets }).eq('workout_day_id', d.workout_day_id).eq('exercise_id', d.exercise_id));
+      check(await sb.from('muscle_feedback').update({ ...update, adjusted: true }).eq('id', fb.id)); applied = true;
+    } else applied = check(rr);
     const msg = adj.delta > 0 ? `+${adj.delta} set${adj.delta > 1 ? 's' : ''}` : adj.delta < 0 ? `${adj.delta} set` : 'sets held';
-    toast(`${fb.muscle_group}: ${changes.length || adj.delta === 0 ? msg : 'at cap, held'} next week${adj.holdRir ? ', RIR held' : ''}`);
+    if (applied) toast(`${fb.muscle_group}: ${changes.length || adj.delta === 0 ? msg : 'at cap, held'} next week${adj.holdRir ? ', RIR held' : ''}`);
+    return;
   }
   check(await sb.from('muscle_feedback').update(update).eq('id', fb.id));
 }
 
 // ---------- workout logger ----------
-async function renderWorkout(dayId) {
+async function renderWorkout(dayId, mode) {
+  const preview = mode === 'view';
   if (!dayId) {
     setHeader('Workout', null, 'workout');
     const m = await activeMeso(); const ds = m ? await mesoDays(m.id) : [];
@@ -814,21 +845,30 @@ async function renderWorkout(dayId) {
   setHeader(`Wk ${day.week} · ${dayName(day)}`, '#/meso/' + meso.id, 'workout');
   const all = await mesoDays(meso.id);
 
-  // Guards (in progress elsewhere / earlier day not done).
-  if (!day.completed_at && !day.skipped_at) {
+  // Guards (in progress elsewhere / an earlier WEEK not done). Days inside a week can be done in any order —
+  // legs today instead of back is fine; each day still progresses from the same day last week (doc §5.3).
+  if (!day.completed_at && !day.skipped_at && !preview) {
     const live = all.find(d => d.started_at && !d.completed_at && !d.skipped_at && d.id !== day.id);
-    const earlier = all.filter(d => order(d) < order(day) && !d.completed_at && !d.skipped_at);
+    const earlier = all.filter(d => d.week < day.week && !d.completed_at && !d.skipped_at);
     if (live) {
+      const cr = await sb.from('sets').select('id, workout_exercises!inner(workout_day_id)', { count: 'exact', head: true })
+        .eq('workout_exercises.workout_day_id', live.id).not('completed_at', 'is', null);
+      const liveSets = cr.error ? 1 : (cr.count ?? 0);   // unsure → treat as logged (don't offer a switch)
+      const loggedAny = Object.values(qLoad()).some(p => p.completed_at) || liveSets > 0;
       app.innerHTML = `<div class="card warn"><h3>Workout in progress</h3>
-        <p class="small">Week ${live.week} · ${esc(dayName(live))} is still open. Finish it (or skip it) before starting another day.</p>
-        <button class="primary block" data-go="#/workout/${live.id}">Resume Week ${live.week} · ${esc(dayName(live))}</button></div>`;
-      $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go)); return;
+        <p class="small">Week ${live.week} · ${esc(dayName(live))} is open${loggedAny ? ' with sets logged. Finish it (or skip it) before starting another day.' : ', but nothing is logged yet — you can switch.'}</p>
+        <div class="grid2"><button class="primary" data-go="#/workout/${live.id}">Resume ${esc(dayName(live))}</button>
+        ${loggedAny ? `<button data-go="#/workout/${day.id}/view">Just look at ${esc(dayName(day))}</button>` : `<button id="switchDay">Switch to ${esc(dayName(day))}</button>`}</div></div>`;
+      $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
+      $('#switchDay') && ($('#switchDay').onclick = async () => { check(await sb.from('workout_days').update({ started_at: null }).eq('id', live.id)); renderWorkout(dayId); });
+      return;
     }
     if (earlier.length) {
       const e = earlier[0];
-      app.innerHTML = `<div class="card warn"><h3>You haven't reached this day yet</h3>
-        <p class="small">Week ${e.week} · ${esc(dayName(e))} comes first${earlier.length > 1 ? ` (and ${earlier.length - 1} more)` : ''}. Log it or skip it to move on.</p>
-        <div class="grid2"><button class="primary" data-go="#/workout/${e.id}">Go to it</button><button id="skip">Skip it</button></div></div>`;
+      app.innerHTML = `<div class="card warn"><h3>Week ${e.week} isn't finished</h3>
+        <p class="small">Week ${e.week} · ${esc(dayName(e))} is still open${earlier.length > 1 ? ` (and ${earlier.length - 1} more)` : ''}. Weeks go in order so each one can progress from the last — but you can look at this day now.</p>
+        <div class="grid2"><button class="primary" data-go="#/workout/${e.id}">Go to it</button><button id="skip">Skip it</button></div>
+        <button class="ghost block" data-go="#/workout/${day.id}/view">Just look at Week ${day.week} · ${esc(dayName(day))}</button></div>`;
       $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
       $('#skip').onclick = async () => {
         if (!confirm(`Skip Week ${e.week} · ${dayName(e)}? You can still open it later.`)) return;
@@ -854,7 +894,7 @@ async function renderWorkout(dayId) {
   const { deload } = L.rirForWeek(day.week, meso.weeks);
 
   // Recovery questions about last time come first (asked before you start).
-  if (!day.completed_at) {
+  if (!day.completed_at && !preview) {
     const pending = await pendingRecovery(day, groups);
     if (pending.length) return renderRecoveryGate(day, meso, pending);
   }
@@ -862,24 +902,28 @@ async function renderWorkout(dayId) {
   // Last week's same session → auto-matched weights and rep targets.
   const prev = {}, staleCarry = {}; let prevFb = {};
   const trail = {};   // exercise_id → [{ week, weight, reps }] first working set per earlier meso week (doc §4.0)
-  const addTrail = (id, week, sets) => { const f = (sets || []).filter(z => z.reps != null && z.duration_min == null).sort((a, b) => a.set_index - b.set_index)[0];
-    if (!f) return; const t = trail[id] = trail[id] || []; if (!t.some(x => x.week === week)) t.push({ week, weight: Number(f.weight), reps: Number(f.reps) }); };
+  // Only FINISHED sets count, and when a lift appears on more than one day a week, the same day (day_index) as
+  // today wins — so the trend compares like with like (review #2).
+  const addTrail = (id, week, sets, dayIndex) => { const f = (sets || []).filter(z => z.reps != null && z.duration_min == null && z.completed_at).sort((a, b) => a.set_index - b.set_index)[0];
+    if (!f) return; const t = trail[id] = trail[id] || []; const same = dayIndex === day.day_index, i = t.findIndex(x => x.week === week);
+    const e = { week, weight: Number(f.weight), reps: Number(f.reps), same };
+    if (i < 0) t.push(e); else if (same && !t[i].same) t[i] = e; };
   if (day.week > 1) {
     const ids0 = [...new Set(wes.map(w => w.exercise_id))];
-    if (ids0.length) check(await sb.from('workout_exercises').select('exercise_id, sets(set_index, weight, reps, duration_min), workout_days!inner(week, mesocycle_id)')
+    if (ids0.length) check(await sb.from('workout_exercises').select('exercise_id, sets(set_index, weight, reps, duration_min, completed_at), workout_days!inner(week, day_index, mesocycle_id)')
       .in('exercise_id', ids0).eq('workout_days.mesocycle_id', meso.id).lt('workout_days.week', day.week).order('id'))
-      .forEach(x => addTrail(x.exercise_id, x.workout_days.week, x.sets));
+      .forEach(x => addTrail(x.exercise_id, x.workout_days.week, x.sets, x.workout_days.day_index));
     const pd = check(await sb.from('workout_days').select('id').eq('mesocycle_id', meso.id).eq('week', day.week - 1).eq('day_index', day.day_index).maybeSingle());
     if (pd) {
-      check(await sb.from('workout_exercises').select('exercise_id, target_rir, sets(set_index, weight, reps, rir, duration_min, rpe)').eq('workout_day_id', pd.id))
-        .forEach(x => prev[x.exercise_id] = { rir: x.target_rir, sets: x.sets.sort((a, b) => a.set_index - b.set_index).map(z => ({ ...z, weight: W(z.weight) })) });
+      check(await sb.from('workout_exercises').select('exercise_id, target_rir, sets(set_index, weight, reps, rir, duration_min, rpe, completed_at)').eq('workout_day_id', pd.id))
+        .forEach(x => { const done = x.sets.filter(z => z.completed_at); if (done.length) prev[x.exercise_id] = { rir: x.target_rir, sets: done.sort((a, b) => a.set_index - b.set_index).map(z => ({ ...z, weight: W(z.weight) })) }; });
       check(await sb.from('muscle_feedback').select('*').eq('workout_day_id', pd.id)).forEach(f => prevFb[f.muscle_group] = f);
     }
   } else {
     // Week 1 carries over from your last finished mesocycle: its final working week for the same exercise.
     const ids = [...new Set(wes.map(w => w.exercise_id))];
     const hist = ids.length ? await fetchAll(() => sb.from('workout_exercises')
-      .select('exercise_id, target_rir, sets(set_index, weight, reps, rir, duration_min, rpe), workout_days!inner(week, completed_at, mesocycle_id, mesocycles(weeks, name))')
+      .select('exercise_id, target_rir, sets(set_index, weight, reps, rir, duration_min, rpe, completed_at), workout_days!inner(week, day_index, completed_at, mesocycle_id, mesocycles(weeks, name))')
       .in('exercise_id', ids).neq('workout_days.mesocycle_id', meso.id).not('workout_days.completed_at', 'is', null).order('id')) : [];
     // Week 1 progresses from your PREVIOUS meso only (the one you trained most recently, finished or not) — doc §5.6.
     // An exercise that wasn't in it gets no auto weight: older history (e.g. a 2025 rehab block) can't be translated,
@@ -889,9 +933,10 @@ async function renderWorkout(dayId) {
       .not('completed_at', 'is', null).order('completed_at', { ascending: false }).limit(1).maybeSingle());
     const prevMesoId = meso.carry_meso_id || last?.mesocycle_id || null;
     for (const h of hist) {
+      h.sets = (h.sets || []).filter(z => z.completed_at);   // unfinished sets never set next week's numbers
       const d = h.workout_days; if (!h.sets.length || L.rirForWeek(d.week, d.mesocycles?.weeks || 99).deload) continue;
       if (meso.carry_week && d.mesocycle_id === meso.carry_meso_id && d.week !== meso.carry_week) continue;
-      if (d.mesocycle_id === prevMesoId) addTrail(h.exercise_id, d.week, h.sets);
+      if (d.mesocycle_id === prevMesoId) addTrail(h.exercise_id, d.week, h.sets, d.day_index);
       const into = d.mesocycle_id === prevMesoId ? prev : staleCarry;
       const cur = into[h.exercise_id];
       if (!cur || d.completed_at > cur.at) into[h.exercise_id] = { rir: h.target_rir, at: d.completed_at, carried: true, wk: d.week, mname: d.mesocycles?.name || 'earlier meso', sets: h.sets.sort((a, b) => a.set_index - b.set_index).map(z => ({ ...z, weight: W(z.weight) })) };
@@ -913,7 +958,7 @@ async function renderWorkout(dayId) {
     return `<button class="lift-flag st-${st.status}" data-flag="${we.id}" aria-label="${esc(head)}: show recommendation"><span>${FLAG[st.status]}</span><span><b>${head}.</b> ${esc(st.rec.split('. ').slice(1, 2).join('') || '')}${st.status === 'pr' ? '' : ' <u>More</u>'}</span></button>`; };
   const feedback = {};
   check(await sb.from('muscle_feedback').select('*').eq('workout_day_id', dayId)).forEach(f => feedback[f.muscle_group] = f);
-  if (!day.started_at && !day.completed_at) {
+  if (!day.started_at && !day.completed_at && !preview) {
     await sb.from('workout_days').update({ started_at: new Date().toISOString() }).eq('id', dayId);
     if (meso.status === 'planned') await sb.from('mesocycles').update({ status: 'active' }).eq('id', meso.id);
   }
@@ -956,6 +1001,8 @@ async function renderWorkout(dayId) {
   };
 
   app.innerHTML = `
+    ${preview ? `<div class="card info small preview-banner"><b>👀 Preview</b> — not started, nothing can be logged here.
+      <div class="grid2" style="margin-top:8px"><button class="primary sm" data-go="#/workout/${day.id}">Start this day</button><button class="sm" data-go="#/meso/${meso.id}">All days</button></div></div>` : ''}
     ${day.completed_at ? '<div class="card good small">Finished ✓ — you can still edit sets and ratings.</div>' : ''}
     ${day.completed_at ? '' : (() => { let seen = false; try { seen = localStorage.getItem('wl_warmup_seen') === '1'; } catch {}
       return seen ? '<div class="muted small warm-line">🔥 Warm up first — tap ⓘ on each muscle’s first exercise for ramp-up sets. Warm-ups aren’t logged.</div>'
@@ -1081,8 +1128,17 @@ async function renderWorkout(dayId) {
       const d = Number(raw) - Number(was);
       const dir = Math.abs(d) < 1e-9 ? 'level' : d > 0 ? 'up' : 'down';
       const good = dir === 'level' ? 'level' : (dir === 'up') !== invert ? 'good' : 'back';
-      el.className = `dir ${good}`; el.textContent = dir === 'up' ? '▲' : dir === 'down' ? '▼' : '=';
-      el.title = `${f === 'weight' ? 'Weight' : 'Reps'} ${dir === 'level' ? 'same as' : dir + ' vs'} ${vs} (${fmt(was)} → ${fmt(raw)})`;
+      let cls = good, note = '';
+      // Fewer reps at a heavier weight isn't a step back if overall performance (load × reps) held or improved.
+      if (f === 'reps' && dir === 'down' && ex.load_type === 'weighted' && old?.weight != null) {
+        const wNow = Number(row.querySelector('[data-f="weight"]').value || old.weight);
+        if (wNow > Number(old.weight)) {
+          const perf = (w, r) => w * (1 + r / 30), now = perf(wNow, Number(raw)), then = perf(Number(old.weight), Number(old.reps));
+          if (now >= then * 0.99) { cls = 'level'; note = ` — heavier weight, so overall performance is ${now >= then * 1.005 ? 'up' : 'the same'}`; }
+        }
+      }
+      el.className = `dir ${cls}`; el.textContent = dir === 'up' ? '▲' : dir === 'down' ? '▼' : '=';
+      el.title = `${f === 'weight' ? 'Weight' : 'Reps'} ${dir === 'level' ? 'same as' : dir + ' vs'} ${vs} (${fmt(was)} → ${fmt(raw)})${note}`;
       el.setAttribute('aria-label', el.title);
     });
   }
@@ -1136,7 +1192,7 @@ async function renderWorkout(dayId) {
     row.querySelectorAll('input').forEach(i => { i.oninput = () => { i.classList.remove('sug'); if (i.dataset.f === 'weight') retarget(we, row); updateDirs(we, row); }; i.onchange = () => save(false); });
     row.querySelector('[data-f="weight"]').addEventListener('change', () => {
       const wIn = row.querySelector('[data-f="weight"]'), r = repsFor(we, +row.dataset.idx - 1, wIn.value);
-      const last = baseFor(we, +row.dataset.idx - 1), lastW = last?.weight != null ? W(last.weight) : null;
+      const last = baseFor(we, +row.dataset.idx - 1), lastW = last?.weight != null ? Number(last.weight) : null;   // already in display units
       const odd = L.weightSanity(lastW, wIn.value);
       wIn.classList.toggle('odd', !!odd);
       const jump = !odd && lastW > 0 && we.exercises.load_type === 'weighted' ? (+wIn.value - lastW) / lastW : 0;
@@ -1165,16 +1221,19 @@ async function renderWorkout(dayId) {
       const done = markDone ? !row.classList.contains('done') : row.classList.contains('done');
       if (markDone && done && (!duration || rpe == null)) return toast('Enter minutes and RPE', true);
       if (!markDone && duration == null && rpe == null) return;
-      if (row.dataset.busy) return;
+      // A tap while a save is in flight is remembered and sent once the first save lands (same as lifting sets).
+      if (row.dataset.busy) { row.dataset.again = markDone ? 'done' : '1'; return; }
       row.dataset.busy = '1'; row.classList.remove('failed', 'queued'); row.classList.add('saving');
       const payload = { workout_exercise_id: we.id, set_index: +row.dataset.idx, duration_min: duration, rpe,
-        weight: null, reps: null, completed_at: done ? new Date().toISOString() : null };
+        weight: null, reps: null, completed_at: done ? (row.dataset.at || new Date().toISOString()) : null };
       row.dataset.key = setKey(payload);
       const res = await saveSet(payload);
       delete row.dataset.busy; row.classList.remove('saving');
       if (res === 'failed') { row.classList.add('failed'); return; }
       if (res === 'queued') row.classList.add('queued');
+      row.dataset.at = payload.completed_at || '';
       row.classList.toggle('done', done);
+      if (row.dataset.again) { const again = row.dataset.again; delete row.dataset.again; return save(again === 'done'); }
       refreshTrend(we);
       if (markDone && done) enforceRatings();
     };
@@ -1194,8 +1253,16 @@ async function renderWorkout(dayId) {
     };
     card.querySelector('[data-rmset]').onclick = async () => {
       const rows = card.querySelectorAll('.set'); if (rows.length <= 1) return;
-      const last = rows[rows.length - 1];
-      await sb.from('sets').delete().eq('workout_exercise_id', we.id).eq('set_index', +last.dataset.idx); last.remove();
+      const last = rows[rows.length - 1], key = we.id + ':' + last.dataset.idx;
+      if (last.dataset.busy) return toast('That set is still saving — try again in a second', true);
+      // Drop any queued offline save for this set FIRST, so a later sync can't bring it back.
+      const q = qLoad(); const queued = q[key]; delete q[key]; qStore(q); syncBadge();
+      const { error } = await sb.from('sets').delete().eq('workout_exercise_id', we.id).eq('set_index', +last.dataset.idx);
+      if (error) {   // keep the row (and its queued save) if the server didn't delete it
+        if (queued) { const q2 = qLoad(); q2[key] = queued; qStore(q2); syncBadge(); }
+        return toast(isNetErr(error) ? 'No signal — can’t remove a set offline. Try again when you’re connected.' : `Couldn’t remove that set: ${error.message}`, true);
+      }
+      last.remove();
     };
   });
 
@@ -1236,6 +1303,12 @@ async function renderWorkout(dayId) {
     openRating(m, !isRated(m));
   });
   wes.forEach(refreshTrend);
+  if (preview) {   // look, don't touch: nothing can be logged until the day is started
+    $$('.card[data-we] input, .card[data-we] button:not([data-info]):not(.lift-flag), #finish, #skipDay, [data-edit]').forEach(el => { el.disabled = true; });
+    $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
+    $('#finish') && ($('#finish').hidden = true);
+    return;
+  }
   if (!day.completed_at) enforceRatings();
   const sk = $('#skipDay'); if (sk) sk.onclick = async () => {
     if (!confirm('Skip this workout? Logged sets are kept.')) return;
@@ -1247,8 +1320,15 @@ async function renderWorkout(dayId) {
     if (unrated.length) { toast(`Rate ${unrated[0]} first`); return openRating(unrated[0]); }
     const open = $$('.set:not(.done)').length;
     if (open && !confirm(`${open} set${open > 1 ? 's are' : ' is'} not checked off. Finish anyway?`)) return;
-    // Performance trend per muscle vs. last week (doc §1.7), computed from what's saved.
-    const fresh = check(await sb.from('workout_exercises').select('exercise_id, target_rir, exercises(*), sets(*)').eq('workout_day_id', dayId));
+    // Performance trend per muscle vs. last week (doc §1.7). First let in-flight saves land and push anything
+    // saved offline; sets still waiting (no signal) are merged in, so the feedback never misses a logged set.
+    for (let i = 0; i < 30 && document.querySelector('.set[data-busy]'); i++) await new Promise(r => setTimeout(r, 100));
+    await flushQueue();
+    const fresh = check(await sb.from('workout_exercises').select('id, exercise_id, target_rir, exercises(*), sets(*)').eq('workout_day_id', dayId));
+    const waiting = Object.values(qLoad());
+    fresh.forEach(w => waiting.filter(p => p.workout_exercise_id === w.id).forEach(p => {
+      const i = w.sets.findIndex(x => x.set_index === p.set_index); if (i >= 0) w.sets[i] = { ...w.sets[i], ...p }; else w.sets.push({ ...p }); }));
+    if (waiting.some(p => fresh.some(w => w.id === p.workout_exercise_id))) toast('No signal — finishing with the sets saved on your phone; they’ll sync automatically.');
     fresh.forEach(w => w.sets.forEach(x => { x.weight = W(x.weight); }));
     const bw = bwD();
     for (const m of muscles) {

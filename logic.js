@@ -645,7 +645,8 @@ export function setAdjustment({ R, L, J, P, F }) {
   if (J === 2) return { delta: 0, rule: 4 };
   if (L === 3) return { delta: 0, holdRir: true, rule: 5 };
   if (R != null && R <= 1 && L != null && L <= 1 && (F == null || F >= 0)) {
-    return { delta: R === 0 && L === 0 && (P == null || P <= 1) ? 2 : 1, rule: 6 };
+    // +2 only with no joint discomfort at all; any joint pain (even "Low") limits the increase to +1 (review #2)
+    return { delta: R === 0 && L === 0 && (P == null || P <= 1) && !(J >= 1) ? 2 : 1, rule: 6 };
   }
   return { delta: 0, rule: 7 };
 }

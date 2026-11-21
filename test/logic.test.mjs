@@ -418,3 +418,10 @@ console.log('GUARDRAIL TESTS PASSED');
   assert.equal(r.reps, 10, '+3 RIR drop would be +3 reps → capped at +2');
   console.log('INJURY GUARDRAIL TESTS PASSED');
 }
+
+// --- Review #2: low joint pain limits volume increases ---
+{
+  assert.equal(L.setAdjustment({ R: 0, L: 0, J: 0, P: 0, F: 1 }).delta, 2, 'everything great → +2');
+  assert.equal(L.setAdjustment({ R: 0, L: 0, J: 1, P: 0, F: 1 }).delta, 1, 'any joint pain → at most +1');
+  console.log('JOINT PAIN VOLUME TESTS PASSED');
+}

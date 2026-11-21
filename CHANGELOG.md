@@ -12,6 +12,28 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.8.0 — 2026-11-21 (00:30 MT) · "Pick your day + reliability"
+
+**New**
+- **Do the days of a week in any order.** Home → "Do a different day this week" lists the open days; e.g. legs today instead of back. Each day still progresses from the same day last week.
+- **Preview any day.** Days in a later week open as a read-only preview ("Just look at…") — see the exercises and targets without starting it.
+- **Switch days** if you opened one by mistake and haven't logged anything yet.
+
+**Fixed (from the second external review)**
+- **kg users:** the big-jump/typo warnings converted last week's weight to kg twice (e.g. compared 45 kg against ~20 kg). Fixed.
+- **Finishing offline:** before scoring the workout, the app now waits for in-flight saves, syncs anything saved offline, and includes sets still waiting on the phone — feedback no longer misses logged sets.
+- **Progression history:** only **finished** sets count, and when a lift appears twice a week the same day is compared (like with like).
+- **Recovery set changes are now one database transaction that can only run once per rating** — a dropped connection + retry can no longer add the sets twice. *(Needs the database update `20261121070000_atomic_feedback_adjustment` — pending approval; until then the app uses the previous method.)*
+- **Offline queue is per account** (switching accounts on one phone can't mix up sets) and sets the server refuses are kept aside instead of being dropped; network/server hiccups keep retrying.
+- **Removing a set** first drops its queued offline save (it can't come back later), and keeps the row if the server didn't delete it.
+- **Cardio:** a tap while a save is in progress is no longer lost.
+- **Volume:** any joint pain (even "Low") limits next week's increase to +1 set (it could be +2).
+- **Arrows:** fewer reps at a heavier weight shows grey, not orange, when overall performance held or improved.
+
+**Tests:** new DB test (adjustment applied exactly once across 3 retries; partial failure rolls back; other users can't touch it) and browser tests (pick a day, preview, legacy queue migration, removing a queued set, kg warnings).
+
+---
+
 ## 1.7.0 — 2026-11-20 (23:55 MT) · "Injury guardrails"
 
 **New — limits on how fast weight goes up, applied to every suggestion:**
