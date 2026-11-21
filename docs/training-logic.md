@@ -225,6 +225,17 @@ Deload weeks and cardio are excluded from these checks.
 
 Cardio can be added as an exercise in any workout (muscle group "Cardio"), logged as minutes + session RPE per bout. It can also be logged on its own from the Cardio page. Both count toward the dashboard's weekly cardio minutes and load (1.9). Cardio is never used in strength trends, volume or set adjustments.
 
+**Cardio ratings are different from lifting ratings.** When every bout of cardio in a workout is checked off, a locked sheet asks:
+
+| Rating | Scale | Why |
+|---|---|---|
+| **Breathing (talk test)** — replaces pump | 0 Could sing · 1 Talked easily · 2 Short phrases · 3 Couldn't talk | Comfortable speech is possible below the ventilatory/lactate threshold and not above it, so it works as a valid, practical intensity check across walking, jogging, cycling, elliptical and stairs. It's less practical for HIIT. Reed & Pipe 2014, *Curr Opin Cardiol* [doi:10.1097/HCO.0000000000000097](https://doi.org/10.1097/HCO.0000000000000097); Foster et al. 2008, *J Cardiopulm Rehabil Prev* [doi:10.1097/01.HCR.0000311504.41775.78](https://doi.org/10.1097/01.HCR.0000311504.41775.78) |
+| Workload | Same 0–3 scale as lifting | |
+| Joint pain | Same 0–3 scale as lifting | |
+| Recovery / soreness | Asked at your next session with cardio | |
+
+The cardio **progression indicator** compares session load (minutes × RPE) with last time. Cardio ratings are recorded and feed the watch list. They don't change lifting sets.
+
 ### 5.6 Carry-over between mesocycles
 
 In week 1 of a new mesocycle, each exercise's weight is auto-matched from your last finished mesocycle's final working week for that same exercise. The reps are set back to the new week-1 RIR target (3 RIR). This is how your imported RP history (AC IV, AC V) feeds your next block.
@@ -272,3 +283,6 @@ In week 1 of a new mesocycle, each exercise's weight is auto-matched from your l
 20. Held S et al. Maximizing Adaptations in Concurrent Training: An Umbrella Review of Meta-analyses. *Sports Med* 2026. https://doi.org/10.1007/s40279-026-02401-y
 21. Lundberg TR et al. The Effects of Concurrent Aerobic and Strength Training on Muscle Fiber Hypertrophy. *Sports Med* 2022. https://doi.org/10.1007/s40279-022-01688-x
 22. Haddad M et al. Session-RPE Method for Training Load Monitoring: Validity, Ecological Usefulness, and Influencing Factors. *Front Neurosci* 2017. https://doi.org/10.3389/fnins.2017.00612
+
+23. Reed JL, Pipe AL. The talk test: a useful tool for prescribing and monitoring exercise intensity. *Curr Opin Cardiol* 2014. https://doi.org/10.1097/HCO.0000000000000097
+24. Foster C et al. The talk test as a marker of exercise training intensity. *J Cardiopulm Rehabil Prev* 2008. https://doi.org/10.1097/01.HCR.0000311504.41775.78

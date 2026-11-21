@@ -1,10 +1,10 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import * as L from './logic.js?v=5';
+import * as L from './logic.js?v=7';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
   { auth: { persistSession: true, autoRefreshToken: true } });
-const DOC_URL = 'https://docs.google.com/document/d/1R1DWOjoxgMkf5Mf9xdSKGG_d7fq-8daxWfPxhHeDc4M';
+const DOC_URL = 'https://docs.google.com/document/d/1Jxhk6bIeWpApGCHCpMIe96r7JE9-GjRW_tZOZUMuisg';
 
 const app = document.getElementById('app');
 const titleEl = document.getElementById('title');
@@ -51,7 +51,9 @@ const RATINGS = {
   workload: { label: 'Workload', opts: ['Easy', 'Pretty good', 'Pushed my limit', 'Too much'] },
   joint_pain: { label: 'Joint pain', opts: ['None', 'Low', 'Moderate', 'A lot'] },
   soreness: { label: 'Recovery', opts: ['Never got sore', 'Healed a while ago', 'Healed just in time', 'Still sore'] },
+  breathing: { label: 'Breathing (talk test)', opts: ['Could sing', 'Talked easily', 'Short phrases', "Couldn't talk"] },
 };
+const rateKeys = m => m === 'Cardio' ? ['breathing', 'workload', 'joint_pain'] : ['pump', 'workload', 'joint_pain'];
 const segHtml = (key, val, attrs = '') => `<div class="seg">${RATINGS[key].opts.map((o, i) =>
   `<button type="button" ${attrs} data-k="${key}" data-v="${i}" class="${val === i ? 'on' : ''}">${o}</button>`).join('')}</div>`;
 
@@ -474,7 +476,7 @@ async function applyAdjustment(fb, R, meso) {
   const srcDeload = L.rirForWeek(src.week, meso.weeks).deload;
   const target = !srcDeload && check(await sb.from('workout_days').select('id, week, completed_at')
     .eq('mesocycle_id', meso.id).eq('week', src.week + 1).eq('day_index', src.day_index).maybeSingle());
-  if (target && !target.completed_at && !L.rirForWeek(target.week, meso.weeks).deload && !fb.adjusted) {
+  if (fb.muscle_group !== 'Cardio' && target && !target.completed_at && !L.rirForWeek(target.week, meso.weeks).deload && !fb.adjusted) {
     const adj = L.setAdjustment({ R, L: fb.workload, J: fb.joint_pain, P: fb.pump, F: fb.performance });
     const weekWes = check(await sb.from('workout_exercises').select('id, workout_day_id, exercise_id, target_sets, target_rir, position, exercises!inner(muscle_group), workout_days!inner(week, mesocycle_id)')
       .eq('workout_days.mesocycle_id', meso.id).eq('workout_days.week', target.week).eq('exercises.muscle_group', fb.muscle_group));
@@ -549,11 +551,12 @@ async function renderWorkout(dayId) {
   wes.forEach(w => w.sets.sort((a, b) => a.set_index - b.set_index));
   const isCardio = w => w.exercises.load_type === 'cardio';
   const muscles = [...new Set(wes.filter(w => !isCardio(w)).map(w => w.exercises.muscle_group))];
+  const groups = wes.some(isCardio) ? [...muscles, 'Cardio'] : muscles; // everything that gets rated
   const { deload } = L.rirForWeek(day.week, meso.weeks);
 
   // Recovery questions about last time come first (asked before you start).
   if (!day.completed_at) {
-    const pending = await pendingRecovery(day, muscles);
+    const pending = await pendingRecovery(day, groups);
     if (pending.length) return renderRecoveryGate(day, meso, pending);
   }
 
@@ -562,7 +565,7 @@ async function renderWorkout(dayId) {
   if (day.week > 1) {
     const pd = check(await sb.from('workout_days').select('id').eq('mesocycle_id', meso.id).eq('week', day.week - 1).eq('day_index', day.day_index).maybeSingle());
     if (pd) {
-      check(await sb.from('workout_exercises').select('exercise_id, target_rir, sets(set_index, weight, reps, rir)').eq('workout_day_id', pd.id))
+      check(await sb.from('workout_exercises').select('exercise_id, target_rir, sets(set_index, weight, reps, rir, duration_min, rpe)').eq('workout_day_id', pd.id))
         .forEach(x => prev[x.exercise_id] = { rir: x.target_rir, sets: x.sets.sort((a, b) => a.set_index - b.set_index) });
       check(await sb.from('muscle_feedback').select('*').eq('workout_day_id', pd.id)).forEach(f => prevFb[f.muscle_group] = f);
     }
@@ -570,7 +573,7 @@ async function renderWorkout(dayId) {
     // Week 1 carries over from your last finished mesocycle: its final working week for the same exercise.
     const ids = [...new Set(wes.map(w => w.exercise_id))];
     const hist = ids.length ? check(await sb.from('workout_exercises')
-      .select('exercise_id, target_rir, sets(set_index, weight, reps, rir), workout_days!inner(week, completed_at, mesocycle_id, mesocycles(weeks))')
+      .select('exercise_id, target_rir, sets(set_index, weight, reps, rir, duration_min, rpe), workout_days!inner(week, completed_at, mesocycle_id, mesocycles(weeks))')
       .in('exercise_id', ids).neq('workout_days.mesocycle_id', meso.id).not('workout_days.completed_at', 'is', null)) : [];
     for (const h of hist) {
       const d = h.workout_days; if (!h.sets.length || L.rirForWeek(d.week, d.mesocycles?.weeks || 99).deload) continue;
@@ -596,8 +599,10 @@ async function renderWorkout(dayId) {
   const todayWarn = day.completed_at ? [] : (await slipFor(meso)).filter(w => !w.muscle || muscles.includes(w.muscle));
   const cardioCard = we => {
     const n = Math.max(we.sets.length, we.target_sets || 0, 1);
-    return `<div class="card" data-we="${we.id}">
-      <h3>♥︎ ${esc(we.exercises.name)}</h3><div class="muted small">Cardio · minutes + intensity (RPE 0 easy → 10 max)</div>
+    return `<div class="card" data-we="${we.id}" data-muscle="Cardio">
+      <div class="row"><div class="grow"><h3>♥︎ ${esc(we.exercises.name)} <span class="trend" data-trend="${we.id}"></span></h3>
+        <div class="muted small">Cardio · minutes + intensity (RPE 0 easy → 10 max)</div></div>
+        <button class="ghost sm" data-edit="Cardio" aria-label="Edit ratings" title="Edit ratings">✎</button></div>
       <div class="sets"><div class="set-head"><div>#</div><div>min</div><div>RPE</div><div></div></div>
         ${Array.from({ length: n }, (_, i) => { const s = we.sets.find(x => x.set_index === i + 1) || {};
           return `<div class="set ${s.completed_at ? 'done' : ''}" data-idx="${i + 1}"><div class="n">${i + 1}</div>
@@ -652,6 +657,12 @@ async function renderWorkout(dayId) {
   // Progression indicator per exercise: best estimated strength today vs last time (doc §1.7).
   function exerciseTrend(we) {
     const card = app.querySelector(`[data-we="${we.id}"]`); if (!card) return null;
+    if (isCardio(we)) { // cardio progression = session load (minutes × RPE) vs last time
+      const cur = [...card.querySelectorAll('.set.done')].reduce((a, r) => a + L.cardioLoad({ minutes: r.querySelector('[data-f="duration"]').value, rpe: r.querySelector('[data-f="rpe"]').value }), 0);
+      const p = prev[we.exercise_id]; const old = p ? p.sets.reduce((a, x) => a + L.cardioLoad({ minutes: x.duration_min, rpe: x.rpe }), 0) : 0;
+      if (!cur || !old) return null;
+      return { t: L.performanceTrend(cur, old), pct: (cur - old) / old * 100, vs: p.carried ? 'last meso' : 'last week' };
+    }
     const cur = [...card.querySelectorAll('.set.done')].map(r => ({ weight: Number(r.querySelector('[data-f="weight"]').value) || 0,
       reps: Number(r.querySelector('[data-f="reps"]').value), rir: we.target_rir })).filter(x => x.reps);
     const p = prev[we.exercise_id]; if (!cur.length || !p?.sets.length) return null;
@@ -662,18 +673,18 @@ async function renderWorkout(dayId) {
   const trendHtml = tr => !tr ? '' : `<span class="pill ${tr.t > 0 ? 'on' : tr.t < 0 ? 'bad' : ''}" title="vs ${tr.vs}">${tr.t > 0 ? '▲' : tr.t < 0 ? '▼' : '●'} ${tr.pct > 0 ? '+' : ''}${tr.pct.toFixed(1)}%</span>`;
   const exComplete = we => { const c = app.querySelector(`[data-we="${we.id}"]`); return !!c && [...c.querySelectorAll('.set')].every(r => r.classList.contains('done')); };
   function refreshTrend(we) { const el = app.querySelector(`[data-trend="${we.id}"]`); if (el) el.innerHTML = exComplete(we) ? trendHtml(exerciseTrend(we)) : ''; }
-  const isRated = m => feedback[m] && feedback[m].pump != null && feedback[m].workload != null && feedback[m].joint_pain != null;
+  const isRated = m => !!feedback[m] && rateKeys(m).every(k => feedback[m][k] != null);
 
   // required = locked: can't dismiss or move on until all three are answered. Editing later via ✎ is not locked.
   function openRating(m, required = true) {
     const f = { ...(feedback[m] || {}) };
-    const exs = wes.filter(w => !isCardio(w) && w.exercises.muscle_group === m);
+    const exs = m === 'Cardio' ? wes.filter(isCardio) : wes.filter(w => !isCardio(w) && w.exercises.muscle_group === m);
     openSheet(`<h3>${esc(m)} — how was that?</h3>
       <div class="muted small">${required ? 'Required before you continue.' : 'Adjust your ratings.'}</div>
       <div class="card" style="margin:10px 0 4px;padding:10px"><div class="muted tiny">Progression</div>
         ${exs.map(w => { const tr = exComplete(w) ? exerciseTrend(w) : null;
           return `<div class="mover"><span>${esc(w.exercises.name)}</span>${tr ? trendHtml(tr) : `<span class="muted tiny">${exComplete(w) ? 'no history yet' : 'not finished'}</span>`}</div>`; }).join('')}</div>
-      ${['pump', 'workload', 'joint_pain'].map(k => `<div class="fb-row"><label>${RATINGS[k].label}</label>${segHtml(k, f[k])}</div>`).join('')}
+      ${rateKeys(m).map(k => `<div class="fb-row"><label>${RATINGS[k].label}</label>${segHtml(k, f[k])}</div>`).join('')}
       <div class="spacer"></div><button class="primary block" id="saveRate">Save</button>
       ${required ? '' : '<button class="ghost block" id="later">Cancel</button>'}`, panel => {
       panel.querySelectorAll('[data-k]').forEach(b => b.onclick = () => {
@@ -682,8 +693,9 @@ async function renderWorkout(dayId) {
       });
       const later = panel.querySelector('#later'); if (later) later.onclick = closeSheet;
       panel.querySelector('#saveRate').onclick = async () => {
-        if (f.pump == null || f.workload == null || f.joint_pain == null) return toast('Pick one for each', true);
-        const row = check(await sb.from('muscle_feedback').upsert({ workout_day_id: dayId, muscle_group: m, pump: f.pump, workload: f.workload, joint_pain: f.joint_pain },
+        if (rateKeys(m).some(k => f[k] == null)) return toast('Pick one for each', true);
+        const payload = { workout_day_id: dayId, muscle_group: m }; rateKeys(m).forEach(k => payload[k] = f[k]);
+        const row = check(await sb.from('muscle_feedback').upsert(payload,
           { onConflict: 'workout_day_id,muscle_group' }).select().single());
         feedback[m] = row; closeSheet();
         const slot = app.querySelector(`[data-rate="${CSS.escape(m)}"]`); if (slot) { slot.innerHTML = rateLine(m, row); wireRate(); }
@@ -694,7 +706,7 @@ async function renderWorkout(dayId) {
   // Any muscle whose sets are all done but isn't rated gets the locked prompt.
   function enforceRatings() {
     if (!sheet.hidden) return;
-    const m = muscles.find(x => muscleComplete(x) && !isRated(x));
+    const m = groups.find(x => muscleComplete(x) && !isRated(x));
     if (m) openRating(m, true);
   }
 
@@ -733,6 +745,8 @@ async function renderWorkout(dayId) {
         weight: null, reps: null, completed_at: done ? new Date().toISOString() : null }, { onConflict: 'workout_exercise_id,set_index' });
       if (error) return toast(error.message, true);
       row.classList.toggle('done', done);
+      refreshTrend(we);
+      if (markDone && done) enforceRatings();
     };
     row.querySelector('.check').onclick = () => save(true);
     row.querySelectorAll('input').forEach(i => i.onchange = () => save(false));
@@ -759,7 +773,7 @@ async function renderWorkout(dayId) {
     if (!isRated(m) && !muscleComplete(m)) return toast(`Finish ${m}'s sets first — ratings open automatically`);
     openRating(m, !isRated(m));
   });
-  wes.filter(w => !isCardio(w)).forEach(refreshTrend);
+  wes.forEach(refreshTrend);
   if (!day.completed_at) enforceRatings();
   const sk = $('#skipDay'); if (sk) sk.onclick = async () => {
     if (!confirm('Skip this workout? Logged sets are kept.')) return;
@@ -767,7 +781,7 @@ async function renderWorkout(dayId) {
   };
   $('#finish').onclick = async () => {
     if (day.completed_at) return go('#/meso/' + meso.id);
-    const unrated = muscles.filter(m => muscleComplete(m) && feedback[m]?.workload == null);
+    const unrated = groups.filter(m => muscleComplete(m) && !isRated(m));
     if (unrated.length) { toast(`Rate ${unrated[0]} first`); return openRating(unrated[0]); }
     const open = $$('.set:not(.done)').length;
     if (open && !confirm(`${open} set${open > 1 ? 's are' : ' is'} not checked off. Finish anyway?`)) return;
@@ -794,7 +808,7 @@ async function renderWorkout(dayId) {
 function renderRecoveryGate(day, meso, pending) {
   const ans = {};
   app.innerHTML = `<div class="card info"><h3>Before you start</h3>
-      <div class="small">How did these muscles recover since you last trained them? This sets next week's volume.</div></div>
+      <div class="small">How did you recover since you last trained these? This sets next week's volume.</div></div>
     ${pending.map(p => `<div class="card"><b>${esc(p.muscle_group)}</b>
       <div class="muted small">since Week ${p.workout_days.week} · ${esc(dayName(p.workout_days))}</div>
       <div class="fb-row">${segHtml('soreness', null, `data-m="${esc(p.muscle_group)}"`)}</div></div>`).join('')}
