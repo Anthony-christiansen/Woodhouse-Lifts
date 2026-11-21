@@ -135,3 +135,18 @@ svg.chart { width: 100%; height: 160px; display: block; }
   .set, .set-head { grid-template-columns: 22px 1fr 1fr 46px; }
 }
 @supports not (inset: 0) { #sheet { top: 0; right: 0; bottom: 0; left: 0; } }
+.tabs2 { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: var(--card2); padding: 4px; border-radius: 12px; margin-bottom: 12px; }
+.tabs2 button { min-height: 38px; background: transparent; }
+.tabs2 button.on { background: var(--card); color: var(--accent); font-weight: 600; }
+.warn-list { margin: 0; padding: 0; list-style: none; }
+.warn-list li { padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14px; display: flex; gap: 8px; }
+.warn-list li:last-child { border-bottom: 0; }
+.dot { width: 8px; height: 8px; border-radius: 99px; margin-top: 6px; flex: none; background: var(--warn); }
+.dot.bad { background: var(--bad); }
+.stat { display: flex; flex-direction: column; gap: 2px; }
+.prog { height: 8px; background: var(--card2); border-radius: 99px; overflow: hidden; margin-top: 8px; }
+.prog > i { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
+.mover { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.mover:last-child { border-bottom: 0; }
+.grid3.keep { grid-template-columns: repeat(3, 1fr) !important; }
+.grid3.keep .card { padding: 10px 4px; }

@@ -205,6 +205,30 @@ When rule 1, 2, 3 or 5 fires (joint pain 3, still sore, performance down with sl
 
 You can't start a day while an earlier day in the mesocycle is still open. The app tells you which day comes first and lets you go to it or skip it. If a workout is already in progress, the app sends you back to resume it.
 
+### 5.4 Slip warnings (week over week)
+
+The app watches for early signs that training is slipping and shows them on Home, on the mesocycle page, and at the top of any workout that trains an affected muscle:
+
+| Signal | Level | Meaning |
+|---|---|---|
+| Fewer sets done than planned in an exercise's latest session | Warn (Bad if half or fewer) | Sets aren't getting hit |
+| Estimated strength down vs. last week (doc 1.7) | Warn | Reps or load slipped |
+| Estimated strength down two weeks in a row | Bad | A real downward trend, not one rough day |
+| "Still sore" at the last session (two in a row = Bad) | Warn / Bad | Recovery isn't keeping up (1.6) |
+| Joint pain moderate or worse | Warn / Bad | Safety signal |
+| Workload "too much" twice in a row | Warn | Volume is above what you can recover from |
+| 3+ muscles slipping in the same week | Bad | Accumulated, systemic fatigue. Consider deloading early (1.8) |
+
+Deload weeks and cardio are excluded from these checks.
+
+### 5.5 Cardio inside workouts
+
+Cardio can be added as an exercise in any workout (muscle group "Cardio"), logged as minutes + session RPE per bout. It can also be logged on its own from the Cardio page. Both count toward the dashboard's weekly cardio minutes and load (1.9). Cardio is never used in strength trends, volume or set adjustments.
+
+### 5.6 Carry-over between mesocycles
+
+In week 1 of a new mesocycle, each exercise's weight is auto-matched from your last finished mesocycle's final working week for that same exercise. The reps are set back to the new week-1 RIR target (3 RIR). This is how your imported RP history (AC IV, AC V) feeds your next block.
+
 **Limits on changes:**
 - At most **12 sets per muscle in one session**.
 - At most **22 sets per muscle per week** (diminishing returns, 1.1).

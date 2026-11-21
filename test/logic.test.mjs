@@ -81,3 +81,23 @@ assert.equal(L.performanceTrend(L.bestE1rm([{ weight: 195, reps: 10, rir: 1 }], 
 assert.equal(L.performanceTrend(100, 100.5), 0);
 assert.equal(L.combineTrends([1, -1, -1]), -1);
 console.log('ALL LOGIC TESTS PASSED');
+
+// Slip warnings
+{
+  const ex = { load_type: 'weighted' };
+  const wk = (week, w, r, target = 3, n = 3) => ({ week, targetSets: target, ex, sets: Array.from({ length: n }, () => ({ weight: w, reps: r, rir: 2 })) });
+  const warns = L.slipWarnings({
+    exercises: [
+      { name: 'Bench', muscle: 'Chest', weeks: [wk(1, 100, 10), wk(2, 100, 9), wk(3, 100, 8)] },
+      { name: 'Row', muscle: 'Back', weeks: [wk(1, 100, 10), wk(2, 100, 11, 3, 1)] },
+      { name: 'Curl', muscle: 'Biceps', weeks: [wk(1, 30, 10), wk(2, 30, 9)] },
+      { name: 'Squat', muscle: 'Quads', weeks: [wk(1, 200, 10), wk(2, 200, 8)] },
+    ],
+    feedback: [{ muscle: 'Chest', soreness: 3 }, { muscle: 'Chest', soreness: 3, joint_pain: 2 }],
+  });
+  const kinds = warns.map(w => w.kind);
+  assert.ok(kinds.includes('strength-2wk')); assert.ok(kinds.includes('missed-sets'));
+  assert.ok(kinds.includes('recovery')); assert.ok(kinds.includes('joints')); assert.equal(kinds[0], 'systemic');
+  assert.deepEqual(L.slipWarnings({ exercises: [{ name: 'A', muscle: 'Chest', weeks: [wk(1, 100, 10), wk(2, 100, 11)] }] }), []);
+}
+console.log('SLIP TESTS PASSED');

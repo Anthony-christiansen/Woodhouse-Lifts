@@ -1,15 +1,16 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import * as L from './logic.js?v=3';
+import * as L from './logic.js?v=5';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
   { auth: { persistSession: true, autoRefreshToken: true } });
-const DOC_URL = 'https://docs.google.com/document/d/16Ue1iRLKY_K8F4YvmdlU7fw94Ncho0X_lMldvaNKffU';
+const DOC_URL = 'https://docs.google.com/document/d/1zz3iiRduLlWdOPXbuIbzT3tDFEVrtJQVhwFxm0kdM14';
 
 const app = document.getElementById('app');
 const titleEl = document.getElementById('title');
 const backBtn = document.getElementById('backBtn');
 const tabs = document.getElementById('tabs');
+const gearBtn = document.getElementById('gearBtn');
 const sheet = document.getElementById('sheet');
 let session = null, profile = null, exCache = null;
 
@@ -32,6 +33,7 @@ function setHeader(title, back, tab) {
   titleEl.textContent = title;
   backBtn.hidden = !back; backBtn.onclick = () => go(back);
   tabs.hidden = !session;
+  gearBtn.hidden = !session || tab !== 'home'; gearBtn.onclick = () => go('#/settings');
   tabs.querySelectorAll('a').forEach(a => a.classList.toggle('on', a.dataset.tab === tab));
 }
 function openSheet(html, wire) {
@@ -59,9 +61,10 @@ async function loadExercises(force = false) {
 
 // ---------- router ----------
 const routes = {
-  '': renderHome, train: renderTrain, new: renderBuilder, meso: renderMeso, workout: renderWorkout,
+  '': renderHome, mesos: renderMesos, train: renderMesos, new: renderBuilder, meso: renderMeso, workout: renderWorkout,
   explore: renderExplore, history: renderHistory, progress: renderProgress, volume: renderVolume,
-  cardio: renderCardio, exercises: renderExercises, settings: renderSettings,
+  cardio: renderCardio, library: renderLibrary, exercises: () => renderLibrary('exercises'), templates: () => renderLibrary('templates'),
+  settings: renderSettings,
 };
 async function route() {
   closeSheet();
@@ -120,7 +123,38 @@ async function cardioSince(fromIso) {
   return check(await sb.from('cardio_sessions').select('*').gte('performed_on', fromIso).order('performed_on', { ascending: false }));
 }
 
-// ---------- home ----------
+// ---------- shared analytics ----------
+async function workoutCardioSince(fromIso) {
+  return check(await sb.from('sets').select('duration_min, rpe, completed_at, workout_exercises!inner(exercises!inner(name, load_type))')
+    .not('duration_min', 'is', null).not('completed_at', 'is', null).gte('completed_at', fromIso));
+}
+const cardioItems = (sessions, wsets) => [
+  ...sessions.map(c => ({ date: c.performed_on, minutes: Number(c.minutes), rpe: c.rpe, name: c.activity })),
+  ...wsets.map(s => ({ date: s.completed_at.slice(0, 10), minutes: Number(s.duration_min), rpe: s.rpe ?? 0, name: s.workout_exercises.exercises.name })),
+];
+async function slipFor(meso) {
+  const rows = check(await sb.from('workout_exercises')
+    .select('exercise_id, target_sets, target_rir, exercises(name, muscle_group, load_type), sets(weight, reps, rir, completed_at), workout_days!inner(id, week, day_index, completed_at, mesocycle_id)')
+    .eq('workout_days.mesocycle_id', meso.id));
+  const groups = {};
+  for (const r of rows) {
+    const d = r.workout_days; if (!d.completed_at || r.exercises.load_type === 'cardio') continue;
+    if (L.rirForWeek(d.week, meso.weeks).deload) continue;
+    const k = d.day_index + ':' + r.exercise_id;
+    (groups[k] = groups[k] || { name: r.exercises.name, muscle: r.exercises.muscle_group, weeks: [] }).weeks.push({
+      week: d.week, targetSets: r.target_sets, ex: r.exercises,
+      sets: r.sets.filter(s => s.completed_at).map(s => ({ ...s, rir: s.rir ?? r.target_rir })) });
+  }
+  Object.values(groups).forEach(g => g.weeks.sort((a, b) => a.week - b.week));
+  const fb = check(await sb.from('muscle_feedback').select('muscle_group, soreness, workload, joint_pain, workout_days!inner(week, day_index, mesocycle_id)')
+    .eq('workout_days.mesocycle_id', meso.id))
+    .map(f => ({ muscle: f.muscle_group, week: f.workout_days.week, day: f.workout_days.day_index, soreness: f.soreness, workload: f.workload, joint_pain: f.joint_pain }))
+    .sort((a, b) => a.week * 100 + a.day - (b.week * 100 + b.day));
+  return L.slipWarnings({ exercises: Object.values(groups), feedback: fb, bodyweight: profile?.bodyweight });
+}
+const warnList = (ws, max = 99) => `<ul class="warn-list">${ws.slice(0, max).map(w => `<li><span class="dot ${w.level}"></span><span>${esc(w.msg)}</span></li>`).join('')}</ul>`;
+
+// ---------- home (dashboard) ----------
 async function renderHome() {
   setHeader('Woodhouse Lifts', null, 'home');
   const meso = await activeMeso();
@@ -129,50 +163,109 @@ async function renderHome() {
   const next = openDays(days)[0];
   const curWeek = next?.week || (days.length ? days[days.length - 1].week : null);
   const wk = days.filter(d => d.week === curWeek);
-  const ws = weekStart(); const cardio = await cardioSince(isoDay(ws));
-  const cMin = cardio.reduce((a, c) => a + Number(c.minutes), 0), cLoad = cardio.reduce((a, c) => a + L.cardioLoad(c), 0);
   const r = meso && curWeek ? L.rirForWeek(curWeek, meso.weeks) : null;
+  const ws = weekStart(); const eightAgo = new Date(ws); eightAgo.setDate(eightAgo.getDate() - 7 * 7);
+  const [cSess, cSets, allSets, warnings, mesoCount] = await Promise.all([
+    cardioSince(isoDay(eightAgo)), workoutCardioSince(eightAgo.toISOString()),
+    sb.from('sets').select('weight, reps, rir, completed_at, workout_exercises!inner(id, exercise_id, target_rir, exercises(id, name, muscle_group, load_type))')
+      .not('completed_at', 'is', null).is('duration_min', null).order('completed_at').limit(10000).then(check),
+    meso ? slipFor(meso) : Promise.resolve([]),
+    sb.from('mesocycles').select('id', { count: 'exact', head: true }).then(x => x.count || 0),
+  ]);
+  const bw = profile?.bodyweight;
+  const cardio = cardioItems(cSess, cSets);
+  const inWeek = (dstr, s) => { const d = new Date(dstr + 'T12:00'); const e = new Date(s); e.setDate(e.getDate() + 7); return d >= s && d < e; };
+  const thisCardio = cardio.filter(c => inWeek(c.date, ws));
+  const cMin = thisCardio.reduce((a, c) => a + c.minutes, 0), cLoad = thisCardio.reduce((a, c) => a + L.cardioLoad(c), 0);
+  // Weekly hard sets (8 weeks) + this week's sets.
+  const weeks = Array.from({ length: 8 }, (_, i) => { const s = new Date(ws); s.setDate(s.getDate() - (7 - i) * 7); return s; });
+  const lift = allSets.filter(s => s.workout_exercises.exercises.load_type !== 'cardio');
+  const setsPerWeek = weeks.map(s => lift.filter(x => inWeek(x.completed_at.slice(0, 10), s)).length);
+  const cardioPerWeek = weeks.map(s => cardio.filter(c => inWeek(c.date, s)).reduce((a, c) => a + c.minutes, 0));
+  // Strength movers & PRs by exercise (best e1RM per session).
+  const byEx = {};
+  for (const x of lift) {
+    const ex = x.workout_exercises.exercises, sid = x.workout_exercises.id;
+    const e = byEx[ex.id] = byEx[ex.id] || { ex, sessions: new Map() };
+    const s = e.sessions.get(sid) || { date: x.completed_at, sets: [] };
+    s.sets.push({ ...x, rir: x.rir ?? x.workout_exercises.target_rir }); e.sessions.set(sid, s);
+  }
+  const twoWeeksAgo = Date.now() - 14 * 864e5, eightWeeksAgo = Date.now() - 56 * 864e5;
+  const prs = [], movers = [];
+  for (const { ex, sessions } of Object.values(byEx)) {
+    const ss = [...sessions.values()].map(s => ({ date: s.date, e: L.bestE1rm(s.sets, ex, bw) })).filter(s => s.e).sort((a, b) => a.date.localeCompare(b.date));
+    if (ss.length < 2) continue;
+    const last = ss[ss.length - 1], prevBest = Math.max(...ss.slice(0, -1).map(s => s.e));
+    if (new Date(last.date) > twoWeeksAgo && last.e > prevBest) prs.push({ name: ex.name, pct: (last.e - prevBest) / prevBest * 100, date: last.date });
+    const base = ss.find(s => new Date(s.date) > eightWeeksAgo) || ss[0];
+    if (base !== last) movers.push({ name: ex.name, pct: (last.e - base.e) / base.e * 100 });
+  }
+  movers.sort((a, b) => b.pct - a.pct);
+  const totalWorkouts = new Set(allSets.map(x => x.completed_at.slice(0, 10))).size;
+  const doneDays = days.filter(d => d.completed_at || d.skipped_at).length;
+  const maxSets = Math.max(1, ...setsPerWeek), maxC = Math.max(1, ...cardioPerWeek);
+  const bars = (vals, max, color) => `<svg class="chart" viewBox="0 0 320 110" style="height:110px">${vals.map((v, i) => { const h = Math.round(v / max * 88);
+    return `<rect x="${i * 40 + 6}" y="${92 - h}" width="28" height="${h}" rx="4" fill="${i === 7 ? color : '#3a4150'}"></rect>
+      <text x="${i * 40 + 20}" y="${88 - h}" font-size="9" fill="#8b93a3" text-anchor="middle">${v ? Math.round(v) : ''}</text>
+      <text x="${i * 40 + 20}" y="106" font-size="8" fill="#8b93a3" text-anchor="middle">${weeks[i].getMonth() + 1}/${weeks[i].getDate()}</text>`; }).join('')}</svg>`;
+
   app.innerHTML = `
     <div class="muted small">Hi ${esc(profile?.display_name || '')} 👋</div><div class="spacer"></div>
     ${live ? `<div class="card warn"><div class="small">Workout in progress</div><h3>Week ${live.week} · ${esc(dayName(live))}</h3>
-        <div class="spacer"></div><button class="primary block" data-go="#/workout/${live.id}">Resume workout</button></div>`
+        <div class="spacer"></div><button class="primary block" data-go="#/workout">Resume workout</button></div>`
       : next ? `<div class="card"><div class="muted small">Next workout · ${esc(meso.name)}</div>
         <h3>Week ${next.week} · ${esc(dayName(next))}</h3>
         <div class="muted small">${r.deload ? 'Deload week — half sets, easy effort' : `Target ${r.rir} RIR this week`}</div>
-        <div class="spacer"></div><button class="primary block" data-go="#/workout/${next.id}">Start workout</button></div>`
+        <div class="spacer"></div><button class="primary block" data-go="#/workout">Start workout</button></div>`
       : `<div class="card"><h3>${meso ? 'Mesocycle finished 🎉' : 'No active mesocycle'}</h3>
-        <p class="muted">Build one from a template — upper, lower or whole body.</p>
-        <button class="primary block" data-go="#/new">+ New mesocycle</button></div>`}
+        <p class="muted">Start from a base template or one of your saved ones.</p>
+        <div class="grid2"><button class="primary" data-go="#/new">+ New mesocycle</button><button data-go="#/templates">Templates</button></div></div>`}
+    ${warnings.length ? `<div class="card warn"><div class="row"><b class="grow">Watch list</b><span class="pill warn">${warnings.length}</span></div>
+        ${warnList(warnings, 4)}${warnings.length > 4 ? `<button class="ghost sm" data-go="#/meso/${meso.id}">See all ${warnings.length}</button>` : ''}</div>`
+      : meso && doneDays ? '<div class="card good small">✓ No slip signals — reps, sets and recovery are on track.</div>' : ''}
+    ${meso ? `<div class="card"><div class="row"><div class="grow"><div class="muted small">Mesocycle</div><b>${esc(meso.name)}</b></div>
+        <span class="pill ${r?.deload ? 'warn' : 'on'}">${r ? (r.deload ? 'Deload' : `Wk ${curWeek} · ${r.rir} RIR`) : ''}</span></div>
+        <div class="prog"><i style="width:${Math.round(doneDays / Math.max(1, days.length) * 100)}%"></i></div>
+        <div class="muted tiny" style="margin-top:4px">${doneDays}/${days.length} workouts · week ${curWeek} of ${meso.weeks}</div></div>` : ''}
     <div class="grid2">
-      <div class="card"><div class="muted small">This week</div>
-        <div class="big">${wk.filter(d => d.completed_at).length}/${wk.length || 0}</div>
-        <div class="muted small">${meso ? `Week ${curWeek} of ${meso.weeks}` : 'workouts'}</div></div>
-      <div class="card"><div class="muted small">Cardio this week</div>
-        <div class="big">${fmt(cMin)}<span class="muted small"> min</span></div>
-        <div class="muted small">load ${fmt(cLoad)}</div></div>
+      <div class="card stat"><span class="muted small">Workouts this week</span><span class="big">${wk.filter(d => d.completed_at).length}/${wk.length || 0}</span></div>
+      <div class="card stat"><span class="muted small">Sets this week</span><span class="big">${setsPerWeek[7]}</span></div>
+      <div class="card stat"><span class="muted small">Cardio this week</span><span class="big">${fmt(cMin)}<span class="muted small"> min</span></span><span class="muted tiny">load ${fmt(cLoad)}</span></div>
+      <div class="card stat"><span class="muted small">PRs (14 days)</span><span class="big">${prs.length}</span></div>
+    </div>
+    <div class="card"><b>Hard sets per week</b>${bars(setsPerWeek, maxSets, 'var(--accent)')}</div>
+    <div class="card"><b>Cardio minutes per week</b> <span class="muted tiny">sessions + in-workout</span>${bars(cardioPerWeek, maxC, 'var(--info)')}</div>
+    ${prs.length ? `<div class="card"><b>Recent PRs 🏆</b>${prs.sort((a, b) => b.pct - a.pct).slice(0, 5).map(p => `<div class="mover"><span>${esc(p.name)}</span><span class="pill on">+${p.pct.toFixed(1)}%</span></div>`).join('')}</div>` : ''}
+    ${movers.length ? `<div class="card"><b>Strength trend · last 8 weeks</b>
+        ${[...movers.slice(0, 3), ...movers.slice(-2).filter(m => m.pct < 0 && !movers.slice(0, 3).includes(m))].map(m => `<div class="mover"><span>${esc(m.name)}</span>
+          <span class="pill ${m.pct > 0 ? 'on' : m.pct < 0 ? 'bad' : ''}">${m.pct > 0 ? '+' : ''}${m.pct.toFixed(1)}%</span></div>`).join('')}
+        <button class="ghost sm" data-go="#/progress">All exercises ›</button></div>` : ''}
+    <div class="grid3 keep">
+      <div class="card stat center"><span class="big">${totalWorkouts}</span><span class="muted tiny">workouts</span></div>
+      <div class="card stat center"><span class="big">${lift.length}</span><span class="muted tiny">sets logged</span></div>
+      <div class="card stat center"><span class="big">${mesoCount}</span><span class="muted tiny">mesocycles</span></div>
     </div>
     <h2>Quick actions</h2>
     <div class="grid2">
       <button class="tile" data-go="#/cardio"><span class="ico">♥︎</span><b>Log cardio</b><span class="muted small">Time + intensity</span></button>
-      <button class="tile" data-go="${meso ? '#/meso/' + meso.id : '#/new'}"><span class="ico">🗓</span><b>${meso ? 'Mesocycle' : 'New meso'}</b><span class="muted small">${meso ? esc(meso.name) : 'From a template'}</span></button>
-      <button class="tile" data-go="#/progress"><span class="ico">📈</span><b>Progress</b><span class="muted small">Strength over time</span></button>
       <button class="tile" data-go="#/volume"><span class="ico">📊</span><b>Volume</b><span class="muted small">Sets per muscle</span></button>
     </div>`;
   $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
 }
 
-// ---------- train ----------
-async function renderTrain() {
-  setHeader('Train', null, 'train');
+// ---------- mesocycles ----------
+async function renderMesos() {
+  setHeader('Mesocycles', null, 'mesos');
   const mesos = check(await sb.from('mesocycles').select('*').order('created_at', { ascending: false }));
-  app.innerHTML = `<button class="primary block" id="new">+ New mesocycle</button><h2>Mesocycles</h2>
-    ${mesos.length ? mesos.map(m => `<button class="list-btn" data-meso="${m.id}"><div class="grow"><b>${esc(m.name)}</b>
-      <div class="muted small">${esc(L.TEMPLATES[m.focus]?.name || '')} · ${m.weeks} wks · ${m.days_per_week} days/wk</div></div>
-      <span class="pill ${m.status === 'active' ? 'on' : ''}">${esc(m.status)}</span></button>`).join('') : '<p class="muted">None yet.</p>'}
-    <h2>Library</h2><button class="list-btn" data-go="#/exercises"><div class="grow"><b>Exercise library</b><div class="muted small">Browse and add your own</div></div>›</button>`;
-  $('#new').onclick = () => go('#/new');
+  const by = s => mesos.filter(m => s.includes(m.status));
+  const item = m => `<button class="list-btn" data-meso="${m.id}"><div class="grow"><b>${esc(m.name)}</b>
+      <div class="muted small">${m.source === 'rp_import' ? 'RP import · ' : ''}${esc(L.TEMPLATES[m.focus]?.name || '')} · ${m.weeks} wks · ${m.days_per_week} days/wk</div></div>
+      <span class="pill ${m.status === 'active' ? 'on' : ''}">${esc(m.status)}</span></button>`;
+  app.innerHTML = `<div class="grid2"><button class="primary" data-go="#/new">+ New mesocycle</button><button data-go="#/templates">From a template</button></div>
+    ${by(['active', 'planned']).length ? '<h2>Current</h2>' + by(['active', 'planned']).map(item).join('') : ''}
+    <h2>Past</h2>${by(['completed', 'abandoned']).map(item).join('') || '<p class="muted">None yet.</p>'}`;
   $$('[data-meso]').forEach(b => b.onclick = () => go('#/meso/' + b.dataset.meso));
-  $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
+  $$('[data-go]').forEach(b => b.onclick = () => { if (b.dataset.go === '#/new') builder = null; go(b.dataset.go); });
 }
 
 // ---------- mesocycle builder ----------
@@ -180,8 +273,13 @@ let builder = null;
 function freshBuilder() {
   return { step: 1, name: '', weeks: 5, days: 4, focus: 'whole', priorities: L.templatePriorities('whole'), plan: [] };
 }
+function builderFromTemplate(t) {
+  return { step: 2, name: t.name.replace(/ \(from .*\)$/, ''), weeks: t.weeks, days: t.days_per_week, focus: t.focus,
+    priorities: Object.keys(t.priorities || {}).length ? t.priorities : L.templatePriorities(t.focus),
+    plan: t.plan.map(d => ({ label: d.label, slots: d.slots.map(x => ({ ...x })) })) };
+}
 async function renderBuilder() {
-  setHeader('New mesocycle', '#/train', 'train');
+  setHeader('New mesocycle', '#/mesos', 'mesos');
   const lib = await loadExercises();
   if (!builder) builder = freshBuilder();
   const S = builder;
@@ -250,13 +348,14 @@ async function renderBuilder() {
           <span class="pill ${dayTotals[di] > 25 ? 'warn' : ''}">${dayTotals[di]} sets</span></div>
         ${dayTotals[di] > 25 ? '<div class="muted small" style="color:var(--warn);margin-top:6px">Over ~25 sets — consider another training day or moving a muscle to Maintain.</div>' : ''}
         ${d.slots.map((s, si) => `<div class="slot">
-          <select data-sm="${di}.${si}">${L.MUSCLES.map(m => `<option ${m === s.muscle ? 'selected' : ''}>${m}</option>`).join('')}</select>
+          <select data-sm="${di}.${si}">${[...L.MUSCLES, 'Cardio'].map(m => `<option ${m === s.muscle ? 'selected' : ''}>${m}</option>`).join('')}</select>
           <select data-se="${di}.${si}">${exOptions(s.muscle, s.exerciseId)}</select>
           <input type="number" inputmode="numeric" min="1" max="10" value="${s.sets}" data-ss="${di}.${si}">
           <button class="ghost danger sm" data-rm="${di}.${si}">✕</button></div>`).join('')}
         <div class="spacer"></div><button class="sm block" data-add="${di}">+ Add exercise slot</button>
       </div>`).join('')}
-      <div class="row"><button id="back1" class="grow">‹ Template</button><button class="primary grow" id="create">Create mesocycle</button></div>`;
+      <div class="row"><button id="back1" class="grow">‹ Template</button><button class="primary grow" id="create">Create mesocycle</button></div>
+      <div class="spacer"></div><button class="ghost block" id="saveTpl">☆ Save this plan as a template</button>`;
     const at = s => s.split('.').map(Number);
     $('#fillAll').onclick = () => { S.plan = L.autofill({ plan: S.plan, priorities: S.priorities, focus: S.focus, library: lib, mode: 'all' }); step2(); };
     $('#fillLeft').onclick = () => { S.plan = L.autofill({ plan: S.plan, priorities: S.priorities, focus: S.focus, library: lib, mode: 'fill' }); step2(); };
@@ -273,6 +372,12 @@ async function renderBuilder() {
       S.plan[+b.dataset.add].slots.push({ muscle: m, exerciseId: null, sets: 3 }); step2();
     });
     $('#create').onclick = create;
+    $('#saveTpl').onclick = async () => {
+      if (S.plan.some(d => d.slots.some(s => !s.exerciseId))) return toast('Pick an exercise for every slot first', true);
+      const name = prompt('Template name', S.name || 'My template'); if (!name) return;
+      check(await sb.from('templates').insert({ name, focus: S.focus, priorities: S.priorities, weeks: S.weeks, days_per_week: S.days, plan: S.plan }));
+      toast('Template saved');
+    };
   };
 
   async function create() {
@@ -281,7 +386,7 @@ async function renderBuilder() {
     $('#create').disabled = true;
     try {
       const meso = check(await sb.from('mesocycles').insert({ name: S.name.trim(), weeks: S.weeks, days_per_week: S.days,
-        focus: S.focus, priorities: S.priorities }).select().single());
+        focus: S.focus, priorities: S.priorities, started_on: today() }).select().single());
       const rows = [];
       for (let w = 1; w <= S.weeks; w++) S.plan.forEach((d, i) => rows.push({ mesocycle_id: meso.id, week: w, day_index: i + 1, label: d.label }));
       const days = check(await sb.from('workout_days').insert(rows).select('id, week, day_index'));
@@ -301,13 +406,14 @@ async function renderBuilder() {
 // ---------- mesocycle detail ----------
 async function renderMeso(id) {
   const meso = check(await sb.from('mesocycles').select('*').eq('id', id).single());
-  setHeader(meso.name, '#/train', 'train');
-  const days = await mesoDays(id);
+  setHeader(meso.name, '#/mesos', 'mesos');
+  const [days, warnings] = await Promise.all([mesoDays(id), slipFor(meso)]);
   const next = openDays(days)[0];
   const weeks = [...new Set(days.map(d => d.week))];
   app.innerHTML = `
-    <div class="card"><div class="row"><div class="grow muted small">${esc(L.TEMPLATES[meso.focus]?.name || '')} · ${meso.weeks} weeks · ${meso.days_per_week} days/week</div>
+    <div class="card"><div class="row"><div class="grow muted small">${meso.source === 'rp_import' ? 'Imported from RP · ' : ''}${esc(L.TEMPLATES[meso.focus]?.name || '')} · ${meso.weeks} weeks · ${meso.days_per_week} days/week</div>
       <span class="pill ${meso.status === 'active' ? 'on' : ''}">${esc(meso.status)}</span></div></div>
+    ${warnings.length ? `<div class="card warn"><b>Watch list</b>${warnList(warnings)}</div>` : ''}
     <div class="weeks-scroll"><div class="weeks" style="--days:${meso.days_per_week}">
       ${weeks.map(w => { const r = L.rirForWeek(w, meso.weeks); return `<div class="week">
         <div class="muted small">Wk ${w}<br><span class="${r.deload ? 'pill warn' : 'tiny'}">${r.deload ? 'deload' : r.rir + ' RIR'}</span></div>
@@ -316,16 +422,33 @@ async function renderMeso(id) {
     </div></div><div class="spacer"></div>
     ${next ? '<button class="primary block" id="go">Go to next workout</button>' : '<p class="muted center">All workouts done 🎉</p>'}
     <div class="spacer"></div>
-    <div class="grid2"><button data-go="#/volume/${id}">📊 Volume</button><button data-go="#/history">🗂 History</button></div>
+    <div class="grid2"><button data-go="#/volume/${id}">📊 Volume</button><button data-go="#/history">🗂 History</button>
+      <button id="again">↻ Run it again</button><button id="tpl">☆ Save as template</button></div>
     <div class="spacer"></div>
     <div class="row">${meso.status !== 'completed' ? '<button class="grow" id="complete">Mark complete</button>' : ''}<button class="grow danger" id="del">Delete</button></div>`;
   $$('[data-day]').forEach(b => b.onclick = () => go('#/workout/' + b.dataset.day));
   $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
   if (next) $('#go').onclick = () => go('#/workout/' + next.id);
+  const planFromMeso = async () => {
+    const d1 = days.filter(d => d.week === 1);
+    const wes = check(await sb.from('workout_exercises').select('workout_day_id, exercise_id, target_sets, position, exercises(muscle_group, name)')
+      .in('workout_day_id', d1.map(d => d.id)).order('position'));
+    return d1.map(d => ({ label: d.label, slots: wes.filter(w => w.workout_day_id === d.id)
+      .map(w => ({ muscle: w.exercises.muscle_group, exerciseId: w.exercise_id, sets: Math.max(1, w.target_sets) })) }));
+  };
+  $('#again').onclick = async () => {
+    builder = builderFromTemplate({ name: meso.name + ' (again)', weeks: meso.weeks, days_per_week: meso.days_per_week, focus: meso.focus, priorities: meso.priorities, plan: await planFromMeso() });
+    go('#/new');
+  };
+  $('#tpl').onclick = async () => {
+    const name = prompt('Template name', meso.name); if (!name) return;
+    check(await sb.from('templates').insert({ name, focus: meso.focus, priorities: meso.priorities, weeks: meso.weeks, days_per_week: meso.days_per_week, plan: await planFromMeso() }));
+    toast('Saved to Library › Templates');
+  };
   const c = $('#complete'); if (c) c.onclick = async () => { check(await sb.from('mesocycles').update({ status: 'completed' }).eq('id', id)); renderMeso(id); };
   $('#del').onclick = async () => {
     if (!confirm('Delete this mesocycle and every workout, set and rating in it? This can’t be undone.')) return;
-    check(await sb.from('mesocycles').delete().eq('id', id)); go('#/train');
+    check(await sb.from('mesocycles').delete().eq('id', id)); go('#/mesos');
   };
 }
 
@@ -382,9 +505,19 @@ async function applyAdjustment(fb, R, meso) {
 
 // ---------- workout logger ----------
 async function renderWorkout(dayId) {
+  if (!dayId) {
+    setHeader('Workout', null, 'workout');
+    const m = await activeMeso(); const ds = m ? await mesoDays(m.id) : [];
+    const cur = ds.find(d => d.started_at && !d.completed_at && !d.skipped_at) || openDays(ds)[0];
+    if (cur) return renderWorkout(cur.id);
+    app.innerHTML = `<div class="card"><h3>No workout queued</h3><p class="muted">${m ? 'This mesocycle is finished.' : 'Start a mesocycle to get your next workout here.'}</p>
+      <div class="grid2"><button class="primary" data-go="#/new">+ New mesocycle</button><button data-go="#/templates">Templates</button></div></div>
+      <button class="list-btn" data-go="#/cardio"><span>♥︎</span><div class="grow"><b>Just cardio today?</b><div class="muted small">Log time and intensity</div></div>›</button>`;
+    return $$('[data-go]').forEach(b => b.onclick = () => { if (b.dataset.go === '#/new') builder = null; go(b.dataset.go); });
+  }
   const day = check(await sb.from('workout_days').select('*, mesocycles(*)').eq('id', dayId).single());
   const meso = day.mesocycles;
-  setHeader(`Wk ${day.week} · ${dayName(day)}`, '#/meso/' + meso.id, 'train');
+  setHeader(`Wk ${day.week} · ${dayName(day)}`, '#/meso/' + meso.id, 'workout');
   const all = await mesoDays(meso.id);
 
   // Guards (in progress elsewhere / earlier day not done).
@@ -413,7 +546,8 @@ async function renderWorkout(dayId) {
 
   const wes = check(await sb.from('workout_exercises').select('*, exercises(*), sets(*)').eq('workout_day_id', dayId).order('position'));
   wes.forEach(w => w.sets.sort((a, b) => a.set_index - b.set_index));
-  const muscles = [...new Set(wes.map(w => w.exercises.muscle_group))];
+  const isCardio = w => w.exercises.load_type === 'cardio';
+  const muscles = [...new Set(wes.filter(w => !isCardio(w)).map(w => w.exercises.muscle_group))];
   const { deload } = L.rirForWeek(day.week, meso.weeks);
 
   // Recovery questions about last time come first (asked before you start).
@@ -431,6 +565,17 @@ async function renderWorkout(dayId) {
         .forEach(x => prev[x.exercise_id] = { rir: x.target_rir, sets: x.sets.sort((a, b) => a.set_index - b.set_index) });
       check(await sb.from('muscle_feedback').select('*').eq('workout_day_id', pd.id)).forEach(f => prevFb[f.muscle_group] = f);
     }
+  } else {
+    // Week 1 carries over from your last finished mesocycle: its final working week for the same exercise.
+    const ids = [...new Set(wes.map(w => w.exercise_id))];
+    const hist = ids.length ? check(await sb.from('workout_exercises')
+      .select('exercise_id, target_rir, sets(set_index, weight, reps, rir), workout_days!inner(week, completed_at, mesocycle_id, mesocycles(weeks))')
+      .in('exercise_id', ids).neq('workout_days.mesocycle_id', meso.id).not('workout_days.completed_at', 'is', null)) : [];
+    for (const h of hist) {
+      const d = h.workout_days; if (!h.sets.length || L.rirForWeek(d.week, d.mesocycles?.weeks || 99).deload) continue;
+      const cur = prev[h.exercise_id];
+      if (!cur || d.completed_at > cur.at) prev[h.exercise_id] = { rir: h.target_rir, at: d.completed_at, carried: true, sets: h.sets.sort((a, b) => a.set_index - b.set_index) };
+    }
   }
   const feedback = {};
   check(await sb.from('muscle_feedback').select('*').eq('workout_day_id', dayId)).forEach(f => feedback[f.muscle_group] = f);
@@ -446,12 +591,28 @@ async function renderWorkout(dayId) {
     return L.suggestSet({ prev: base, ex: we.exercises, targetRir: we.target_rir, prevTargetRir: p.rir, deload,
       jointHold: (prevFb[we.exercises.muscle_group]?.joint_pain ?? 0) >= 2, unit: unit() });
   };
-  const lastOfMuscle = {}; wes.forEach(w => lastOfMuscle[w.exercises.muscle_group] = w.id);
+  const lastOfMuscle = {}; wes.filter(w => !isCardio(w)).forEach(w => lastOfMuscle[w.exercises.muscle_group] = w.id);
+  const todayWarn = day.completed_at ? [] : (await slipFor(meso)).filter(w => !w.muscle || muscles.includes(w.muscle));
+  const cardioCard = we => {
+    const n = Math.max(we.sets.length, we.target_sets || 0, 1);
+    return `<div class="card" data-we="${we.id}">
+      <h3>♥︎ ${esc(we.exercises.name)}</h3><div class="muted small">Cardio · minutes + intensity (RPE 0 easy → 10 max)</div>
+      <div class="sets"><div class="set-head"><div>#</div><div>min</div><div>RPE</div><div></div></div>
+        ${Array.from({ length: n }, (_, i) => { const s = we.sets.find(x => x.set_index === i + 1) || {};
+          return `<div class="set ${s.completed_at ? 'done' : ''}" data-idx="${i + 1}"><div class="n">${i + 1}</div>
+            <input type="number" inputmode="decimal" step="any" data-f="duration" value="${s.duration_min ?? ''}" placeholder="min">
+            <input type="number" inputmode="numeric" min="0" max="10" data-f="rpe" value="${s.rpe ?? ''}" placeholder="0–10">
+            <button class="check">✓</button></div>`; }).join('')}
+      </div>
+      <div class="row" style="margin-top:8px"><button class="ghost sm" data-addset>+ bout</button><button class="ghost sm" data-rmset>− bout</button></div></div>`;
+  };
 
   app.innerHTML = `
     ${day.completed_at ? '<div class="card good small">Finished ✓ — you can still edit sets and ratings.</div>' : ''}
     ${deload ? '<div class="card info small"><b>Deload week.</b> Same weights as last week, half the sets, stop well short of failure (≈4 RIR).</div>' : ''}
+    ${todayWarn.length ? `<div class="card warn"><b>Heads up for today</b>${warnList(todayWarn, 5)}</div>` : ''}
     ${wes.map(we => {
+      if (isCardio(we)) return cardioCard(we);
       const ex = we.exercises; const n = Math.max(we.sets.length, we.target_sets || 0, 1);
       const p = prev[we.exercise_id];
       return `<div class="card" data-we="${we.id}" data-muscle="${esc(ex.muscle_group)}">
@@ -470,7 +631,7 @@ async function renderWorkout(dayId) {
           }).join('')}
         </div>
         <div class="row" style="margin-top:8px"><button class="ghost sm" data-addset>+ set</button><button class="ghost sm" data-rmset>− set</button>
-          <span class="grow muted tiny right">${p?.sets.length ? 'last wk: ' + p.sets.map(s => `${fmt(s.weight)}×${s.reps ?? '–'}`).join(', ') : 'first week — pick weights for ' + (deload ? '' : `${we.target_rir} RIR`)}</span></div>
+          <span class="grow muted tiny right">${p?.sets.length ? (p.carried ? 'last meso: ' : 'last wk: ') + p.sets.map(s => `${fmt(s.weight)}×${s.reps ?? '–'}`).join(', ') : 'first week — pick weights for ' + (deload ? '' : `${we.target_rir} RIR`)}</span></div>
         ${lastOfMuscle[ex.muscle_group] === we.id ? `<div data-rate="${esc(ex.muscle_group)}" style="margin-top:8px">${rateLine(ex.muscle_group, feedback[ex.muscle_group])}</div>` : ''}
       </div>`;
     }).join('')}
@@ -508,6 +669,7 @@ async function renderWorkout(dayId) {
   }
 
   function wireSet(we, row) {
+    if (isCardio(we)) return wireCardio(we, row);
     const save = async markDone => {
       const wIn = row.querySelector('[data-f="weight"]'), rIn = row.querySelector('[data-f="reps"]');
       if (markDone && rIn.value === '' && rIn.dataset.sug) rIn.value = rIn.dataset.sug;
@@ -528,6 +690,21 @@ async function renderWorkout(dayId) {
     row.querySelector('.check').onclick = () => save(true);
     row.querySelectorAll('input').forEach(i => { i.oninput = () => i.classList.remove('sug'); i.onchange = () => save(false); });
   }
+  function wireCardio(we, row) {
+    const save = async markDone => {
+      const dIn = row.querySelector('[data-f="duration"]'), rIn = row.querySelector('[data-f="rpe"]');
+      const duration = dIn.value === '' ? null : Number(dIn.value), rpe = rIn.value === '' ? null : Math.max(0, Math.min(10, Math.round(Number(rIn.value))));
+      const done = markDone ? !row.classList.contains('done') : row.classList.contains('done');
+      if (markDone && done && (!duration || rpe == null)) return toast('Enter minutes and RPE', true);
+      if (!markDone && duration == null && rpe == null) return;
+      const { error } = await sb.from('sets').upsert({ workout_exercise_id: we.id, set_index: +row.dataset.idx, duration_min: duration, rpe,
+        weight: null, reps: null, completed_at: done ? new Date().toISOString() : null }, { onConflict: 'workout_exercise_id,set_index' });
+      if (error) return toast(error.message, true);
+      row.classList.toggle('done', done);
+    };
+    row.querySelector('.check').onclick = () => save(true);
+    row.querySelectorAll('input').forEach(i => i.onchange = () => save(false));
+  }
   $$('[data-we]').forEach(card => {
     const we = wes.find(w => w.id === card.dataset.we);
     card.querySelectorAll('.set').forEach(r => wireSet(we, r));
@@ -535,8 +712,7 @@ async function renderWorkout(dayId) {
       const setsEl = card.querySelector('.sets'); const last = setsEl.querySelector('.set:last-child');
       const row = last.cloneNode(true); const idx = +last.dataset.idx + 1;
       row.dataset.idx = idx; row.dataset.at = ''; row.classList.remove('done'); row.querySelector('.n').textContent = idx;
-      const lw = last.querySelector('[data-f="weight"]').value; row.querySelector('[data-f="weight"]').value = lw;
-      row.querySelector('[data-f="reps"]').value = '';
+      row.querySelectorAll('input').forEach(i => { if (i.dataset.f !== 'weight') i.value = ''; i.classList.remove('sug'); });
       setsEl.appendChild(row); wireSet(we, row);
     };
     card.querySelector('[data-rmset]').onclick = async () => {
@@ -601,13 +777,15 @@ function renderRecoveryGate(day, meso, pending) {
 const ACTIVITIES = ['Run', 'Walk', 'Incline walk', 'Bike', 'Row', 'Elliptical', 'Stairmaster', 'Swim', 'HIIT', 'Hike', 'Sport', 'Other'];
 const RPE_WORDS = ['Rest', 'Very easy', 'Easy', 'Moderate', 'Somewhat hard', 'Hard', 'Hard+', 'Very hard', 'Very hard+', 'Near max', 'Max'];
 async function renderCardio() {
-  setHeader('Cardio', null, 'cardio');
+  setHeader('Cardio', '#/explore', 'explore');
   const since = new Date(); since.setDate(since.getDate() - 8 * 7);
-  const list = await cardioSince(isoDay(weekStart(since)));
+  const from = weekStart(since);
+  const [list, wsets] = await Promise.all([cardioSince(isoDay(from)), workoutCardioSince(from.toISOString())]);
+  const all = cardioItems(list, wsets);
   const ws = weekStart();
   const weeks = Array.from({ length: 8 }, (_, i) => { const s = new Date(ws); s.setDate(s.getDate() - (7 - i) * 7); return s; });
   const byWeek = weeks.map(s => { const e = new Date(s); e.setDate(e.getDate() + 7);
-    const items = list.filter(c => { const d = new Date(c.performed_on + 'T12:00'); return d >= s && d < e; });
+    const items = all.filter(c => { const d = new Date(c.date + 'T12:00'); return d >= s && d < e; });
     return { s, min: items.reduce((a, c) => a + Number(c.minutes), 0), load: items.reduce((a, c) => a + L.cardioLoad(c), 0) }; });
   const cur = byWeek[7], prior = byWeek.slice(4, 7), avg = prior.reduce((a, w) => a + w.load, 0) / 3;
   const spike = avg > 0 && cur.load > avg * 1.5;
@@ -658,7 +836,9 @@ function renderExplore() {
     ['#/volume', '📊', 'Muscle volume', 'Weekly sets per muscle vs. productive range'],
     ['#/cardio', '♥︎', 'Cardio', 'Minutes, intensity and load by week'],
     ['#/exercises', '📚', 'Exercise library', 'All exercises; add your own'],
-    ['#/train', '🗓', 'Mesocycles', 'Current and past programs'],
+    ['#/templates', '☆', 'Templates', 'Base templates and your saved plans'],
+    ['#/mesos', '🗓', 'Mesocycles', 'Current and past programs'],
+    ['#/settings', '⚙︎', 'Settings', 'Name, units, bodyweight, sign out'],
   ];
   app.innerHTML = items.map(([h, i, t, d]) => `<button class="list-btn" data-go="${h}"><span style="font-size:22px">${i}</span>
     <div class="grow"><b>${t}</b><div class="muted small">${d}</div></div>›</button>`).join('') +
@@ -671,7 +851,7 @@ async function renderHistory() {
   const days = check(await sb.from('workout_days').select('id, week, day_index, label, completed_at, mesocycles(name), workout_exercises(id, sets(id, completed_at))')
     .not('completed_at', 'is', null).order('completed_at', { ascending: false }).limit(100));
   const cardio = check(await sb.from('cardio_sessions').select('*').order('performed_on', { ascending: false }).limit(100));
-  const items = [...days.map(d => ({ t: d.completed_at, kind: 'lift', d })), ...cardio.map(c => ({ t: c.performed_on + 'T12:00:00', kind: 'cardio', c }))]
+  const items = [...days.filter(d => d.completed_at).map(d => ({ t: d.completed_at, kind: 'lift', d })), ...cardio.map(c => ({ t: c.performed_on + 'T12:00:00', kind: 'cardio', c }))]
     .sort((a, b) => b.t.localeCompare(a.t));
   app.innerHTML = items.length ? items.map(it => it.kind === 'lift'
     ? `<button class="list-btn" data-go="#/workout/${it.d.id}"><span>🏋︎</span><div class="grow"><b>${esc(it.d.mesocycles?.name)} · Wk ${it.d.week} ${esc(dayName(it.d))}</b>
@@ -689,7 +869,7 @@ async function renderProgress(exId) {
   const bw = profile?.bodyweight;
   const byEx = {};
   for (const r of rows) {
-    const ex = r.workout_exercises.exercises; (byEx[ex.id] = byEx[ex.id] || { ex, sessions: {} });
+    const ex = r.workout_exercises.exercises; if (ex.load_type === 'cardio' || r.reps == null) continue; (byEx[ex.id] = byEx[ex.id] || { ex, sessions: {} });
     const sid = r.workout_exercises.id; const s = (byEx[ex.id].sessions[sid] = byEx[ex.id].sessions[sid] || { date: r.completed_at, sets: [] });
     s.sets.push(r);
   }
@@ -731,6 +911,7 @@ async function renderVolume(mesoId) {
   for (const m of L.MUSCLES) { plan[m] = 0; done[m] = 0; ind[m] = 0; }
   for (const w of wes) {
     const m = w.exercises.muscle_group, d = w.sets.filter(s => s.completed_at).length;
+    if (!(m in plan)) continue;
     plan[m] += w.target_sets; done[m] += d;
     for (const s of w.exercises.secondary || []) if (s in ind) ind[s] += 0.5 * w.target_sets;
   }
@@ -747,27 +928,54 @@ async function renderVolume(mesoId) {
 }
 
 // ---------- exercise library ----------
-async function renderExercises(filter = '') {
-  setHeader('Exercise library', '#/explore', 'explore');
+async function renderLibrary(tab = 'exercises') {
+  setHeader('Library', null, 'library');
+  const head = `<div class="tabs2"><button data-lt="exercises" class="${tab === 'exercises' ? 'on' : ''}">Exercises</button><button data-lt="templates" class="${tab === 'templates' ? 'on' : ''}">Templates</button></div>`;
+  const wireTabs = () => $$('[data-lt]').forEach(b => b.onclick = () => go('#/' + b.dataset.lt));
+  if (tab === 'templates') return renderTemplates(head, wireTabs);
+  return renderExercises('', head, wireTabs);
+}
+async function renderTemplates(head, wireTabs) {
+  const mine = check(await sb.from('templates').select('*').order('created_at', { ascending: false }));
+  const lib = await loadExercises(); const byId = new Map(lib.map(e => [e.id, e]));
+  app.innerHTML = head + `
+    <h2>Base templates · evidence-based</h2>
+    ${Object.entries(L.TEMPLATES).map(([k, t]) => `<button class="list-btn" data-base="${k}"><div class="grow"><b>${t.name}</b><div class="muted small">${t.blurb}</div></div>›</button>`).join('')}
+    <h2>Your templates</h2>
+    ${mine.length ? mine.map(t => `<div class="card"><div class="row"><div class="grow"><b>${esc(t.name)}</b>
+        <div class="muted small">${t.weeks} wks · ${t.days_per_week} days/wk · ${t.plan.reduce((a, d) => a + d.slots.length, 0)} exercises</div></div></div>
+        ${t.notes ? `<div class="muted tiny" style="margin-top:4px">${esc(t.notes)}</div>` : ''}
+        <details style="margin-top:8px"><summary class="muted small">Preview</summary>
+          ${t.plan.map(d => `<div class="small" style="margin-top:6px"><b>${esc(d.label)}</b><div class="muted tiny">${d.slots.map(x => `${esc(byId.get(x.exerciseId)?.name || x.muscle)} ×${x.sets}`).join(' · ')}</div></div>`).join('')}
+        </details>
+        <div class="grid2" style="margin-top:10px"><button class="primary sm" data-use="${t.id}">Use template</button><button class="sm danger" data-del="${t.id}">Delete</button></div></div>`).join('')
+      : '<p class="muted">Save a plan from the builder or a mesocycle and it shows up here.</p>'}`;
+  wireTabs();
+  $$('[data-base]').forEach(b => b.onclick = () => { builder = null; builder = freshBuilder(); builder.focus = b.dataset.base; builder.priorities = L.templatePriorities(b.dataset.base); go('#/new'); });
+  $$('[data-use]').forEach(b => b.onclick = () => { builder = builderFromTemplate(mine.find(t => t.id === b.dataset.use)); go('#/new'); });
+  $$('[data-del]').forEach(b => b.onclick = async () => { if (!confirm('Delete this template?')) return; check(await sb.from('templates').delete().eq('id', b.dataset.del)); renderLibrary('templates'); });
+}
+async function renderExercises(filter = '', head = '', wireTabs = () => {}) {
   const list = await loadExercises(true);
   let mf = decodeURIComponent(filter || ''), q = '';
   const draw = () => {
     const shown = list.filter(e => (!mf || e.muscle_group === mf) && (!q || e.name.toLowerCase().includes(q)));
-    app.innerHTML = `
+    app.innerHTML = head + `
       <input id="q" placeholder="Search ${list.length} exercises" value="${esc(q)}"><div class="spacer"></div>
-      <div class="chips">${['', ...L.MUSCLES].map(m => `<button class="chip ${m === mf ? 'sel' : ''}" data-mf="${m}">${m || 'All'}</button>`).join('')}</div>
+      <div class="chips">${['', ...L.MUSCLES, 'Cardio'].map(m => `<button class="chip ${m === mf ? 'sel' : ''}" data-mf="${m}">${m || 'All'}</button>`).join('')}</div>
       <div class="spacer"></div>
       <div class="card">${shown.map(e => `<div class="row" style="padding:7px 0;border-bottom:1px solid var(--line)"><div class="grow">${esc(e.name)}
         <div class="muted tiny">${esc(e.muscle_group)} · ${esc(e.equipment || '')} · ${e.kind} · ${e.load_type} · ${e.rep_min}–${e.rep_max} reps${e.secondary?.length ? ' · also ' + e.secondary.join(', ') : ''}</div></div>
         ${e.owner_id ? `<span class="pill">mine</span><button class="ghost sm danger" data-del="${e.id}">✕</button>` : ''}</div>`).join('') || '<p class="muted">No matches.</p>'}</div>
       <div class="card"><h3>Add your own</h3><form id="f">
         <label>Name</label><input name="name" required>
-        <div class="row"><div class="grow"><label>Muscle</label><select name="mg">${L.MUSCLES.map(m => `<option ${m === mf ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
+        <div class="row"><div class="grow"><label>Muscle</label><select name="mg">${[...L.MUSCLES, 'Cardio'].map(m => `<option ${m === mf ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
           <div class="grow"><label>Equipment</label><select name="eq">${['Barbell', 'Dumbbell', 'Machine', 'Cable', 'Smith Machine', 'Bodyweight', 'Band', 'Kettlebell', 'Other'].map(x => `<option>${x}</option>`).join('')}</select></div></div>
         <div class="row"><div class="grow"><label>Type</label><select name="kind"><option value="compound">Compound</option><option value="isolation">Isolation</option></select></div>
-          <div class="grow"><label>Load</label><select name="lt"><option value="weighted">Weighted</option><option value="bodyweight">Bodyweight (+added)</option><option value="assisted">Assisted</option></select></div></div>
+          <div class="grow"><label>Load</label><select name="lt"><option value="weighted">Weighted</option><option value="bodyweight">Bodyweight (+added)</option><option value="assisted">Assisted</option><option value="cardio">Cardio (minutes + RPE)</option></select></div></div>
         <div class="row"><div class="grow"><label>Rep min</label><input name="rmin" type="number" value="8"></div><div class="grow"><label>Rep max</label><input name="rmax" type="number" value="15"></div></div>
         <div class="spacer"></div><button class="primary block">Add exercise</button></form></div>`;
+    wireTabs();
     const qi = $('#q'); qi.oninput = e => { q = e.target.value.toLowerCase(); const pos = qi.selectionStart; draw(); const n = $('#q'); n.focus(); n.setSelectionRange(pos, pos); };
     $$('[data-mf]').forEach(b => b.onclick = () => { mf = b.dataset.mf; draw(); });
     $('#f').onsubmit = async e => {
@@ -775,12 +983,12 @@ async function renderExercises(filter = '') {
       const rmin = Math.max(1, +fd.get('rmin') || 8), rmax = Math.max(rmin, +fd.get('rmax') || 15);
       check(await sb.from('exercises').insert({ name: fd.get('name').trim(), muscle_group: fd.get('mg'), equipment: fd.get('eq'),
         kind: fd.get('kind'), load_type: fd.get('lt'), rep_min: rmin, rep_max: rmax }));
-      toast('Added'); renderExercises(mf);
+      toast('Added'); exCache = null; renderLibrary('exercises');
     };
     $$('[data-del]').forEach(b => b.onclick = async () => {
       if (!confirm('Delete this exercise?')) return;
       const r = await sb.from('exercises').delete().eq('id', b.dataset.del);
-      if (r.error) toast('In use by a workout — can’t delete', true); else renderExercises(mf);
+      if (r.error) toast('In use by a workout — can’t delete', true); else { exCache = null; renderLibrary('exercises'); }
     });
   };
   draw();
@@ -788,7 +996,7 @@ async function renderExercises(filter = '') {
 
 // ---------- settings ----------
 function renderSettings() {
-  setHeader('Me', null, 'settings');
+  setHeader('Settings', '#/explore', 'explore');
   app.innerHTML = `<div class="card">
       <div class="muted small">Signed in as</div><div>${esc(session.user.email)}</div>
       <label>Name</label><input id="name" value="${esc(profile?.display_name || '')}">

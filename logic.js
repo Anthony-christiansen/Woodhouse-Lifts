@@ -163,7 +163,7 @@ export function autofill({ plan, priorities, focus, library, mode }) {
 
 export function placedSets(plan) {
   const t = {}; for (const m of MUSCLES) t[m] = 0;
-  for (const d of plan) for (const s of d.slots) if (s.muscle) t[s.muscle] += Number(s.sets) || 0;
+  for (const d of plan) for (const s of d.slots) if (s.muscle in t) t[s.muscle] += Number(s.sets) || 0;
   return t;
 }
 
@@ -285,4 +285,45 @@ export function volumeBand(sets) {
   if (sets <= 20) return 'productive';
   if (sets <= 22) return 'high';
   return 'over';
+}
+
+/**
+ * Week-over-week slip warnings (doc §5.4). Inputs are completed, non-deload sessions.
+ * exercises: [{ key, name, muscle, weeks: [{ week, targetSets, sets: [{weight,reps,rir}], ex }] }] sorted by week
+ * feedback:  [{ muscle, week, day, soreness, workload, joint_pain }] sorted oldest → newest
+ */
+export function slipWarnings({ exercises = [], feedback = [], bodyweight } = {}) {
+  const out = [];
+  const downNow = new Set();
+  for (const e of exercises) {
+    const w = e.weeks.filter(x => x.sets.length || x.targetSets);
+    if (!w.length) continue;
+    const last = w[w.length - 1];
+    const done = last.sets.length;
+    if (last.targetSets && done < last.targetSets) {
+      out.push({ level: done <= last.targetSets / 2 ? 'bad' : 'warn', muscle: e.muscle, kind: 'missed-sets',
+        msg: `${e.name}: ${done} of ${last.targetSets} sets done in week ${last.week}` });
+    }
+    const trends = [];
+    for (let i = 1; i < w.length; i++) {
+      trends.push(performanceTrend(bestE1rm(w[i].sets, w[i].ex, bodyweight), bestE1rm(w[i - 1].sets, w[i - 1].ex, bodyweight)));
+    }
+    const t1 = trends[trends.length - 1], t2 = trends[trends.length - 2];
+    if (t1 === -1) downNow.add(e.muscle);
+    if (t1 === -1 && t2 === -1) out.push({ level: 'bad', muscle: e.muscle, kind: 'strength-2wk', msg: `${e.name}: strength down two weeks in a row` });
+    else if (t1 === -1) out.push({ level: 'warn', muscle: e.muscle, kind: 'strength-1wk', msg: `${e.name}: reps/load slipped vs last week` });
+  }
+  const byMuscle = {};
+  for (const f of feedback) (byMuscle[f.muscle] = byMuscle[f.muscle] || []).push(f);
+  for (const [m, list] of Object.entries(byMuscle)) {
+    const recent = list.slice(-2), last = list[list.length - 1];
+    if (recent.length === 2 && recent.every(f => f.soreness === 3)) out.push({ level: 'bad', muscle: m, kind: 'recovery', msg: `${m}: still sore two sessions running — recovery is lagging` });
+    else if (last.soreness === 3) out.push({ level: 'warn', muscle: m, kind: 'recovery', msg: `${m}: still sore at the last session` });
+    if (last.joint_pain >= 2) out.push({ level: last.joint_pain === 3 ? 'bad' : 'warn', muscle: m, kind: 'joints', msg: `${m}: joint pain reported (${last.joint_pain === 3 ? 'a lot' : 'moderate'})` });
+    if (recent.length === 2 && recent.every(f => f.workload === 3)) out.push({ level: 'warn', muscle: m, kind: 'workload', msg: `${m}: workload rated "too much" twice in a row` });
+  }
+  if (downNow.size >= 3) out.unshift({ level: 'bad', muscle: null, kind: 'systemic',
+    msg: `${downNow.size} muscles slipped this week (${[...downNow].join(', ')}) — signs of accumulated fatigue; consider deloading early` });
+  const rank = { bad: 0, warn: 1 };
+  return out.sort((a, b) => rank[a.level] - rank[b.level]);
 }
