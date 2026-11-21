@@ -152,3 +152,8 @@ svg.chart { width: 100%; height: 160px; display: block; }
 .grid3.keep .card { padding: 10px 4px; }
 .trend .pill { font-size: 11px; vertical-align: middle; margin-left: 4px; }
 [data-edit] { font-size: 18px; padding: 6px 10px; }
+/* auth notices (check-your-email, unconfirmed, expired link) */
+.card.notice { border-left: 4px solid var(--warn); }
+.card.notice.ok { border-left-color: var(--accent); }
+.card.notice h3 { margin-top: 0; }
+.card.notice p { overflow-wrap: anywhere; }

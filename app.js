@@ -3,7 +3,18 @@ import * as L from './logic.js?v=7';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
-  { auth: { persistSession: true, autoRefreshToken: true } });
+  { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+// Where confirmation emails send people back to (must be in Supabase Auth → URL Configuration → Redirect URLs).
+const SITE_URL = 'https://anthony-christiansen.github.io/Woodhouse-Lifts/';
+// Capture what the confirmation link put in the URL before the router or supabase-js touch it.
+// Implicit flow (not PKCE) on purpose: the link then works even when opened on a different device than sign-up.
+let authReturn = (() => {
+  const h = new URLSearchParams(location.hash.replace(/^#\/?/, '')), q = new URLSearchParams(location.search);
+  const get = k => h.get(k) || q.get(k);
+  if (get('access_token')) return { ok: true, type: get('type') };
+  if (get('error') || get('error_code')) return { ok: false, code: get('error_code') || get('error'), desc: get('error_description') };
+  return null;
+})();
 const DOC_URL = 'https://docs.google.com/document/d/1Jxhk6bIeWpApGCHCpMIe96r7JE9-GjRW_tZOZUMuisg';
 
 const app = document.getElementById('app');
@@ -71,7 +82,13 @@ const routes = {
 };
 async function route() {
   closeSheet();
-  const { data } = await sb.auth.getSession(); session = data.session;
+  const { data } = await sb.auth.getSession(); session = data.session; // waits for supabase-js to read the link's tokens
+  if (authReturn) {
+    const r = authReturn; authReturn = null;
+    history.replaceState(null, '', location.pathname + '#/'); // drop tokens/errors from the address bar
+    if (r.ok && session) toast(r.type === 'signup' ? 'Email confirmed — welcome to Woodhouse Lifts!' : 'Signed in');
+    else if (!session) { tabs.hidden = true; return renderAuth('signin', linkProblem(r)); }
+  }
   if (!session) { tabs.hidden = true; return renderAuth(); }
   if (!profile) profile = (await sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle()).data;
   const [name, ...args] = location.hash.replace(/^#\/?/, '').split('/');
@@ -83,32 +100,89 @@ window.addEventListener('hashchange', route);
 sb.auth.onAuthStateChange(evt => { if (evt === 'SIGNED_IN' || evt === 'SIGNED_OUT') { profile = null; route(); } });
 
 // ---------- auth ----------
-function renderAuth(mode = 'signin') {
+// notice: { tone: 'warn'|'ok', title, text, resendEmail? } shown above the form.
+function authNotice(n) {
+  if (!n) return '';
+  return `<div class="card notice ${n.tone || 'warn'}" role="status"><h3>${esc(n.title)}</h3><p class="muted">${esc(n.text)}</p>
+    ${n.resend ? `<button class="ghost block" id="resend" type="button">Resend confirmation email</button>` : ''}</div>`;
+}
+function linkProblem(r) {
+  const expired = /expired|invalid/i.test(`${r.code} ${r.desc}`);
+  return { title: expired ? 'That link has expired or was already used' : 'We couldn’t confirm that link',
+    text: expired ? 'If you already confirmed, just sign in below. If not, enter your email below and tap Resend for a fresh link.'
+      : 'Try signing in below. If your email isn’t confirmed yet, enter it below and tap Resend for a new link.', resend: true };
+}
+function friendlyAuthError(err) {
+  const code = err?.code || '', msg = err?.message || '';
+  if (code === 'email_not_confirmed' || /not confirmed/i.test(msg)) return 'unconfirmed';
+  if (code === 'invalid_credentials' || /invalid login/i.test(msg)) return 'That email and password don’t match. Check for typos and try again.';
+  if (code === 'weak_password' || /password/i.test(msg) && /least|weak|short/i.test(msg)) return 'Choose a stronger password — at least 8 characters.';
+  if (code === 'over_email_send_rate_limit' || err?.status === 429 || /rate limit|security purposes/i.test(msg)) return 'Too many emails requested. Wait a minute and try again.';
+  if (code === 'signup_disabled') return 'New sign-ups are turned off right now.';
+  if (code === 'email_address_invalid' || /invalid.*email/i.test(msg)) return 'That email address doesn’t look right.';
+  return msg || 'Something went wrong. Please try again.';
+}
+function wireResend(getEmail) {
+  const b = $('#resend'); if (!b) return;
+  b.onclick = async () => {
+    const email = typeof getEmail === 'function' ? getEmail() : getEmail;
+    if (!email) return toast('Enter your email below first', true);
+    b.disabled = true;
+    const { error } = await sb.auth.resend({ type: 'signup', email, options: { emailRedirectTo: SITE_URL } });
+    if (error) { toast(friendlyAuthError(error), true); b.disabled = false; return; }
+    toast('Confirmation email sent');
+    let s = 60; b.textContent = `Resend available in ${s}s`;
+    const t = setInterval(() => { s--; if (s <= 0 || !b.isConnected) { clearInterval(t); b.disabled = false; b.textContent = 'Resend confirmation email'; } else b.textContent = `Resend available in ${s}s`; }, 1000);
+  };
+}
+function renderCheckEmail(email) {
+  setHeader('Woodhouse Lifts'); tabs.hidden = true;
+  app.innerHTML = `<div class="card notice ok" role="status"><h3>Check your email to confirm your account</h3>
+      <p>We sent a confirmation link to <b>${esc(email)}</b> from <b>Woodhouse Lifts</b>.</p>
+      <p class="muted">Open it and tap the link — it brings you right back here, signed in. No code to type. Can’t find it? Check spam or promotions; it can take a minute.</p>
+      <p class="muted small">Already have an account with this email? Sign in instead.</p>
+      <button class="ghost block" id="resend" type="button">Resend confirmation email</button>
+      <div class="spacer"></div><button class="primary block" id="toSignin" type="button">Back to sign in</button></div>`;
+  wireResend(email);
+  $('#toSignin').onclick = () => renderAuth('signin', null, email);
+}
+
+function renderAuth(mode = 'signin', notice = null, prefill = '') {
   setHeader('Woodhouse Lifts');
-  app.innerHTML = `
+  app.innerHTML = `${authNotice(notice)}
     <div class="card"><h3>${mode === 'signin' ? 'Sign in' : 'Create account'}</h3>
       <form id="f">
         ${mode === 'signup' ? '<label>Name</label><input name="name" autocomplete="given-name" required>' : ''}
-        <label>Email</label><input name="email" type="email" autocomplete="email" required>
+        <label>Email</label><input name="email" type="email" autocomplete="email" value="${esc(prefill)}" required>
         <label>Password</label><input name="password" type="password" minlength="8" autocomplete="${mode === 'signin' ? 'current-password' : 'new-password'}" required>
         <div class="spacer"></div><button class="primary block" type="submit">${mode === 'signin' ? 'Sign in' : 'Create account'}</button>
       </form><div class="spacer"></div>
       <button class="ghost block" id="swap">${mode === 'signin' ? 'New here? Create an account' : 'Have an account? Sign in'}</button>
     </div>`;
-  $('#swap').onclick = () => renderAuth(mode === 'signin' ? 'signup' : 'signin');
+  const emailVal = () => app.querySelector('input[name=email]')?.value.trim() || prefill;
+  wireResend(emailVal);
+  $('#swap').onclick = () => renderAuth(mode === 'signin' ? 'signup' : 'signin', null, emailVal());
   $('#f').onsubmit = async e => {
     e.preventDefault();
-    const fd = new FormData(e.target); const btn = e.target.querySelector('button'); btn.disabled = true;
+    const fd = new FormData(e.target); const btn = e.target.querySelector('button[type=submit]'); btn.disabled = true;
     const email = fd.get('email').trim(), password = fd.get('password');
-    if (mode === 'signin') {
-      const { error } = await sb.auth.signInWithPassword({ email, password }); if (error) toast(error.message, true);
-    } else {
-      const { data, error } = await sb.auth.signUp({ email, password,
-        options: { data: { display_name: fd.get('name').trim() }, emailRedirectTo: location.origin + location.pathname } });
-      if (error) toast(error.message, true);
-      else if (!data.session) app.innerHTML = `<div class="card"><h3>Check your email</h3><p class="muted">Tap the confirmation link sent to ${esc(email)}, then come back and sign in.</p></div>`;
-    }
-    btn.disabled = false;
+    try {
+      if (mode === 'signin') {
+        const { error } = await sb.auth.signInWithPassword({ email, password });
+        if (error) {
+          const f = friendlyAuthError(error);
+          if (f === 'unconfirmed') return renderAuth('signin', { title: 'Confirm your email first',
+            text: `Your account exists, but ${email} hasn’t been confirmed yet. Open the email from Woodhouse Lifts and tap the link — check spam too. Need a new one?`, resend: true }, email);
+          toast(f, true);
+        }
+        // success: onAuthStateChange('SIGNED_IN') routes into the app
+      } else {
+        const { data, error } = await sb.auth.signUp({ email, password,
+          options: { data: { display_name: fd.get('name').trim() }, emailRedirectTo: SITE_URL } });
+        if (error) toast(friendlyAuthError(error) === 'unconfirmed' ? 'Check your email to confirm your account.' : friendlyAuthError(error), true);
+        else if (!data.session) return renderCheckEmail(email); // never treat an unconfirmed sign-up as logged in
+      }
+    } finally { if (btn.isConnected) btn.disabled = false; }
   };
 }
 
