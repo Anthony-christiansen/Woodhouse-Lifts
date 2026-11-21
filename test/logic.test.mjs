@@ -490,3 +490,34 @@ console.log('GUARDRAIL TESTS PASSED');
   assert.ok(Object.keys(f.trimmed).every(m => L.normPriority(pr[m], 'upper') !== 'emphasize'));
   console.log('V1.9 ENGINE TESTS PASSED');
 }
+
+// --- v1.10: per-exercise feedback combined with the muscle rating (doc §4.3) ---
+{
+  const S = L.liftSpeed, sp = (e, m) => S(e, m).speed;
+  const mOk = { workload: 1, joint_pain: 0, soreness: 1 }, mEasy = { workload: 0, joint_pain: 0, soreness: 0 };
+  assert.equal(sp(null, mOk), 'normal', 'no exercise rating → muscle only');
+  assert.equal(sp(null, { workload: 0, joint_pain: 0, soreness: 0 }), 'fast', 'old data: muscle-only fast still works');
+  assert.equal(sp({ workload: 1, joint_pain: 0 }, mOk), 'normal');
+  assert.equal(sp({ workload: 2, joint_pain: 0 }, mOk), 'slow', 'pushed on this exercise → slower');
+  assert.equal(sp({ workload: 3, joint_pain: 0 }, mOk), 'hold', 'too much on this exercise → hold');
+  assert.equal(sp({ workload: 1, joint_pain: 2 }, mOk), 'hold', 'joint pain on this exercise → hold');
+  assert.match(S({ workload: 1, joint_pain: 2 }, mOk).why, /this exercise/);
+  // muscle joint pain that belonged to another lift: this pain-free lift slows, it doesn't hold
+  assert.equal(sp({ workload: 1, joint_pain: 0 }, { workload: 1, joint_pain: 2 }), 'slow');
+  assert.equal(sp({ workload: 1, joint_pain: 2 }, { workload: 1, joint_pain: 2 }), 'hold', 'the lift that hurt holds');
+  assert.equal(sp({ workload: 1, joint_pain: 0 }, { workload: 3, joint_pain: 0 }), 'hold', 'muscle "Too much" holds every lift');
+  assert.equal(sp({ workload: 0, joint_pain: 0 }, { workload: 2, joint_pain: 0 }), 'slow', 'muscle pushed caps an easy exercise');
+  // faster needs both easy + never sore + no pain anywhere
+  assert.equal(sp({ workload: 0, joint_pain: 0 }, mEasy), 'fast');
+  assert.equal(sp({ workload: 0, joint_pain: 0 }, mOk), 'normal', 'exercise easy, muscle not → normal');
+  assert.equal(sp({ workload: 1, joint_pain: 0 }, mEasy), 'normal', 'muscle easy, exercise not → normal');
+  assert.equal(sp({ workload: 0, joint_pain: 1 }, mEasy), 'normal', 'any exercise joint pain → no faster');
+  assert.equal(sp({ workload: 0, joint_pain: 0 }, { ...mEasy, soreness: 2 }), 'normal', 'got sore → no faster');
+  // plugs into suggestSet
+  const sled = { name: 'Sled push', load_type: 'weighted', equipment: 'Barbell', rep_min: 5, rep_max: 30 };
+  const base = { prev: { weight: 315, reps: 27, rir: 2 }, ex: sled, targetRir: 1, unit: 'lb', mode: { mode: 'load', step: 5 } };
+  assert.equal(L.suggestSet({ ...base, speed: S({ workload: 0, joint_pain: 0 }, mEasy) }).weight, 325, 'both easy + never sore → +10');
+  assert.equal(L.suggestSet({ ...base, speed: S({ workload: 1, joint_pain: 0 }, mEasy) }).weight, 320, 'normal → +5');
+  assert.equal(L.suggestSet({ ...base, speed: S({ workload: 1, joint_pain: 2 }, mOk) }).weight, 315, 'exercise joint pain → hold');
+  console.log('EXERCISE FEEDBACK TESTS PASSED');
+}

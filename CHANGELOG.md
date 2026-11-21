@@ -12,6 +12,26 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.10.0 — 2026-11-21 · "Rate each exercise"
+
+**Per-exercise feedback, plus the muscle rating**
+- After the last set of **each exercise**, rate that exercise's **workload** and **joint pain**. After the last exercise for a muscle, rate the **muscle as a whole** (pump, workload, joint pain) as before; recovery is still asked at the next session.
+- **Each lift's progression now uses its own rating, capped by the muscle's:**
+  - joint pain or "Too much" on an exercise holds **that lift only**, with a note suggesting a swap;
+  - "Pushed my limit" on an exercise slows that lift;
+  - muscle "Too much" still holds every lift for that muscle; muscle joint pain that came from a *different* exercise now slows the pain-free lifts instead of holding them;
+  - faster (+10 lb max) only when the exercise **and** the muscle were Easy, the muscle never got sore, and there was no joint pain.
+- Set counts still come from the muscle rating.
+- The muscle sheet shows each exercise's rating next to its progression badge; with one exercise, workload and joints start pre-filled from it.
+- Finish asks for any missing exercise rating first. Replacing an exercise clears its rating along with its sets.
+- Sessions from before 1.10 (no exercise ratings) keep using the muscle rating alone.
+
+**Underneath**
+- New table `exercise_feedback` (one row per workout exercise; RLS own rows; deleted with the exercise) and added to the weekly backup snapshot (with `exercise_prefs`, which was missing). Migration `20261121230000_exercise_feedback`.
+- New `liftSpeed(exerciseFb, muscleFb)` in logic.js. If the table isn't there, the app hides exercise ratings and works as 1.9.1.
+
+---
+
 ## 1.9.1 — 2026-11-21 · "Small steps, always"
 
 - **Every automatic weight increase is at most +5 lb (2.5 kg) a week, for every exercise** — usually 2.5 or 5 lb. This now covers every path that could add weight: a two-RIR drop in one week (was 2 × step), far-above-range re-solves, and passing the top of the rep range.

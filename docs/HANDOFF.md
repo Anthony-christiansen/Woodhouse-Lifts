@@ -1,6 +1,6 @@
 # Woodhouse Lifts — Start Here (handoff for a new chat)
 
-**Current version: 1.9.1 (2026-11-21).** If you are a new chat picking this up: read this page first, then *Woodhouse Lifts — Training Logic* (the full rules and evidence) and *Woodhouse Lifts — Changelog* (what changed, version by version). All three live in the Google Drive folder **Woodhouse Lifts**; older copies are in its **Archive — earlier versions** subfolder. The repo holds the same files under `docs/` and `CHANGELOG.md`, and the repo copy is the one that changes first.
+**Current version: 1.10.0 (2026-11-21).** If you are a new chat picking this up: read this page first, then *Woodhouse Lifts — Training Logic* (the full rules and evidence) and *Woodhouse Lifts — Changelog* (what changed, version by version). All three live in the Google Drive folder **Woodhouse Lifts**; older copies are in its **Archive — earlier versions** subfolder. The repo holds the same files under `docs/` and `CHANGELOG.md`, and the repo copy is the one that changes first.
 
 ---
 
@@ -34,8 +34,8 @@ No build step. Plain ES modules served by GitHub Pages.
 
 | File | What's in it |
 |---|---|
-| `index.html` | Shell. Loads `styles.css?v=N` and `app.js?v=N` — **bump `?v=` on every release** (now `v=27`). |
-| `app.js` (~1,900 lines) | UI + data access. Hash router (`#/`, `#/workout/<dayId>`, `#/workout/<id>/view`, `#/meso/<id>`, `#/new`, `#/templates`, `#/cardio`, settings…). Supabase client, offline save queue, workout logger, recovery gate, builder, home dashboard and drill-downs. `APP_VERSION` constant at the top (now `'1.9.1'`) must match the changelog. |
+| `index.html` | Shell. Loads `styles.css?v=N` and `app.js?v=N` — **bump `?v=` on every release** (now `v=28`). |
+| `app.js` (~1,900 lines) | UI + data access. Hash router (`#/`, `#/workout/<dayId>`, `#/workout/<id>/view`, `#/meso/<id>`, `#/new`, `#/templates`, `#/cardio`, settings…). Supabase client, offline save queue, workout logger, recovery gate, builder, home dashboard and drill-downs. `APP_VERSION` constant at the top (now `'1.10.0'`) must match the changelog. |
 | `logic.js` (~850 lines) | **Pure training engine, no I/O.** Everything testable lives here (see §5). |
 | `learn.js` | In-app "Learn" explanations and app defaults. |
 | `styles.css` | Styling; phone-first (inputs ≥16 px font, ≥44 px tap targets). |
@@ -68,17 +68,18 @@ Row Level Security is on for every table ("own rows" policies keyed on `user_id`
 | `workout_days` | One per day per week: week, day_index, label, `started_at`, `completed_at`, `skipped_at`. |
 | `workout_exercises` | Exercises on a day with planned sets and `target_rir`, `flag`. |
 | `sets` | Logged sets: set_index, weight (lb), reps, rir (optional actual RIR), duration_min / rpe for cardio, `completed_at`. |
+| `exercise_feedback` | (v1.10) Per workout exercise: workload, joint_pain. One row per exercise per session. |
 | `muscle_feedback` | Per day per muscle: pump, workload, joint_pain, performance, `soreness` (rated at the *next* session for that muscle), breathing (cardio), `adjusted` flag. |
 | `cardio_sessions` | Stand-alone cardio. |
 | `backup.snapshot` | Weekly snapshots (`backup.take_snapshot`). |
 
 **RPCs:** `create_mesocycle` (atomic, idempotent by client_key), `dashboard_stats`, `strength_summary`, `lift_recent` / `lift_sessions` (history with horizon), `apply_feedback_adjustment(p_feedback_id, p_soreness, p_changes jsonb, p_deload jsonb) → boolean` (applies a set adjustment exactly once — locks the feedback row and checks `adjusted`; the app falls back to plain updates if the RPC is missing, error PGRST202).
 
-**Migrations applied to prod, in order:** initial_schema → lock_rls_auto_enable → training_logic_v2 → workout_day_skip → cardio_exercises_and_import → templates → cardio_breathing_rating → dashboard_rpc → strength_summary_rpc → weekly_snapshots → p1_reliability → exercise_preferences → lift_recent → lift_recent_horizon → carry_from_week → atomic_feedback_adjustment (latest).
+**Migrations applied to prod, in order:** initial_schema → lock_rls_auto_enable → training_logic_v2 → workout_day_skip → cardio_exercises_and_import → templates → cardio_breathing_rating → dashboard_rpc → strength_summary_rpc → weekly_snapshots → p1_reliability → exercise_preferences → lift_recent → lift_recent_horizon → carry_from_week → atomic_feedback_adjustment → exercise_feedback (latest).
 
 **Offline queue:** unsaved sets are kept per account in localStorage `wl_pending_sets_v1:<user id>` and retried; saves the database permanently refuses (SQLSTATE classes 22/23/42) move to a "failed" list instead of retrying forever. Other phone-only settings: `wl_increments` (smallest weight jumps), `wl_session_minutes`.
 
-## 5. The training engine as it stands (1.9.1)
+## 5. The training engine as it stands (1.10.0)
 
 Full rules, examples and sources: *Training Logic* doc. Quick map of `logic.js`:
 
@@ -88,7 +89,7 @@ Full rules, examples and sources: *Training Logic* doc. Quick map of `logic.js`:
 | Plan building | Split by days (2–6), muscle priorities **Emphasize / Grow / Maintain / Skip** (max 3 emphasized), equipment and preferences, then **fit to time** (60/75/90 min; trims lowest priority first; ≤10 sets per muscle per session). | `autofill`, `applyPreferences`, `fitToTime`, `SET_MIN`, `SESSION_MUSCLE_CAP` |
 | Load vs reps | Each lift progresses either by weight or by reps, decided from the meso's own pattern, room in the rep range, and load size (light loads where one step >5% go by reps). | `progressionMode` |
 | Step size | ≈2.5% of the load, rounded down to the gym increment, ≥1 increment, **≤5 lb / 2.5 kg**, ≤ your usual jump. Increments default 2.5 lb (dumbbells 5 lb), settable. | `loadStep`, `STEP_MAX`, `setIncrements`, `increment` |
-| Speed from feedback | Hold (workload Too much or joint pain ≥2) · Slow (Pushed my limit) · Normal · **Fast only if Easy + never got sore + no joint pain**, and never at 0 RIR or on axial lifts. | `progressionSpeed` |
+| Speed from feedback | Each lift: its **own exercise rating** (workload, joint pain) capped by the **muscle rating**. Hold (Too much or joint pain ≥2 on the exercise; muscle Too much) · Slow (Pushed my limit; muscle joint pain from another lift) · Normal · **Fast only if exercise and muscle were Easy + never got sore + no joint pain**, never at 0 RIR or on axial lifts. Older sessions without exercise ratings use the muscle rating alone. | `liftSpeed`, `progressionSpeed` |
 | Guardrails | Every automatic raise ≤ `safeMax` = smaller of +1 step (≤5 lb / 2.5 kg; 2 steps on a Fast week) and +5%; meso ceiling +20% over week 1 (then reps); ≤+2 reps a week; deloads untouched. Manual entries above `safeMax` save and show a "Manual bump" note; >1.5× asks "typo?". | `suggestSet`, `safeMax`, `GUARD`, `weightSanity` |
 | Equivalent reps | Changing the weight re-targets reps by e1RM (`w × (1 + (reps+RIR)/30)`), capped at 20 reps+RIR. | `repsAtLoad`, `weightRange`, `e1rm` |
 | Sets per muscle | From pump, workload, joint pain, soreness, performance and priority: Emphasize adds when recovered, Grow adds only on a stall, Maintain never adds; ≤+2 sets per muscle per week; every change explains itself. | `setAdjustment`, `distributeDelta`, `WEEKLY_STEP_CAP` |
@@ -107,6 +108,7 @@ Useful so a future change doesn't reintroduce an old problem.
 | ≤1.4 | Load lifts copied the RIR drop as +1 rep at same weight. | Sled 315×27 vs RP's 325×28 — didn't match how weighted lifts progress. | 1.5.0 load-vs-reps modes. |
 | 1.5–1.8 | Step = your last observed jump (sled +10 lb). Weekly cap +10%. | History (2,376 changes) showed jumps >4% kept reps only 27–39% of the time vs 94–97% at ≤4%. | 1.9.0: ~2.5% step, ≤5 lb, +5% cap. |
 | 1.6–1.9.0 | "Faster" on workload Easy alone (+2 steps, e.g. sled +10). Two-RIR drop = 2 × step. | Anthony: never more than 2.5 or 5 lb unless manual, or the work was insufficient **and** never sore. | 1.9.1: `safeMax`, Fast needs never-sore. |
+| ≤1.9.1 | Feedback only per muscle; joint pain on one exercise held every lift for that muscle. | Anthony wanted each exercise rated, plus the muscle. | 1.10.0 `exercise_feedback` + `liftSpeed`. |
 | ≤1.8 | "Focus" muscles (on/off). | Too coarse; couldn't say "keep it" vs "grow it". | 1.9.0 Emphasize / Grow / Maintain / Skip (old "focus" reads as Emphasize). |
 | ≤1.8 | Fixed set counts regardless of time. | 2-day full body came out at 35–38 sets. | 1.9.0 fit-to-time builder. |
 | ≤1.7 | Days in fixed order; recovery asked about "the previous day". | Wanted legs today instead of back. | 1.8.0 any order within a week, read-only preview of later weeks, recovery uses the most recently finished session. |

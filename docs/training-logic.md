@@ -205,11 +205,15 @@ These are personal choices, not medical rules. Nothing is removed from the libra
 
 | When | Rating | Scale | What it measures |
 |---|---|---|---|
-| Right after the last set for a muscle in a session | Pump | 0 None · 1 Mild · 2 Good · 3 Huge | Lowest weight. Only a tiebreaker. |
+| Right after the last set of **each exercise** (v1.10) | Exercise workload | 0 Easy · 1 Pretty good · 2 Pushed my limit · 3 Too much | How hard **this exercise** felt |
+| | Exercise joint pain | 0 None · 1 Low · 2 Moderate · 3 A lot | Whether **this exercise** hurt a joint |
+| Right after the last set for a muscle in a session (after its last exercise's rating) | Pump | 0 None · 1 Mild · 2 Good · 3 Huge | Lowest weight. Only a tiebreaker. |
 | | Workload (load rating) | 0 Easy · 1 Pretty good · 2 Pushed my limit · 3 Too much | How hard the volume felt overall |
 | | Joint pain | 0 None · 1 Low · 2 Moderate · 3 A lot | A safety signal, which overrides everything else |
 | At the start of your next session that trains that muscle | Recovery / soreness | 0 Never got sore · 1 Healed a while ago · 2 Healed just in time · 3 Still sore | Whether recovery kept up with the volume |
 | Calculated automatically | Performance trend | Up / Same / Down vs. last week | What you actually lifted |
+
+**Two levels, two jobs (v1.10).** The exercise rating is about one lift — "the pec dec was easy, the incline press beat me up" — and sets **how fast that lift's weight or reps move** (§4.3). The muscle rating is about the muscle as a whole that day, across all its exercises, and drives **how many sets** the muscle gets next week (§5) while also **capping** how fast any of its lifts can progress. Example: Chest day with incline press, machine press and pec dec → three exercise ratings (one after each), then one Chest rating after the pec dec.
 
 The recovery question comes later on purpose. You can only judge recovery once the next session for that muscle arrives. The app asks it at that point and applies the result to **next week's version of the session you're rating.**
 
@@ -291,7 +295,7 @@ Light and heavy loads build similar muscle when sets end near failure (Schoenfel
 
 ### 4.3 Progression speed from your feedback (autoregulation)
 
-The ratings you give after each muscle now set **how big next week's jump is** for that muscle's lifts. This is autoregulation: the effort you report adjusts the next load. Rating-based (RPE/RIR) and performance-based (APRE) autoregulation have produced equal or better strength gains than fixed week-to-week increases [34, 35, 36, 16].
+The ratings you give set **how big next week's jump is**. Since v1.10 each lift uses its **own exercise rating**, capped by the **muscle rating** (before v1.10, and for sessions logged before it, the muscle rating alone applies to all that muscle's lifts — that is the table below). This is autoregulation: the effort you report adjusts the next load. Rating-based (RPE/RIR) and performance-based (APRE) autoregulation have produced equal or better strength gains than fixed week-to-week increases [34, 35, 36, 16].
 
 | Last session's rating for the muscle | Speed | By-weight lift (e.g. sled 315×27, step +5 — v1.9) | By-reps lift (e.g. row 70×11) |
 |---|---|---|---|
@@ -305,6 +309,25 @@ The ratings you give after each muscle now set **how big next week's jump is** f
 - **Pump does not change the load.** Pump and cell swelling are not supported as drivers of muscle growth [14], so pump only feeds the set (volume) rules in §5, together with soreness and workload. It appears in the note as context only.
 - **Why soreness counts (v1.9.1):** "Easy" alone can mean the volume was light while the muscle was still recovering. Requiring *never got sore* means the workload was clearly insufficient on both counts before the app speeds up. Soreness is a weak growth signal on its own [14], so it is used only as a brake, never as a reason to add load.
 - Deload weeks are never affected.
+
+#### 4.3a Exercise rating + muscle rating (v1.10)
+
+How one lift's speed is decided when it has its own rating from last week:
+
+| This exercise's rating last week | Muscle rating last week | This lift's speed | Why |
+|---|---|---|---|
+| Joint pain 2+ | anything | **Hold** — note suggests ⇄ swapping it | The pain was on this lift. |
+| Too much | anything | **Hold** | |
+| Pushed my limit | anything below Too much | **Slower** | |
+| Pretty good / Easy, no pain | Too much | **Hold** | The muscle as a whole was overloaded. |
+| Pretty good / Easy, no pain | Pushed my limit | **Slower** | Muscle-level cap. |
+| Pretty good / Easy, **no pain** | Joint pain 2+ (on another lift) | **Slower**, not hold | Before v1.10 this held every lift for the muscle; now only the lift that hurt holds. |
+| Pretty good | Pretty good / Easy | Normal | |
+| **Easy, no pain** | **Easy + never got sore + no pain** | **Faster** (≤ +10 lb, §4.5) | Both levels say the work was insufficient. |
+| Easy, no pain | Pretty good, or got sore | Normal | One signal isn't enough to speed up. |
+| Pretty good | Easy + never sore | Normal | This lift wasn't easy. |
+
+Examples (sled 315 × 27 at 2 RIR → 1 RIR this week, step 5 lb): exercise Easy + muscle Easy + never sore → **325**; exercise Pretty good + muscle Easy → **320**; exercise joint pain Moderate → **315** (hold). Set counts are unchanged by exercise ratings — they still come from the muscle rating (§5).
 
 ### 4.5 Injury guardrails on increases and speed
 
@@ -400,7 +423,8 @@ When rule 1, 2, 3 or 5 fires (joint pain 3, still sore, performance down with sl
 ### 5.2 When the questions appear
 
 - **Before you start a session:** recovery questions for any muscle in today's session whose last session hasn't been rated yet. You must answer these first, because they set next week's volume for that earlier session.
-- **As soon as every set for a muscle is checked off:** pump, workload and joint pain for that muscle open in a **locked** sheet. It shows each of that muscle's exercises with its progression indicator (▲ up / ● same / ▼ down vs. last week, by estimated strength), and you can't dismiss it or continue until all three are answered. Every exercise also shows its progression badge as soon as its last set is checked. Tap ✎ on any exercise to adjust ratings afterward.
+- **As soon as every set for an exercise is checked off (v1.10):** that exercise's workload and joint pain open in a locked sheet (with its ▲ / ● / ▼ vs. last week). Tap the "✓ Exercise …" line on the card to change it later. Cardio has no separate exercise rating. When a muscle has only one exercise that day, the muscle sheet starts with that exercise's workload and joint pain pre-selected; change them if the muscle as a whole felt different.
+- **As soon as every set for a muscle is checked off (after its exercise ratings):** pump, workload and joint pain for that muscle open in a **locked** sheet. It shows each of that muscle's exercises with its progression indicator (▲ up / ● same / ▼ down vs. last week, by estimated strength), and you can't dismiss it or continue until all three are answered. Every exercise also shows its progression badge as soon as its last set is checked. Tap ✎ on any exercise to adjust ratings afterward.
 - **When you tap Finish:** the app calculates performance trend per muscle and saves it.
 
 ### 5.3 Order of days

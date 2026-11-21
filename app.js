@@ -17,7 +17,7 @@ let authReturn = (() => {
   return null;
 })();
 let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
-export const APP_VERSION = '1.9.1'; // keep in sync with CHANGELOG.md
+export const APP_VERSION = '1.10.0'; // keep in sync with CHANGELOG.md
 const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
 const DOC_URL = 'https://docs.google.com/document/d/13ZTx5aJg79zmuB2lVmzuc2snD1ldOF9dFNvqWkJ7sEo';
 
@@ -933,7 +933,7 @@ async function renderWorkout(dayId, mode) {
   }
 
   // Last week's same session → auto-matched weights and rep targets.
-  const prev = {}, staleCarry = {}; let prevFb = {};
+  const prev = {}, staleCarry = {}; let prevFb = {}; const prevExFb = {};   // exercise_id → last week's exercise rating (v1.10)
   const trail = {};   // exercise_id → [{ week, weight, reps }] first working set per earlier meso week (doc §4.0)
   // Only FINISHED sets count, and when a lift appears on more than one day a week, the same day (day_index) as
   // today wins — so the trend compares like with like (review #2).
@@ -948,8 +948,10 @@ async function renderWorkout(dayId, mode) {
       .forEach(x => addTrail(x.exercise_id, x.workout_days.week, x.sets, x.workout_days.day_index));
     const pd = check(await sb.from('workout_days').select('id').eq('mesocycle_id', meso.id).eq('week', day.week - 1).eq('day_index', day.day_index).maybeSingle());
     if (pd) {
-      check(await sb.from('workout_exercises').select('exercise_id, target_rir, sets(set_index, weight, reps, rir, duration_min, rpe, completed_at)').eq('workout_day_id', pd.id))
-        .forEach(x => { const done = x.sets.filter(z => z.completed_at); if (done.length) prev[x.exercise_id] = { rir: x.target_rir, sets: done.sort((a, b) => a.set_index - b.set_index).map(z => ({ ...z, weight: W(z.weight) })) }; });
+      const pwes = check(await sb.from('workout_exercises').select('id, exercise_id, target_rir, sets(set_index, weight, reps, rir, duration_min, rpe, completed_at)').eq('workout_day_id', pd.id));
+      pwes.forEach(x => { const done = x.sets.filter(z => z.completed_at); if (done.length) prev[x.exercise_id] = { rir: x.target_rir, sets: done.sort((a, b) => a.set_index - b.set_index).map(z => ({ ...z, weight: W(z.weight) })) }; });
+      if (pwes.length) { const r = await sb.from('exercise_feedback').select('workout_exercise_id, workload, joint_pain').in('workout_exercise_id', pwes.map(x => x.id));
+        if (!r.error) r.data.forEach(f => { const x = pwes.find(w => w.id === f.workout_exercise_id); if (x) prevExFb[x.exercise_id] = f; }); }
       check(await sb.from('muscle_feedback').select('*').eq('workout_day_id', pd.id)).forEach(f => prevFb[f.muscle_group] = f);
     }
   } else {
@@ -991,6 +993,10 @@ async function renderWorkout(dayId, mode) {
     return `<button class="lift-flag st-${st.status}" data-flag="${we.id}" aria-label="${esc(head)}: show recommendation"><span>${FLAG[st.status]}</span><span><b>${head}.</b> ${esc(st.rec.split('. ').slice(1, 2).join('') || '')}${st.status === 'pr' ? '' : ' <u>More</u>'}</span></button>`; };
   const feedback = {};
   check(await sb.from('muscle_feedback').select('*').eq('workout_day_id', dayId)).forEach(f => feedback[f.muscle_group] = f);
+  const exFb = {}; let exFbOn = true;   // workout_exercise_id → this session's exercise rating (v1.10)
+  { const liftIds = wes.filter(w => !isCardio(w)).map(w => w.id);
+    const r = liftIds.length ? await sb.from('exercise_feedback').select('*').in('workout_exercise_id', liftIds) : { data: [] };
+    if (r.error) exFbOn = false; else r.data.forEach(f => exFb[f.workout_exercise_id] = f); }
   if (!day.started_at && !day.completed_at && !preview) {
     await sb.from('workout_days').update({ started_at: new Date().toISOString() }).eq('id', dayId);
     if (meso.status === 'planned') await sb.from('mesocycles').update({ status: 'active' }).eq('id', meso.id);
@@ -1009,8 +1015,8 @@ async function renderWorkout(dayId, mode) {
     const p = prev[we.exercise_id]; if (!p?.sets.length) return null;
     const base = baseFor(we, i);
     return L.suggestSet({ prev: base, ex: we.exercises, targetRir: we.target_rir, prevTargetRir: p.rir, deload,
-      jointHold: (prevFb[we.exercises.muscle_group]?.joint_pain ?? 0) >= 2, unit: unit(), mode: modeFor(we),
-      speed: L.progressionSpeed(prevFb[we.exercises.muscle_group]),
+      unit: unit(), mode: modeFor(we),
+      speed: L.liftSpeed(prevExFb[we.exercise_id], prevFb[we.exercises.muscle_group]),
       mesoStart: day.week > 1 && trail[we.exercise_id]?.[0] ? W(trail[we.exercise_id][0].weight) : null });
   };
   const lastOfMuscle = {}; wes.filter(w => !isCardio(w)).forEach(w => lastOfMuscle[w.exercises.muscle_group] = w.id);
@@ -1077,6 +1083,7 @@ async function renderWorkout(dayId, mode) {
           <span class="grow muted tiny right">${p?.sets.length ? (p.carried ? `last meso wk ${p.wk}: ` : 'last wk: ') + p.sets.map(s => `${fmt(s.weight)}×${s.reps ?? '–'}`).join(', ')
             : staleCarry[we.exercise_id] ? `${esc(staleCarry[we.exercise_id].mname)} wk ${staleCarry[we.exercise_id].wk} (${staleCarry[we.exercise_id].sets.map(s => `${fmt(s.weight)}×${s.reps ?? '–'}`).join(', ')}) — not in your last meso, so not used. Pick a fresh weight for ${deload ? 'deload' : `${we.target_rir} RIR`}`
             : 'first week — pick weights for ' + (deload ? '' : `${we.target_rir} RIR`)}</span></div>
+        ${exFbOn ? `<div data-exrate="${we.id}" style="margin-top:8px">${exRateLine(we, exFb[we.id])}</div>` : ''}
         ${lastOfMuscle[ex.muscle_group] === we.id ? `<div data-rate="${esc(ex.muscle_group)}" style="margin-top:8px">${rateLine(ex.muscle_group, feedback[ex.muscle_group])}</div>` : ''}
       </div>`;
     }).join('')}
@@ -1088,7 +1095,17 @@ async function renderWorkout(dayId, mode) {
     return done ? `<button class="ghost sm" data-open="${esc(m)}">✓ ${esc(m)} rated · pump ${RATINGS.pump.opts[f.pump]}, ${RATINGS.workload.opts[f.workload].toLowerCase()}, joints ${RATINGS.joint_pain.opts[f.joint_pain].toLowerCase()}</button>`
       : `<button class="sm block" data-open="${esc(m)}">Rate ${esc(m)} (pump · workload · joints)</button>`;
   }
-  const wireRate = () => $$('[data-open]').forEach(b => b.onclick = () => openRating(b.dataset.open, !isRated(b.dataset.open) && muscleComplete(b.dataset.open)));
+  function exRated(we) { return !exFbOn || isCardio(we) || (exFb[we.id]?.workload != null && exFb[we.id]?.joint_pain != null); }
+  function exRateLine(we, f) {
+    return exRated(we) ? `<button class="ghost sm ex-rated" data-exopen="${we.id}">✓ Exercise · ${RATINGS.workload.opts[f.workload].toLowerCase()}, joints ${RATINGS.joint_pain.opts[f.joint_pain].toLowerCase()}</button>`
+      : `<button class="sm block ex-rate" data-exopen="${we.id}">Rate this exercise (workload · joints)</button>`;
+  }
+  const wireRate = () => {
+    $$('[data-open]').forEach(b => b.onclick = () => openRating(b.dataset.open, !isRated(b.dataset.open) && muscleComplete(b.dataset.open)));
+    $$('[data-exopen]').forEach(b => b.onclick = () => { const we = wes.find(w => w.id === b.dataset.exopen);
+      if (!exRated(we) && !exComplete(we)) return toast('Finish this exercise’s sets first — the rating opens automatically');
+      openExRating(we, !exRated(we)); });
+  };
   wireRate();
 
   const muscleComplete = m => $$(`[data-muscle="${CSS.escape(m)}"] .set`).every(r => r.classList.contains('done'));
@@ -1112,16 +1129,47 @@ async function renderWorkout(dayId, mode) {
   const exComplete = we => { const c = app.querySelector(`[data-we="${we.id}"]`); return !!c && [...c.querySelectorAll('.set')].every(r => r.classList.contains('done')); };
   function refreshTrend(we) { const el = app.querySelector(`[data-trend="${we.id}"]`); if (el) el.innerHTML = exComplete(we) ? trendHtml(exerciseTrend(we)) : ''; }
   const isRated = m => !!feedback[m] && rateKeys(m).every(k => feedback[m][k] != null);
+  const exsOf = m => wes.filter(w => !isCardio(w) && w.exercises.muscle_group === m);
+
+  // Per-exercise rating (v1.10): workload + joint pain for THIS exercise, asked after its last set.
+  function openExRating(we, required = true) {
+    const f = { ...(exFb[we.id] || {}) };
+    const tr = exComplete(we) ? exerciseTrend(we) : null;
+    openSheet(`<h3>${esc(we.exercises.name)} — how was this exercise?</h3>
+      <div class="muted small">${required ? 'Required before you continue.' : 'Adjust your rating.'} This sets how fast <b>this lift</b> progresses; the ${esc(we.exercises.muscle_group)} rating comes after its last exercise.</div>
+      ${tr ? `<div class="card" style="margin:10px 0 4px;padding:10px"><div class="mover"><span>vs ${tr.vs}</span>${trendHtml(tr)}</div></div>` : ''}
+      ${['workload', 'joint_pain'].map(k => `<div class="fb-row"><label>${RATINGS[k].label}</label>${segHtml(k, f[k])}</div>`).join('')}
+      <div class="spacer"></div><button class="primary block" id="saveExRate">Save</button>
+      ${required ? '' : '<button class="ghost block" id="later">Cancel</button>'}`, panel => {
+      panel.querySelectorAll('[data-k]').forEach(b => b.onclick = () => {
+        f[b.dataset.k] = +b.dataset.v;
+        panel.querySelectorAll(`[data-k="${b.dataset.k}"]`).forEach(x => x.classList.toggle('on', x === b));
+      });
+      const later = panel.querySelector('#later'); if (later) later.onclick = closeSheet;
+      panel.querySelector('#saveExRate').onclick = async () => {
+        if (f.workload == null || f.joint_pain == null) return toast('Pick one for each', true);
+        const row = check(await sb.from('exercise_feedback').upsert({ workout_exercise_id: we.id, workload: f.workload, joint_pain: f.joint_pain, updated_at: new Date().toISOString() },
+          { onConflict: 'workout_exercise_id' }).select().single());
+        exFb[we.id] = row; closeSheet();
+        const slot = app.querySelector(`[data-exrate="${we.id}"]`); if (slot) { slot.innerHTML = exRateLine(we, row); wireRate(); }
+        enforceRatings();
+      };
+    }, required);
+  }
 
   // required = locked: can't dismiss or move on until all three are answered. Editing later via ✎ is not locked.
   function openRating(m, required = true) {
     const f = { ...(feedback[m] || {}) };
+    if (!feedback[m] && m !== 'Cardio' && exsOf(m).length === 1 && exFb[exsOf(m)[0].id]) {   // one exercise: start from its rating
+      const e1 = exFb[exsOf(m)[0].id]; f.workload ??= e1.workload; f.joint_pain ??= e1.joint_pain; }
     const exs = m === 'Cardio' ? wes.filter(isCardio) : wes.filter(w => !isCardio(w) && w.exercises.muscle_group === m);
     openSheet(`<h3>${esc(m)} — how was that?</h3>
       <div class="muted small">${required ? 'Required before you continue.' : 'Adjust your ratings.'}</div>
       <div class="card" style="margin:10px 0 4px;padding:10px"><div class="muted tiny">Progression</div>
         ${exs.map(w => { const tr = exComplete(w) ? exerciseTrend(w) : null;
-          return `<div class="mover"><span>${esc(w.exercises.name)}</span>${tr ? trendHtml(tr) : `<span class="muted tiny">${exComplete(w) ? 'no history yet' : 'not finished'}</span>`}</div>`; }).join('')}</div>
+          const ef = exFb[w.id], er = ef?.workload != null ? ` <span class="muted tiny">· ${RATINGS.workload.opts[ef.workload].toLowerCase()}, joints ${RATINGS.joint_pain.opts[ef.joint_pain].toLowerCase()}</span>` : '';
+          return `<div class="mover"><span>${esc(w.exercises.name)}${er}</span>${tr ? trendHtml(tr) : `<span class="muted tiny">${exComplete(w) ? 'no history yet' : 'not finished'}</span>`}</div>`; }).join('')}</div>
+      ${m !== 'Cardio' && exFbOn ? `<div class="muted tiny">Now rate <b>${esc(m)} as a whole</b> today — this drives its sets next week, and caps how fast its lifts progress.</div>` : ''}
       ${rateKeys(m).map(k => `<div class="fb-row"><label>${RATINGS[k].label}</label>${segHtml(k, f[k])}</div>`).join('')}
       <div class="spacer"></div><button class="primary block" id="saveRate">Save</button>
       ${required ? '' : '<button class="ghost block" id="later">Cancel</button>'}`, panel => {
@@ -1144,6 +1192,8 @@ async function renderWorkout(dayId, mode) {
   // Any muscle whose sets are all done but isn't rated gets the locked prompt.
   function enforceRatings() {
     if (!sheet.hidden) return;
+    const we = wes.find(w => exComplete(w) && !exRated(w));
+    if (we) return openExRating(we, true);
     const m = groups.find(x => muscleComplete(x) && !isRated(x));
     if (m) openRating(m, true);
   }
@@ -1369,6 +1419,7 @@ async function renderWorkout(dayId, mode) {
         panel.querySelectorAll('[data-scope]').forEach(x => x.onclick = async () => {
           if (!pick) return;
           if (logged) check(await sb.from('sets').delete().eq('workout_exercise_id', we.id));
+          if (exFbOn && exFb[we.id]) await sb.from('exercise_feedback').delete().eq('workout_exercise_id', we.id);
           const q = qLoad(); Object.keys(q).filter(k => k.startsWith(we.id + ':')).forEach(k => delete q[k]); qStore(q); syncBadge();
           check(await sb.from('workout_exercises').update({ exercise_id: pick.id, flag: null }).eq('id', we.id));
           let n = 0;
@@ -1398,6 +1449,8 @@ async function renderWorkout(dayId, mode) {
   };
   $('#finish').onclick = async () => {
     if (day.completed_at) return go('#/meso/' + meso.id);
+    const exUn = wes.find(w => exComplete(w) && !exRated(w));
+    if (exUn) { toast(`Rate ${exUn.exercises.name} first`); return openExRating(exUn); }
     const unrated = groups.filter(m => muscleComplete(m) && !isRated(m));
     if (unrated.length) { toast(`Rate ${unrated[0]} first`); return openRating(unrated[0]); }
     const open = $$('.set:not(.done)').length;

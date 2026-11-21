@@ -611,6 +611,32 @@ export function progressionSpeed(fb) {
  *  - "Faster" is switched off at 0 RIR (failure weeks), on spinal-loading (axial) lifts, and with any joint pain.
  *  - Reps never jump more than +2 in a week.
  */
+const SPEED_ORDER = { hold: 0, slow: 1, normal: 2, fast: 3 };
+/**
+ * Progression speed for ONE lift from its own rating (exercise_feedback: workload, joint_pain) and the muscle's
+ * rating (muscle_feedback) — v1.10. Without an exercise rating (older data) it is the muscle rating alone.
+ *  - The exercise rating decides that lift: joint pain 2+ or "Too much" → hold; "Pushed my limit" → slower.
+ *  - The muscle rating caps it: muscle "Too much" holds every lift for that muscle; muscle "Pushed" → slower.
+ *    Muscle joint pain 2+ while THIS exercise was pain-free → slower (not hold): the pain belonged to another lift.
+ *  - Faster only when BOTH felt easy, the muscle never got sore, and no joint pain anywhere.
+ */
+export function liftSpeed(exFb, muscleFb) {
+  const m = progressionSpeed(muscleFb);
+  if (!exFb || exFb.workload == null) return m;
+  const ej = exFb.joint_pain ?? 0;
+  let e;
+  if (ej >= 2) e = { speed: 'hold', why: 'joint pain on this exercise last time — ⇄ swaps it if it keeps hurting' };
+  else if (exFb.workload === 3) e = { speed: 'hold', why: 'you rated this exercise "Too much" last time' };
+  else if (exFb.workload === 2) e = { speed: 'slow', why: 'you pushed your limit on this exercise last time' };
+  else if (exFb.workload === 0 && ej === 0) e = { speed: 'fast', why: null };
+  else e = { speed: 'normal', why: null };
+  let cap = m;
+  if (m.speed === 'hold' && (muscleFb?.joint_pain ?? 0) >= 2 && muscleFb?.workload !== 3 && ej === 0)
+    cap = { speed: 'slow', why: 'joint pain in this muscle last time (not on this exercise)' };
+  if (e.speed === 'fast') return cap.speed === 'fast' ? { speed: 'fast', why: 'this exercise and the muscle felt easy and you never got sore' } : cap;
+  if (cap.speed === 'fast') return e;   // muscle easy but this exercise wasn't → this exercise's own speed
+  return SPEED_ORDER[cap.speed] < SPEED_ORDER[e.speed] ? cap : e;
+}
 export const GUARD = { weeklyPct: 0.05, mesoPct: 0.20, maxRepJump: 2 };
 /** Biggest automatic weekly raise from w0: one step (≤ 5 lb / 2.5 kg, two on a "faster" week) and never past ~+5%. */
 export function safeMax(w0, ex, unit, fast = false) {

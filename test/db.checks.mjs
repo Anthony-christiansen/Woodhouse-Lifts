@@ -125,5 +125,15 @@ export async function runChecks(db) {
   await assert.rejects(as(db, A, `select public.apply_feedback_adjustment($1, 1, $2::jsonb)`, [fb2, JSON.stringify([{ id: we2, target_sets: 99 }])]), /check/i);
   assert.equal((await as(db, A, `select adjusted from public.muscle_feedback where id = $1`, [fb2]))[0].adjusted, false, 'rolled back: not marked adjusted');
   console.log('FEEDBACK ADJUSTMENT: atomic + once only OK');
+  // ---- exercise_feedback (v1.10): one rating per exercise per session, own rows only, cleaned up with the exercise
+  await as(db, A, `insert into public.exercise_feedback (workout_exercise_id, workload, joint_pain) values ($1, 1, 0)`, [we2]);
+  await as(db, A, `insert into public.exercise_feedback (workout_exercise_id, workload, joint_pain) values ($1, 2, 1)
+    on conflict (workout_exercise_id) do update set workload = excluded.workload, joint_pain = excluded.joint_pain`, [we2]);
+  const efA = await as(db, A, `select workload, joint_pain from public.exercise_feedback where workout_exercise_id = $1`, [we2]);
+  assert.deepEqual([efA.length, efA[0].workload, efA[0].joint_pain], [1, 2, 1], 'upsert keeps one row per exercise');
+  assert.equal((await as(db, B, `select * from public.exercise_feedback`)).length, 0, 'B sees none of A\'s exercise ratings');
+  await assert.rejects(as(db, B, `insert into public.exercise_feedback (workout_exercise_id, workload, joint_pain) values ($1, 0, 0)`, [we2]), /violates|foreign key|row-level/i, 'B cannot rate A\'s exercise');
+  await assert.rejects(as(db, A, `insert into public.exercise_feedback (workout_exercise_id, workload) values ($1, 7)`, [we2]), /check|duplicate|unique/i);
+  console.log('EXERCISE FEEDBACK: RLS + one per exercise OK');
   console.log('ALL DB TESTS PASSED');
 }
