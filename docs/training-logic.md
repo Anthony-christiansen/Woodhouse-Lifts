@@ -364,15 +364,29 @@ Example: Home shows "Sets this week 42" → tap → Quads 12, Back 10, … → t
 
 ### 6.1 Lift status flags (home screen, chart, and in the workout)
 
-Each lift in your current mesocycle gets a status from its best estimated strength per session (§1.7). Deload sessions, myo-rep mini-sets and warm-ups are left out, and ±1% counts as "the same". Each lift is judged on its **best session per week**, so a heavier day and a lighter day in the same week don't read as ups and downs. Only the **last 6 months** count. The current week counts only once it's at least as good as the week before. The rules are checked in this order:
+**Why this changed in 1.4.0.** In a mesocycle the target RIR drops every week (3 → 2 → 1 → 0). Following the plan exactly means adding about one rep, or a little weight, each week. The strength estimate in §1.7 gives credit for reps left in the tank, so +1 rep at 1 less RIR comes out **flat**. The old rule read that as "Stalled" — it was flagging people for doing exactly what the program asked.
+
+Example from real data (bent-over row, AC VII): 70×9 @3 → 70×10 @2 → 70×11 @1 → 70×12 @0. Estimate = 70 × (1 + 12/30) = 98 every week → old rule: **Stalled**. New rule: performance 91 → 93 → 96 → 98 → **On track**, and vs AC VI week 4 (70×11 @0): **+1 rep at the same weight**.
+
+**How a lift is judged now:**
+- **Inside the current meso**, by meso week (not calendar dates): **performance** = weight × (1 + reps/30), with no RIR credit. That rises when you add reps or weight. Each meso week uses its best session. Deload weeks, warm-ups and myo-rep mini-sets are left out.
+- **Against the previous meso**: the same meso week, so the same target RIR (AC VII week 4 vs AC VI week 4). This is where real strength gains show. It's shown under the status, e.g. "vs AC VI week 4: +1 rep at the same weight".
+- **PRs** still use the RIR-credited estimate (§1.7): a true strength record that beats every earlier one by more than 1%.
+
+Rules, checked in this order:
 
 | Status | Rule | What the app tells you to do |
 |---|---|---|
-| 🏆 PR | Latest week beats every week in the last 6 months by more than 1% | Keep the plan. Add a rep, or a small weight jump once you pass the top of the rep range. |
-| 📉 Down | The last 2 weeks are both more than 3% below your best of the 4 weeks before them | Usually fatigue. Keep the weight, match last time's reps at today's RIR, and rate recovery honestly so the set rules (§5) can trim volume. If it drops again next week, take an early deload or a lighter week. |
-| ⚠️ Stalled | 4+ weeks, and the best of the last 3 is within ±1% of your best of the 6 weeks before them | Keep the weight and add 1 rep to the first set (double progression). Still stuck next week? Drop 5–10% and build back over 2–3 weeks, or swap to a close variation next mesocycle. |
-| Up | Latest is more than 1% above the oldest session in the window | Keep going. |
-| Steady / New | Anything else, or fewer than 2 sessions | Keep chasing a rep at the same weight. |
+| 🏆 PR | Latest week's strength estimate beats every earlier one by more than 1% | Keep the plan — add a rep or a small weight jump as RIR drops. |
+| 📉 Down | The last 2 meso weeks are both more than 3% below your best week earlier in this meso | Usually fatigue. Keep the weight, match last week's reps, rate recovery honestly so the set rules (§5) can trim volume; if it drops again, take the deload early. |
+| ⚠️ Stalled | 3+ meso weeks and **no gain two weeks in a row** (each week within 1% of the one before, while the target got harder) | Keep the weight, go for +1 rep on the first set. Still flat? The deload is the fix — then start the next meso a week or two back ("Run it again", §5.6). |
+| Dipped | Latest week more than 1% below last week (one week only) | One week isn't a trend. Last week's weight, match its reps. No flag in the workout. |
+| On track | Latest week beat last week (any added rep or weight) | Keep going. |
+| Held / New | Same as last week, or first week of the meso | Aim for +1 rep. Week 1 shows the comparison to the last meso. |
+
+**AC VII check (Nov 21, 2026).** Under the old rule 6 lifts read Stalled (bent-over row, overhead triceps extension, lying curl, preacher curl, Pallof press, pec dec) — all of them were +1 rep/week exactly on plan. Under the new rule they're On track, and each is ahead of AC VI's same week (e.g. preacher curl 35×10 vs 35×9, Pallof 25×24 vs 25×23). Leg extension (200×8 → 205×5) and machine lateral raise (105×7 → 105×5) show **Dipped** for week 4.
+
+**Chart page** has two views: **Performance** (default; what you lifted, rises through each meso and resets a little at each easier week 1) and **Strength estimate** (with RIR credit; flat when you hit the plan, steps up meso to meso).
 
 **Where it shows:**
 - **Home:** "This meso's lifts", with lifts that need attention listed first, and "PRs this meso". Tap any lift to open its chart.

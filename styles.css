@@ -82,6 +82,7 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px
 .set.done button.check { background: var(--accent); color: var(--accent-ink); }
 .seg { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
 .seg.c3 { grid-template-columns: repeat(3, 1fr); }
+.seg.c2 { grid-template-columns: repeat(2, 1fr); }
 .seg.c11 { grid-template-columns: repeat(11, 1fr); }
 .seg button { padding: 9px 2px; font-size: 12px; line-height: 1.2; min-height: 44px; word-break: break-word; }
 .seg button.on { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
@@ -220,7 +221,7 @@ table.warm td, table.warm th { padding: 6px 6px 6px 0; text-align: left; }
 .pill.st-pr, .pill.st-progressing { background: #12301d; color: var(--accent); }
 .pill.st-stalled { background: #3a2a07; color: var(--warn); }
 .pill.st-regressing { background: #3a1212; color: var(--bad); }
-.pill.st-steady, .pill.st-new { background: #232832; color: var(--muted); }
+.pill.st-steady, .pill.st-new, .pill.st-dip { background: #232832; color: var(--muted); }
 button.lift-row { width: 100%; background: none; border: 0; border-top: 1px solid var(--line); border-radius: 0; color: inherit; text-align: left;
   display: flex; align-items: center; gap: 8px; padding: 10px 0; min-height: 44px; font: inherit; }
 button.lift-row > span:first-child { flex: 1; }

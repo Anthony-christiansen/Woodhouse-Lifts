@@ -331,6 +331,71 @@ export function liftStatus(sessions, priorBest = null, { name = 'this lift', rir
 }
 
 /**
+ * Doc §6.1 (v1.4) — lift status judged the way the program is run.
+ * In an RP-style meso the target RIR drops each week (3 → 2 → 1 → 0), so adding a rep or a little weight every week
+ * IS the plan. A strength estimate that includes RIR stays flat when you do exactly that, so it must not be used to
+ * call a lift "stalled". Instead:
+ *   - Within the current meso: compare PERFORMANCE (load × reps, no RIR credit) week over week, by meso week.
+ *   - Across mesos: compare the same meso week (same target RIR), e.g. AC VII week 4 vs AC VI week 4.
+ *   - PR: the RIR-adjusted estimate beats every earlier one by > 1% (a true strength record).
+ * entries: [{ meso, mesoName, week, e (RIR-adjusted), raw (no RIR), top: { weight, reps } }] in time order, one per
+ * meso week (best by raw), deload weeks already removed.
+ */
+export function mesoStatus(entries, priorBest = null, { name = 'this lift', rir = null } = {}) {
+  const pct = (a, b) => (a - b) / b * 100;
+  const es = (entries || []).filter(x => x.raw > 0);
+  if (!es.length) return { status: 'new', label: 'New', pct: null, rec: 'Log a couple of weeks and trends show up here.', vs: null };
+  const last = es[es.length - 1];
+  const cur = es.filter(x => x.meso === last.meso);
+  const vs = vsLastMeso(es);
+  const before = Math.max(priorBest || 0, ...es.slice(0, -1).map(x => x.e));
+  if (before > 0 && last.e > before * 1.01) {
+    return { status: 'pr', label: 'PR', pct: pct(last.e, before), vs,
+      rec: `New best on ${name} (+${pct(last.e, before).toFixed(1)}% estimated strength). Keep the same plan — add a rep or a small jump in weight as RIR drops.` };
+  }
+  if (cur.length < 2) return { status: 'new', label: 'New', pct: null, vs, rec: vs ? `First week of this meso. ${vs.text}` : 'First week of this meso — trends show from week 2.' };
+  const a = cur[cur.length - 1].raw, b = cur[cur.length - 2].raw;
+  if (cur.length >= 3) {
+    const best = Math.max(...cur.slice(0, -2).map(x => x.raw));
+    if (a < best * 0.97 && b < best * 0.97) {
+      return { status: 'regressing', label: 'Down', pct: pct(a, best), vs,
+        rec: `Down ${Math.abs(pct(a, best)).toFixed(1)}% from your best week this meso, two weeks running — usually fatigue, not lost strength. Today: keep the weight, aim to match last week's reps${rir != null ? ` at ${rir} RIR` : ''}, and rate recovery honestly so the app can trim sets. If it drops again, take the deload early.` };
+    }
+    const c = cur[cur.length - 3].raw;
+    if (a <= b * 1.01 && b <= c * 1.01) {
+      return { status: 'stalled', label: 'Stalled', pct: pct(a, c), vs,
+        rec: `No gain for 2 weeks in a row, even as the target got harder. Today: keep the weight and go for +1 rep on your first set. Still flat next week? The deload is the fix — then start the next meso a week or two back ("Run it again").` };
+    }
+  }
+  if (a > b * 1.005) return { status: 'progressing', label: 'On track', pct: pct(a, b), vs, rec: `Beat last week (+${pct(a, b).toFixed(1)}%). Keep going — next week add a rep or a small weight jump.` };
+  if (a < b * 0.99) return { status: 'dip', label: 'Dipped', pct: pct(a, b), vs, rec: `Below last week (${pct(a, b).toFixed(1)}%). One week isn't a trend — sleep, food and stress all show up here. Today: last week's weight, aim to match its reps.` };
+  return { status: 'steady', label: 'Held', pct: pct(a, b), vs, rec: 'Same as last week — fine for one week. Aim for +1 rep on your first set.' };
+}
+/** Same meso week in the previous meso that has this lift (falls back to its closest week). */
+export function vsLastMeso(entries) {
+  const es = entries || []; if (!es.length) return null;
+  const last = es[es.length - 1];
+  const prev = es.filter(x => x.meso !== last.meso); if (!prev.length) return null;
+  const pm = prev[prev.length - 1].meso, pw = prev.filter(x => x.meso === pm);
+  const m = pw.find(x => x.week === last.week) || pw.reduce((p, q) => Math.abs(q.week - last.week) < Math.abs(p.week - last.week) ? q : p);
+  const d = (last.raw - m.raw) / m.raw * 100;
+  const t = last.top, u = m.top;
+  const how = t && u && Number(t.weight) === Number(u.weight) && t.reps !== u.reps ? `${t.reps > u.reps ? '+' : ''}${t.reps - u.reps} rep${Math.abs(t.reps - u.reps) === 1 ? '' : 's'} at the same weight`
+    : `${d >= 0 ? '+' : ''}${d.toFixed(1)}%`;
+  return { mesoName: m.mesoName, week: m.week, pct: d, text: `vs ${m.mesoName} week ${m.week}: ${how}.` };
+}
+/** PRs within one meso: entries of that meso whose RIR-adjusted estimate beats everything before it by > 1%. */
+export function prsInMeso(entries, priorBest, meso) {
+  let best = priorBest || 0, n = 0, top = null;
+  for (const x of entries || []) {
+    if (!(x.e > 0)) continue;
+    if (x.meso === meso && best > 0 && x.e > best * 1.01) { n++; top = { pct: (x.e - best) / best * 100, week: x.week }; }
+    best = Math.max(best, x.e);
+  }
+  return { count: n, last: top };
+}
+
+/**
  * Doc §6.1 — collapse sessions to the best session per calendar week (Mon–Sun). Many programs train a lift on a
  * heavier and a lighter day; comparing those to each other would look like constant ups and downs.
  * If the latest (current) week is still below the week before, it's dropped — an unfinished week can only ever

@@ -322,3 +322,31 @@ console.log('GUARDRAIL TESTS PASSED');
   assert.ok(!d.note, 'small overshoot still uses the one-step rule');
   console.log('RE-SOLVE TESTS PASSED');
 }
+
+// --- Meso-aware lift status (doc §6.1 v1.4): hitting the RP plan must never read as "stalled" ---
+{
+  const ex = { load_type: 'weighted' };
+  const mk = (meso, rows) => rows.map(([week, w, r, rir], i) => ({ meso, mesoName: meso, week, date: `2026-${meso === 'VI' ? '09' : '10'}-${String(10 + i * 5).padStart(2, '0')}`,
+    e: L.e1rm({ weight: w, reps: r, rir }, ex), raw: L.e1rm({ weight: w, reps: r, rir: 0 }, ex), top: { weight: w, reps: r } }));
+  // Anthony's real bent-over row: +1 rep a week as RIR drops 3→0, both mesos
+  const row = [...mk('VI', [[1, 65, 11, 3], [2, 65, 12, 2], [3, 70, 10, 1], [4, 70, 11, 0]]), ...mk('VII', [[1, 70, 9, 3], [2, 70, 10, 2], [3, 70, 11, 1], [4, 70, 12, 0]])];
+  const old = L.liftStatus(row.filter(x => x.meso === 'VII').map(x => ({ e: x.e, date: x.date })), null);
+  assert.equal(old.status, 'stalled', 'the OLD rule called this stalled — the bug');
+  const st = L.mesoStatus(row, null, { name: 'Row' });
+  assert.equal(st.status, 'progressing', 'hitting +1 rep/week as RIR drops = On track');
+  assert.equal(st.vs.text, 'vs VI week 4: +1 rep at the same weight.');
+  // genuinely flat for 2 weeks while RIR dropped → stalled
+  assert.equal(L.mesoStatus(mk('X', [[1, 100, 10, 3], [2, 100, 10, 2], [3, 100, 10, 1]])).status, 'stalled');
+  // one flat week → Held; one bad week → Dipped (no flag)
+  assert.equal(L.mesoStatus(mk('X', [[1, 100, 10, 3], [2, 100, 10, 2]])).status, 'steady');
+  assert.equal(L.mesoStatus(mk('X', [[1, 100, 10, 3], [2, 105, 10, 2], [3, 105, 8, 1]])).status, 'dip');
+  // two weeks well below the meso's best → Down
+  assert.equal(L.mesoStatus(mk('X', [[1, 100, 12, 3], [2, 100, 10, 2], [3, 100, 10, 1]])).status, 'regressing');
+  // first week of a new meso → New, with the comparison to last meso
+  const nw = L.mesoStatus([...mk('VI', [[1, 65, 11, 3], [4, 70, 11, 0]]), ...mk('VII', [[1, 70, 8, 3]])]);
+  assert.equal(nw.status, 'new'); assert.ok(nw.vs && nw.vs.week === 1);
+  // PRs counted inside one meso on the RIR-adjusted estimate
+  assert.equal(L.prsInMeso(row, null, 'VII').count, 1, 'AC VII week 1 (70×9 @3) beat AC VI best (70×11 @0) on the RIR-adjusted estimate');
+  assert.equal(L.prsInMeso([...row, ...mk('VII', [[5, 80, 12, 0]])], null, 'VII').count, 2);
+  console.log('MESO STATUS TESTS PASSED');
+}

@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import * as L from './logic.js?v=19';
-import * as LEARN from './learn.js?v=19';
+import * as L from './logic.js?v=20';
+import * as LEARN from './learn.js?v=20';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -17,7 +17,7 @@ let authReturn = (() => {
   return null;
 })();
 let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
-export const APP_VERSION = '1.3.0'; // keep in sync with CHANGELOG.md
+export const APP_VERSION = '1.4.0'; // keep in sync with CHANGELOG.md
 const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
 const DOC_URL = 'https://docs.google.com/document/d/1e_ypB2l3qW58SPRpZ1BWOclB1ycmSF3Q5C2jgPkFvdc';
 
@@ -130,23 +130,34 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) flus
 setInterval(() => { if (Object.keys(qLoad()).length) flushQueue(); }, 20000);
 
 // ---------- per-lift insights (doc §6.1) ----------
-// For a list of exercise ids: recent sessions + earlier best from the database (lift_recent), then the
-// training engine's status (PR / Up / Steady / Stalled / Down) and a concrete recommendation.
-const STATUS_ORDER = { regressing: 0, stalled: 1, pr: 2, progressing: 3, steady: 4, new: 5 };
+// For a list of exercise ids: recent sessions + earlier best (lift_recent), tagged with meso and meso week, then the
+// training engine's status. Within a meso the target RIR drops each week, so lifts are judged on PERFORMANCE
+// (load × reps) week over week, and against the same week of the previous meso — never on a RIR-adjusted number
+// that stays flat when you hit the plan exactly (L.mesoStatus).
+const STATUS_ORDER = { regressing: 0, stalled: 1, dip: 2, pr: 3, progressing: 4, steady: 5, new: 6 };
 const statusPill = st => `<span class="pill st-${st.status}">${st.label}${st.pct != null && st.status !== 'new' ? ` ${st.pct > 0 ? '+' : ''}${st.pct.toFixed(1)}%` : ''}</span>`;
-async function liftInsights(ids, { excludeSessions = [], since = null, rirFor = {} } = {}) {
+async function liftInsights(ids, { excludeSessions = [], meso = null, rirFor = {} } = {}) {
   if (!ids.length) return {};
-  const rows = check(await sb.rpc('lift_recent', { p_ids: ids, p_n: 30, p_days: 182 }));
+  const rows = check(await sb.rpc('lift_recent', { p_ids: ids, p_n: 30, p_days: 182 })).filter(r => !excludeSessions.includes(r.session_id));
+  // meso + week + load type for every session (chunked: long id lists don't fit in one URL)
+  const meta = {}; const sids = [...new Set(rows.map(r => r.session_id))];
+  for (let i = 0; i < sids.length; i += 80) check(await sb.from('workout_exercises').select('id, exercises(load_type), workout_days(week, mesocycle_id, mesocycles(name, weeks))').in('id', sids.slice(i, i + 80)))
+    .forEach(w => meta[w.id] = w);
   const by = {};
   for (const r of rows) {
-    if (excludeSessions.includes(r.session_id)) continue; // e.g. today's unfinished session
-    (by[r.exercise_id] = by[r.exercise_id] || { id: r.exercise_id, name: r.name, prior: r.prior_best == null ? null : Number(r.prior_best), sessions: [] })
-      .sessions.push({ e: Number(r.best_e1rm), date: r.done_at.slice(0, 10), top: { weight: r.top_weight, reps: r.top_reps } });
+    const m = meta[r.session_id], d = m?.workout_days;
+    const x = by[r.exercise_id] = by[r.exercise_id] || { id: r.exercise_id, name: r.name, prior: r.prior_best == null ? null : Number(r.prior_best), sessions: [] };
+    const top = { weight: r.top_weight, reps: r.top_reps };
+    x.sessions.push({ e: Number(r.best_e1rm), raw: L.e1rm({ ...top, rir: 0 }, m?.exercises || { load_type: 'weighted' }, profile?.bodyweight), date: r.done_at.slice(0, 10),
+      meso: d?.mesocycle_id || null, mesoName: d?.mesocycles?.name || '', week: d?.week ?? null, deload: d ? L.rirForWeek(d.week, d.mesocycles?.weeks || 99).deload : false, top });
   }
   for (const x of Object.values(by)) {
-    x.weeks = L.weeklyBest(x.sessions);   // judge on each week's best session (heavy + light days don't look like ups and downs)
-    x.status = L.liftStatus(x.weeks, x.prior, { name: x.name, rir: rirFor[x.id] ?? null });
-    x.prs = since ? L.prsSince(x.weeks, x.prior, since) : { count: 0, last: null };
+    // one entry per meso week (its best session by performance); deload weeks don't count
+    const ent = new Map();
+    for (const s of x.sessions) { if (s.deload || !s.meso) continue; const k = s.meso + '|' + s.week, c = ent.get(k); if (!c || s.raw > c.raw) ent.set(k, s); }
+    x.entries = [...ent.values()].sort((p, q) => p.date.localeCompare(q.date));
+    x.status = L.mesoStatus(x.entries, x.prior, { name: x.name, rir: rirFor[x.id] ?? null });
+    x.prs = meso ? L.prsInMeso(x.entries, x.prior, meso) : { count: 0, last: null };
   }
   return by;
 }
@@ -414,11 +425,11 @@ async function renderHome() {
     sb.rpc('dashboard_stats', { p_tz: tz }).then(check),
     meso ? slipFor(meso) : Promise.resolve([]),
     sb.from('mesocycles').select('id', { count: 'exact', head: true }).then(x => x.count || 0),
-    liftInsights(liftIds, { since: meso?.started_on || null }),
+    liftInsights(liftIds, { meso: meso?.id || null }),
   ]);
   const lifts = Object.values(insights).sort((a, b) => STATUS_ORDER[a.status.status] - STATUS_ORDER[b.status.status] || a.name.localeCompare(b.name));
-  const mesoPrs = lifts.filter(x => x.prs.count).map(x => ({ id: x.id, name: x.name, pct: x.prs.last.pct, date: x.prs.last.date, n: x.prs.count }))
-    .sort((a, b) => b.date.localeCompare(a.date));
+  const mesoPrs = lifts.filter(x => x.prs.count).map(x => ({ id: x.id, name: x.name, pct: x.prs.last.pct, week: x.prs.last.week, n: x.prs.count }))
+    .sort((a, b) => b.week - a.week || b.pct - a.pct);
   const prCount = meso ? lifts.reduce((a, x) => a + x.prs.count, 0) : (stats.prs || []).length;
   const bw = profile?.bodyweight;
   const cardio = cardioItems(cSess, cSets);
@@ -882,12 +893,12 @@ async function renderWorkout(dayId) {
     rirFor: Object.fromEntries(wes.map(w => [w.exercise_id, w.target_rir])) }).catch(() => ({}));
   // Reference only: how last week compares with your all-time best. Never changes today's targets (those come from last week).
   const histNote = we => { const x = insights[we.exercise_id]; if (!x || deload || day.completed_at) return '';
-    const lastE = x.weeks.at(-1)?.e, best = Math.max(x.prior || 0, ...x.weeks.map(w => w.e));
+    const lastE = x.entries.at(-1)?.e, best = Math.max(x.prior || 0, ...x.entries.map(w => w.e));
     if (!lastE || !(best > lastE * 1.05)) return '';
     return `<div class="muted tiny hist-note">📌 ${Math.round((1 - lastE / best) * 100)}% below your all-time best estimate — for reference only; today's targets come from last week.</div>`; };
   const FLAG = { stalled: '⚠️', regressing: '📉', pr: '🏆' };
   const liftFlag = we => { const x = insights[we.exercise_id]; if (!x || !FLAG[x.status.status] || day.completed_at) return '';
-    const st = x.status, head = st.status === 'pr' ? `New best last week (+${st.pct.toFixed(1)}%)` : st.status === 'stalled' ? 'Stalled — no progress in 3 weeks' : `Down ${Math.abs(st.pct).toFixed(1)}% for 2 weeks`;
+    const st = x.status, head = st.status === 'pr' ? `New best last time (+${st.pct.toFixed(1)}%)` : st.status === 'stalled' ? 'Stalled — no gain 2 weeks running' : `Down ${Math.abs(st.pct).toFixed(1)}% for 2 weeks`;
     return `<button class="lift-flag st-${st.status}" data-flag="${we.id}" aria-label="${esc(head)}: show recommendation"><span>${FLAG[st.status]}</span><span><b>${head}.</b> ${esc(st.rec.split('. ').slice(1, 2).join('') || '')}${st.status === 'pr' ? '' : ' <u>More</u>'}</span></button>`; };
   const feedback = {};
   check(await sb.from('muscle_feedback').select('*').eq('workout_day_id', dayId)).forEach(f => feedback[f.muscle_group] = f);
@@ -1163,8 +1174,8 @@ async function renderWorkout(dayId) {
 
   $('#warmOk') && ($('#warmOk').onclick = () => { try { localStorage.setItem('wl_warmup_seen', '1'); } catch {} $('#warmNote').outerHTML = '<div class="muted small warm-line">🔥 Warm up first — tap ⓘ on each muscle’s first exercise for ramp-up sets. Warm-ups aren’t logged.</div>'; });
   const trendSheet = we => { const x = insights[we.exercise_id]; if (!x) return;
-    openSheet(`<h3>${esc(we.exercises.name)}</h3><div class="row" style="margin:6px 0">${statusPill(x.status)}<span class="muted small">best session each week, last ${x.weeks.length} week${x.weeks.length > 1 ? 's' : ''}</span></div>
-      <p>${esc(x.status.rec)}</p>
+    openSheet(`<h3>${esc(we.exercises.name)}</h3><div class="row" style="margin:6px 0">${statusPill(x.status)}<span class="muted small">by meso week · reps × load</span></div>
+      <p>${esc(x.status.rec)}</p>${x.status.vs ? `<p class="small">${esc(x.status.vs.text)}</p>` : ''}
       <div class="muted small">Last time: ${(t => t ? `${fmt(W(t.weight))} ${unit()} × ${t.reps}` : '—')(x.sessions[x.sessions.length - 1]?.top)}</div>
       <div class="spacer"></div><button class="block" id="toChart">See the chart ›</button><div class="spacer"></div><button class="primary block" id="closeFlag">Got it</button>`,
       panel => { panel.querySelector('#closeFlag').onclick = closeSheet; panel.querySelector('#toChart').onclick = () => { closeSheet(); go('#/progress/' + we.exercise_id); }; }); };
@@ -1399,11 +1410,11 @@ async function renderStats(kind, arg) {
       return wire(); }
     const ids = [...new Set(check(await sb.from('workout_exercises').select('exercise_id, exercises!inner(load_type), workout_days!inner(mesocycle_id)').eq('workout_days.mesocycle_id', meso.id))
       .filter(x => x.exercises.load_type !== 'cardio').map(x => x.exercise_id))];
-    const ins = Object.values(await liftInsights(ids, { since: meso.started_on || null }));
+    const ins = Object.values(await liftInsights(ids, { meso: meso.id }));
     const prs = ins.filter(x => x.prs.count).sort((p, q) => q.prs.count - p.prs.count || q.prs.last.pct - p.prs.last.pct);
     const none = ins.filter(x => !x.prs.count).sort((p, q) => p.name.localeCompare(q.name));
     app.innerHTML = `<div class="card"><div class="big">${prs.reduce((t, x) => t + x.prs.count, 0)}</div><div class="muted small">PRs this meso across ${prs.length} lift${prs.length === 1 ? '' : 's'} · a PR = best weekly strength estimate beats every earlier one by more than 1%</div></div>
-      ${prs.length ? `<div class="card"><b>Lifts with PRs 🏆</b>${prs.map(x => `<button class="mover lift-row" data-go="#/progress/${x.id}/meso"><span>${esc(x.name)} <span class="muted tiny">${x.prs.count}× · latest +${x.prs.last.pct.toFixed(1)}%</span></span>${statusPill(x.status)}<span class="chev">›</span></button>`).join('')}</div>` : ''}
+      ${prs.length ? `<div class="card"><b>Lifts with PRs 🏆</b>${prs.map(x => `<button class="mover lift-row" data-go="#/progress/${x.id}/meso"><span>${esc(x.name)} <span class="muted tiny">${x.prs.count}× · latest +${x.prs.last.pct.toFixed(1)}% in wk ${x.prs.last.week}</span></span>${statusPill(x.status)}<span class="chev">›</span></button>`).join('')}</div>` : ''}
       ${none.length ? `<div class="card"><b>No PR yet this meso</b>${none.map(x => `<button class="mover lift-row" data-go="#/progress/${x.id}/meso"><span>${esc(x.name)}</span>${statusPill(x.status)}<span class="chev">›</span></button>`).join('')}</div>` : ''}`;
     return wire();
   }
@@ -1488,7 +1499,7 @@ async function renderHistory() {
   $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
 }
 
-async function renderProgress(exId, rangeArg) {
+async function renderProgress(exId, rangeArg, metricArg) {
   setHeader('Exercise progress', exId ? '#/progress' : '#/explore', 'explore');
   // Per-session strength is computed in the database (lift_sessions / strength_summary): deload weeks,
   // myo-rep mini-sets and cardio are excluded so sessions compare like for like.
@@ -1502,21 +1513,25 @@ async function renderProgress(exId, rangeArg) {
       : '<p class="muted">Log some sets and your progress shows up here.</p>';
     return $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
   }
-  const [all, meso] = await Promise.all([
+  const [all, meso, exRow] = await Promise.all([
     fetchAll(() => sb.rpc('lift_sessions', { p_exercise_id: exId }).order('done_at').order('session_id')),
-    activeMeso()]);
+    activeMeso(), sb.from('exercises').select('load_type').eq('id', exId).maybeSingle().then(r => r.data)]);
   if (!all.length) { app.innerHTML = '<p class="muted">No sets for this exercise yet.</p>'; return; }
-  const series = all.map(s => ({ date: s.done_at.slice(0, 10), at: s.done_at, e: W(s.best_e1rm), top: { weight: W(s.top_weight), reps: s.top_reps }, n: s.n_sets }));
-  // Status uses the last 12 sessions against the best before them — same rule as the home screen and the workout flag.
-  const recent = series.filter(x => x.date >= isoDay(new Date(Date.now() - 182 * 864e5)));
-  const status = L.liftStatus(L.weeklyBest(recent.length ? recent : series.slice(-2)), null, { name: all[0].name });
+  // Two views: Performance = load × reps with no RIR credit (what you actually lifted; rises through a meso as RIR drops),
+  // Strength estimate = with RIR credit (comparable across different effort levels).
+  const metric = metricArg === 'est' ? 'est' : 'perf';
+  const series = all.map(s => ({ date: s.done_at.slice(0, 10), at: s.done_at, est: W(s.best_e1rm),
+    raw: W(L.e1rm({ weight: s.top_weight, reps: s.top_reps, rir: 0 }, exRow || { load_type: 'weighted' }, profile?.bodyweight)),
+    top: { weight: W(s.top_weight), reps: s.top_reps }, n: s.n_sets })).map(x => ({ ...x, e: metric === 'est' ? x.est : x.raw }));
+  // Status: same rule and same data as the home screen and the workout flag (doc §6.1).
+  const status = ((await liftInsights([exId]))[exId] || {}).status || { status: 'new', label: 'New', pct: null, rec: 'Log a couple of weeks and trends show up here.' };
   const mesoStart = meso?.started_on || null;
   const ranges = { meso: 'This meso', '3m': '3 months', all: 'All' };
   const range = ranges[rangeArg] ? rangeArg : (mesoStart && series.some(x => x.date >= mesoStart) ? 'meso' : 'all');
   const from = range === 'meso' ? mesoStart : range === '3m' ? isoDay(new Date(Date.now() - 91 * 864e5)) : null;
   const ss = series.filter(x => !from || x.date >= from);
   // PR markers: sessions that beat every earlier session (whole history) by >1%.
-  let run = 0; const prDates = new Set(); for (const x of series) { if (run && x.e > run * 1.01) prDates.add(x.at); run = Math.max(run, x.e); }
+  let run = 0; const prDates = new Set(); for (const x of series) { if (run && x.est > run * 1.01) prDates.add(x.at); run = Math.max(run, x.est); }
   const vals = ss.map(s => s.e), min = Math.min(...vals), max = Math.max(...vals), span = max - min || 1;
   const X = i => ss.length === 1 ? 160 : 10 + i * 300 / (ss.length - 1), Y = e => 110 - (e - min) / span * 95;
   const pts = ss.map((s, i) => `${X(i)},${Y(s.e)}`).join(' ');
@@ -1524,9 +1539,11 @@ async function renderProgress(exId, rangeArg) {
   const first = ss[0], last = ss[ss.length - 1], change = first.e ? (last.e - first.e) / first.e * 100 : 0;
   setHeader(all[0].name, '#/progress', 'explore');
   app.innerHTML = `<div class="card insight st-${status.status}"><div class="row"><b class="grow">${status.status === 'new' ? 'Getting started' : 'Where this lift stands'}</b>${statusPill(status)}</div>
-      <p class="small" style="margin:6px 0 0">${esc(status.rec)}</p></div>
-    <div class="seg c3" role="tablist" aria-label="Chart range">${Object.entries(ranges).map(([k, v]) => `<button role="tab" aria-selected="${k === range}" class="${k === range ? 'on' : ''}" data-go="#/progress/${exId}/${k}" ${k === 'meso' && !mesoStart ? 'disabled' : ''}>${v}</button>`).join('')}</div>
-    <div class="card"><div class="muted small">Best estimated strength per session (${unit()}) · weight × (1 + (reps + RIR)/30)</div>
+      <p class="small" style="margin:6px 0 0">${esc(status.rec)}</p>${status.vs ? `<p class="small muted" style="margin:6px 0 0">${esc(status.vs.text)}</p>` : ''}</div>
+    <div class="seg c3" role="tablist" aria-label="Chart range">${Object.entries(ranges).map(([k, v]) => `<button role="tab" aria-selected="${k === range}" class="${k === range ? 'on' : ''}" data-go="#/progress/${exId}/${k}/${metric}" ${k === 'meso' && !mesoStart ? 'disabled' : ''}>${v}</button>`).join('')}</div>
+    <div class="seg c2" role="tablist" aria-label="Chart measure" style="margin-top:8px">${[['perf', 'Performance'], ['est', 'Strength estimate']].map(([k, v]) => `<button role="tab" aria-selected="${k === metric}" class="${k === metric ? 'on' : ''}" data-go="#/progress/${exId}/${range}/${k}">${v}</button>`).join('')}</div>
+    <div class="card"><div class="muted small">${metric === 'perf' ? `Performance per session (${unit()}) · weight × (1 + reps/30), no RIR credit — rises through a meso as you add reps or weight, resets a bit at each new meso's easier week 1`
+      : `Estimated strength per session (${unit()}) · weight × (1 + (reps + RIR)/30) — gives credit for reps left in the tank, so hitting the plan each week looks flat; real gains show meso to meso`}</div>
       <svg class="chart" viewBox="0 0 320 120" role="img" aria-label="Estimated strength from ${fmt(Math.round(first.e))} to ${fmt(Math.round(last.e))} ${unit()}">
       ${mesoIdx > 0 ? `<line x1="${X(mesoIdx)}" y1="8" x2="${X(mesoIdx)}" y2="114" stroke="#3a4150" stroke-dasharray="3 3"/><text x="${X(mesoIdx) + 3}" y="14" font-size="8" fill="#8b93a3">meso start</text>` : ''}
       <polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
@@ -1536,7 +1553,7 @@ async function renderProgress(exId, rangeArg) {
         <div class="stat center"><span class="big">${ss.length}</span><span class="muted tiny">sessions</span></div>
         <div class="stat center"><span class="big">${change > 0 ? '+' : ''}${change.toFixed(1)}%</span><span class="muted tiny">change</span></div>
         <div class="stat center"><span class="big">${[...prDates].filter(d => ss.some(x => x.at === d)).length}</span><span class="muted tiny">PRs <span style="color:var(--warn)">●</span></span></div></div></div>
-    <div class="card"><table><tr><th>Date</th><th>Top set</th><th>Sets</th><th class="right">Est.</th></tr>
+    <div class="card"><table><tr><th>Date</th><th>Top set</th><th>Sets</th><th class="right">${metric === 'perf' ? 'Perf.' : 'Est.'}</th></tr>
       ${ss.slice().reverse().map(s => `<tr><td>${new Date(s.at).toLocaleDateString()}${prDates.has(s.at) ? ' 🏆' : ''}</td><td>${fmt(s.top.weight)} × ${s.top.reps}</td><td>${s.n}</td><td class="right">${fmt(Math.round(s.e))}</td></tr>`).join('')}</table></div>`;
   $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
 }

@@ -12,6 +12,18 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.4.0 — 2026-11-20 (22:45 MT) · "Stalled means stalled"
+
+**Fixed — lifts were flagged Stalled for hitting the plan.**
+- In a meso the target RIR drops each week, so the plan is +1 rep (or a bit of weight) every week. The old status used a strength estimate that credits reps left in the tank, so +1 rep at 1 less RIR scored **flat** → "Stalled". On AC VII that wrongly flagged 6 lifts that were exactly on plan (bent-over row, overhead triceps extension, lying curl, preacher curl, Pallof press, pec dec).
+- **Now:** inside a meso, each meso week is compared on **performance** (weight × reps, no RIR credit). Across mesos, the same meso week is compared (AC VII week 4 vs AC VI week 4). PRs still use the RIR-credited estimate.
+- **Stalled** now means no gain two weeks in a row while the target got harder. **Down** = two weeks more than 3% under this meso's best. New **Dipped** = one off week (no flag). New **On track** = beat last week.
+- Every status shows the comparison to last meso, e.g. "vs AC VI week 4: +1 rep at the same weight".
+- Chart page: new **Performance / Strength estimate** switch (Performance is the default).
+- Statuses are the same on Home, the chart page and the workout flag (one shared rule).
+
+---
+
 ## 1.3.0 — 2026-11-20 (22:10 MT) · "Tap anything on Home"
 
 **New — every number and chart on Home opens a drill-down:**
