@@ -136,15 +136,16 @@ Abs, Traps and Forearms default to **Maintain** in every template. You can chang
 
 Autofill works backward from the whole week, so Day 1 is built knowing what Days 2–N will cover:
 
-1. **Weekly set target per muscle**, set by its priority:
+1. **Weekly set target per muscle**, set by its priority (v1.9 — RP-style three levels plus Skip):
 
-   | Priority | Large muscles (Chest, Back, Quads, Hamstrings, Glutes) | Smaller muscles (Shoulders, Biceps, Triceps, Calves) | Abs / Traps / Forearms |
-   |---|---|---|---|
-   | Focus | 10 | 8 | 6 |
-   | Whole body (everything) | 8 | 6 | 3 |
-   | Maintain | 4 | 4 | 3 |
-   | Skip | 0 | 0 | 0 |
+   | Priority | What it means | Large (Chest, Back, Quads, Hamstrings, Glutes) | Smaller (Shoulders, Biceps, Triceps, Calves) | Abs / Traps / Forearms |
+   |---|---|---|---|---|
+   | **Emphasize** | Grow it hard: sets rise when recovery is good | 10 | 8 | 6 |
+   | **Grow** | Build it near the minimum effective volume: sets rise only when progress needs it | 8 | 6 | 4 |
+   | **Maintain** | Keep it with low volume, saving recovery | 4 | 4 | 3 |
+   | **Skip** | Leave it out | 0 | 0 | 0 |
 
+   Templates: *Balanced* = everything Grow (small muscles Maintain); *Upper focus* = upper body Emphasize, lower Maintain; *Lower focus* = the reverse. Emphasizing more than **3** muscles shows a warning — recovery is shared, so emphasizing a few at a time usually grows them faster. Mesos made before v1.9 that say "Focus" are read as Emphasize (Balanced plans as Grow).
    These are starting points at the low end of the productive range (1.1). The feedback rules in Section 5 grow them week by week.
 2. **How many days a week each muscle is trained:**
    - Focused muscles: 2× at minimum (1.4), and more often if needed to keep each session at **5 sets or fewer per muscle**. Frequency = weekly sets ÷ 5, rounded up, between 2 and the number of training days.
@@ -167,6 +168,19 @@ Autofill works backward from the whole week, so Day 1 is built knowing what Days
 - **Autofill everything.** The app builds every day from the template: it picks muscles and exercises, spreads sets across days, and varies exercises across the week.
 - **Fill what's left.** The app keeps anything you've already picked and only fills empty days and empty exercise slots.
 - **Start blank.** You build it all yourself.
+
+### 2.3 Fitting each workout into your time
+
+The builder asks **time per workout** (45 / 60 / 75 / 90 / 120 min; remembered on your phone). Each day is estimated as:
+**6 min** warm-up + **1 min** setup per exercise + per working set **3 min** for compounds / **2 min** for isolations (set + rest).
+
+- No muscle gets more than **10 sets in one session**.
+- If a day runs long, sets come off the **lowest priority first** (Skip → Maintain → Grow → Emphasize), then from whichever muscle has the most sets that day. Floors per session: Emphasize keeps at least 2 sets, Grow 1; Maintain can be dropped from that day.
+- The builder shows **what was trimmed and why**, and each day shows its sets and estimated minutes.
+
+Why: the second external review found the old builder could produce **35–40 set** sessions on 2-day plans. Checked across every split, 2–6 days, three templates and 60/75/90 min: every day now fits its time (a 2-day full-body plan at 60 min can land 1–2 min over, because Emphasize/Grow muscles keep their floor sets — the day shows a warning).
+
+Example (2 days, full body, Balanced, 60 min): untrimmed 38 / 35 sets (~113 / 101 min) → **17 / 18 sets (~58 / 59 min)**, with the builder listing "Chest −5, Back −4, Quads −4 …".
 
 ### 2.2 Personal exercise preferences
 
@@ -228,11 +242,11 @@ Each week the target RIR drops by one, so each week asks for one rep's worth mor
 | **By reps** | **+1 rep**, same weight | Bent-over row 70×9 → 70×10 → 70×11 → 70×12 · Preacher curl 35×7 → 35×8 → 35×9 → 35×10 |
 
 **How the app picks the style:** it looks at how *this lift* moved in the most recent week-to-week change of the meso.
-- The weight went up → by weight, and the step is the jump you actually took (sled: +10 lb; pec dec: +5 lb).
+- The weight went up → by weight. The step size follows §4.6 (about 2.5% of the load, at most 5 lb, never more than your usual jump) — v1.9; before that it copied your last jump (sled +10 lb).
 - Same weight and the reps went up → by reps.
 - No history yet (week 1 with nothing to carry) → machines, cables and sleds start by weight; barbells, dumbbells and bodyweight start by reps. Week 1 of a new meso uses the previous meso's pattern.
 
-**By weight:** suggestion = last week's weight + step × (RIR drop), same reps; the reps box shows **reps to reps + 1** so the top of the range is the stretch goal. Example (Nov 2026): sled push 315×27 at 1 RIR → week 4 at 0 RIR → **325 × 27–28** (RP had 325×28). Before this change the app always added a rep (→ 315×28).
+**By weight:** suggestion = last week's weight + step × (RIR drop), same reps; the reps box shows **reps to reps + 1** so the top of the range is the stretch goal. Example: sled push 315×27 at 1 RIR → week 4 at 0 RIR → **320 × 27–28** (v1.9 step sizes; v1.5 suggested 325, RP had 325×28, and before v1.5 the app always added a rep → 315×28).
 
 The exercise line shows the style, e.g. "progresses +10 lb" or "progresses by reps". Change the weight yourself and the reps re-target as in §4.1. Deloads and joint-pain holds never add weight.
 
@@ -279,10 +293,10 @@ Light and heavy loads build similar muscle when sets end near failure (Schoenfel
 
 The ratings you give after each muscle now set **how big next week's jump is** for that muscle's lifts. This is autoregulation: the effort you report adjusts the next load. Rating-based (RPE/RIR) and performance-based (APRE) autoregulation have produced equal or better strength gains than fixed week-to-week increases [34, 35, 36, 16].
 
-| Last session's rating for the muscle | Speed | By-weight lift (e.g. sled 315×27, step +10) | By-reps lift (e.g. row 70×11) |
+| Last session's rating for the muscle | Speed | By-weight lift (e.g. sled 315×27, step +5 — v1.9) | By-reps lift (e.g. row 70×11) |
 |---|---|---|---|
-| Workload **Easy** | **Faster** — one extra step | **335 × 27** (+20 lb, never more than ~10% of the load) | **70 × 13** (+2 reps) |
-| Workload **Pretty good**, or no rating | Normal | 325 × 27 | 70 × 12 |
+| Workload **Easy** | **Faster** — one extra step (not in 0-RIR weeks, §4.5) | **325 × 27** (+10 lb, inside the +5% weekly cap) | **70 × 13** (+2 reps) |
+| Workload **Pretty good**, or no rating | Normal | 320 × 27 | 70 × 12 |
 | Workload **Pushed my limit** | **Slower** — smaller jump | **315 × 28** (same weight, +1 rep) | **70 × 11** (match last week) |
 | Workload **Too much**, or joint pain 2+ | **Hold** | 315 × 27 | 70 × 11 |
 
@@ -297,15 +311,37 @@ Getting stronger needs progressive load, but most non-contact soft-tissue injuri
 
 | Guardrail | Rule | Example |
 |---|---|---|
-| **Weekly load cap** | At most **+10%** over last week's weight for that set. On light loads where one step is already more than 10%, one step is allowed. | Planned 100 → 120 → capped at **110**. 20 lb cable → 25 is allowed (one step). |
+| **Weekly load cap** | At most **+5%** over last week's weight for that set (v1.9; was 10%). On light loads where one step is already more than 5%, one step is allowed. | Planned 100 → 120 → capped at **105**. 20 lb cable → 22.5 is allowed (one step). |
 | **Meso ceiling** | At most **+20%** over that lift's week-1 weight in this meso; past it, the weight holds and **+1 rep** is suggested instead. | Week 1 = 100 lb, now 120 → stays **120 × 11**, not 125. |
 | **No faster jumps at failure** | "Faster" (§4.3) is switched off in 0-RIR weeks. | Easy rating in week 4 → normal step only. |
 | **No faster jumps on spinal-loading lifts** | Lifts tagged *axial* (squats, deadlifts, good mornings…) only ever take the normal step. | Easy on hack squat → +10, not +20. |
 | **No faster jumps with any joint pain** | Even a joint-pain rating of 1 cancels "faster"; 2+ holds the lift. | Easy + joint pain 1 → normal. |
 | **Rep jumps** | Never more than **+2 reps** a week at the same or heavier weight. | 50×8 at 3 RIR → 0 RIR = 50×10, not 50×11. |
-| **Your own big jumps** | Typing a weight more than ~10% (and more than one step) over last week shows a warning with the safer max. Over 1.5× asks if it's a typo. Neither blocks you. | 70 → 88: "Big jump: +26% … about 75 is the safer max". |
+| **Your own big jumps** | Typing a weight more than ~5% (and more than one step) over last week shows a warning with the safer max. Over 1.5× asks if it's a typo. Neither blocks you. | 70 → 88: "Big jump: +26% … about 75 is the safer max". |
 
-When a guardrail trims a suggestion, the exercise note says so (e.g. "capped at about +10% a week" or "at this meso's +20% ceiling — adding reps instead"). Deload weeks are never affected. The 10% and 20% limits are deliberately conservative defaults built on the ACSM range; no trial has tested these exact caps.
+When a guardrail trims a suggestion, the exercise note says so (e.g. "capped at about +5% a week" or "at this meso's +20% ceiling — adding reps instead"). Deload weeks are never affected. The 5% and 20% limits are deliberately conservative: 5% sits at the low end of the ACSM 2–10% range and matches where Anthony's own reps held (§4.6); no trial has tested these exact caps.
+
+### 4.6 How big a weight step is — from your own history
+
+Anthony's logged history (2023–2026, **2,376** week-to-week changes on weighted lifts; 1,247 by adding weight, 1,129 by adding reps):
+
+| Weight increase that week | Times | Reps held or went up |
+|---|---|---|
+| ≤ 2.5% | 395 | **97%** |
+| 2.5–4% | 399 | **94%** |
+| 4–6% | 127 | 39% |
+| 6–10% | 160 | 27% |
+| > 10% | 166 | 34% |
+
+Jumps of 4% or less almost always worked; bigger jumps usually cost reps. By equipment: machines (median +5 lb, 3.0%, 78% held), cables (3.4%, 61%), barbells (5.3%, 54%), dumbbells (12.5%, 23% — the next pair up is a big jump on light dumbbells).
+
+So, "less is more":
+- **One step ≈ 2.5% of the load, rounded down** to what your gym can load, at least one increment and **never more than 5 lb (2.5 kg)** — and never more than your own usual jump for that lift. Examples: sled 315 → **320** (not 325); pec dec 185 → **187.5**; leg press 295 → **300**; 100 lb machine → 102.5.
+- **Default smallest jumps:** 2.5 lb (1.25 kg) for machines, cables, barbells and sleds; 5 lb (2 kg) for dumbbells. Change them in **Settings → Smallest weight jumps** to match your gym (kept on your phone).
+- **Weekly cap tightened to +5%** (was 10%), with one increment always allowed on light loads. "Faster" weeks (§4.3) add two steps, still inside the 5% cap.
+- **Light loads progress by reps:** if one step is more than ~5% of the load (e.g. 2.5 lb on a 20 lb cable, 5 lb on a 40 lb dumbbell) the lift adds reps until it reaches the top of its rep range, then takes one step.
+- **Choosing weight vs reps (§4.0) now uses several signals:** the majority of this meso's week-to-week changes (latest breaks a tie), reps at the top of the range → add weight, and the light-load rule above.
+- Warm-up sets still round to 5 lb / 2.5 kg plates.
 
 ### 4.4 How this logic lines up with the research
 
@@ -346,6 +382,15 @@ The rules are checked in order, and the first one that matches wins:
 | 6 | R ≤ 1 and L ≤ 1 and F ≥ Same | +1 set, or +2 if R = 0, L = 0 and P ≤ 1 | Recovered with room to spare and performance is holding, so add volume, the main growth lever (1.1) |
 | 7 | Everything else (e.g., healed just in time) | No change | You're near your productive limit, so hold and let the RIR drop do the work |
 
+**v1.9 — volume follows the muscle's priority, with a weekly limit and a reason every time.**
+- **Emphasize:** the rules above (+1 or +2 when recovery and workload were good). Mesos with no stored priorities (imported from RP, e.g. AC VII) keep these rules.
+- **Grow:** when recovery was good, sets are **held if performance improved** ("no extra volume is needed yet"); **+1** only if performance didn't move. Never +2.
+- **Maintain:** never adds sets (it can still remove them).
+- **Weekly limit:** a muscle's weekly total can rise by at most **+2 sets** from one week to the next, however many sessions train it — two sessions can't each add +2.
+- **Any joint pain** (even Low) limits an increase to +1.
+- Each change explains itself, e.g. *"Chest: kept at 10 weekly sets — performance improved and recovery was good, so no extra volume is needed yet."* or *"Quads: 12 → 13 weekly sets — recovery was good but performance didn't move — one set added."*
+- The change is written in **one database transaction that runs at most once per rating** (`apply_feedback_adjustment`), so a dropped connection and a retry can never apply it twice.
+
 ### 5.1 RIR adjustment from feedback
 
 When rule 1, 2, 3 or 5 fires (joint pain 3, still sore, performance down with slow recovery, or workload "too much"), that muscle's session **keeps this week's RIR next week** instead of stepping closer to failure. Going closer to failure adds fatigue, and these signals say recovery is already the bottleneck (1.2, 1.6). The normal step-down resumes the week after.
@@ -363,6 +408,20 @@ When rule 1, 2, 3 or 5 fires (joint pain 3, still sore, performance down with sl
 **Weeks go in order.** A day in a later week can't be started while an earlier week still has open days — you can log those or skip them. You can still **look** at any later day: "Just look at…" opens a read-only preview (nothing can be logged and the day isn't started).
 
 **One workout at a time.** If another day is in progress with nothing logged yet, you can switch to the day you want instead; if sets are already logged there, finish or skip it first (or preview the other day).
+
+### 5.3a Replacing an exercise mid-meso
+
+Tap **⇄** on an exercise in a workout → pick another exercise for the same muscle (favorites first; excluded / unavailable ones hidden) → choose:
+- **Just today** — only this workout changes.
+- **Today and every later week (this day)** — this day's later weeks switch too; finished days are never changed.
+
+Logged sets of the old exercise on today's workout are removed (you're told first). The new exercise starts fresh: the first time you pick the weight, then it progresses normally.
+
+### 5.3b Actual RIR (optional)
+
+Under each exercise: **"set 1 RIR"**. Leave it on *target* and the app assumes you finished set 1 at the prescribed RIR. Pick a number (0–5+) when you know you were closer to — or further from — failure; next week's targets and strength estimates then use what you actually did. Sets without a recorded RIR are stored as "assumed on target" (empty), never as if measured.
+
+**Minimum RIR for compounds (builder option):** "Keep main (compound) lifts at least 1 rep from failure" — compounds stop at 1 RIR in the hardest week; isolations still reach 0.
 
 ### 5.4 Slip warnings (week over week)
 

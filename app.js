@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import * as L from './logic.js?v=25';
-import * as LEARN from './learn.js?v=25';
+import * as L from './logic.js?v=26';
+import * as LEARN from './learn.js?v=26';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -17,7 +17,7 @@ let authReturn = (() => {
   return null;
 })();
 let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
-export const APP_VERSION = '1.8.0'; // keep in sync with CHANGELOG.md
+export const APP_VERSION = '1.9.0'; // keep in sync with CHANGELOG.md
 const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
 const DOC_URL = 'https://docs.google.com/document/d/1NPofO_ycDr1h13dwF0_lZHCvhl-lrlki0agiLpWAY-M';
 
@@ -107,6 +107,9 @@ function qMigrateLegacy() {
   try { const old = localStorage.getItem(QKEY); if (!old || !qKey()) return;
     const q = { ...JSON.parse(old), ...qLoad() }; qStore(q); localStorage.removeItem(QKEY); } catch {}
 }
+// Smallest weight jumps per equipment (doc §4.6) — kept on this phone; defaults are 2.5 lb / 1.25 kg, dumbbells 5 lb / 2 kg.
+const loadIncrements = () => { try { return JSON.parse(localStorage.getItem('wl_increments') || '{}'); } catch { return {}; } };
+L.setIncrements(loadIncrements());
 // Permanent = the database refused the row (constraint, permission); anything else (network, 5xx, timeouts) is retried.
 const isPermanentErr = e => /^(22|23|42)/.test(e?.code || '') || e?.code === 'PGRST116';
 const isNetErr = e => !navigator.onLine || /failed to fetch|network|load failed|timeout|fetch/i.test(e?.message || '');
@@ -547,11 +550,13 @@ async function renderMesos() {
 // ---------- mesocycle builder ----------
 let builder = null;
 function freshBuilder() {
-  return { step: 1, name: '', weeks: 5, days: 4, focus: 'whole', goal: 'hypertrophy', priorities: L.templatePriorities('whole'), plan: [] };
+  return { step: 1, name: '', weeks: 5, days: 4, focus: 'whole', goal: 'hypertrophy', priorities: L.templatePriorities('whole'), plan: [],
+    minutes: Number(localStorage.getItem('wl_session_minutes')) || 75, minRirCompound: false };
 }
 function builderFromTemplate(t) {
   return { step: 2, name: t.name.replace(/ \(from .*\)$/, ''), weeks: t.weeks, days: t.days_per_week, focus: t.focus, goal: L.goalOf(t.goal),
-    priorities: Object.keys(t.priorities || {}).length ? t.priorities : L.templatePriorities(t.focus),
+    priorities: Object.keys(t.priorities || {}).length ? Object.fromEntries(Object.entries(t.priorities).map(([m, p]) => [m, L.normPriority(p, t.focus)])) : L.templatePriorities(t.focus),
+    minutes: Number(localStorage.getItem('wl_session_minutes')) || 75, minRirCompound: false,
     plan: t.plan.map(d => ({ label: d.label, slots: d.slots.map(x => ({ ...x })) })) };
 }
 async function renderBuilder() {
@@ -584,6 +589,9 @@ async function renderBuilder() {
           <select id="days">${[2, 3, 4, 5, 6].map(n => `<option ${n === S.days ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
           <div class="grow"><label for="weeks">Weeks (last is deload)</label>
           <select id="weeks">${[3, 4, 5, 6, 7, 8].map(n => `<option ${n === S.weeks ? 'selected' : ''}>${n}</option>`).join('')}</select></div></div>
+        <label for="minutes">Time per workout</label>
+        <select id="minutes">${[45, 60, 75, 90, 120].map(n => `<option value="${n}" ${n === S.minutes ? 'selected' : ''}>${n} min</option>`).join('')}</select>
+        <div class="muted tiny">Each day is fitted to this (sets × rest + warm-up). Lower-priority muscles are trimmed first.</div>
         <div class="spacer"></div>
         ${splits.map(x => `<button class="list-btn" data-split="${x.id}" aria-pressed="${S.split === x.id}" style="${S.split === x.id ? 'border-color:var(--accent)' : ''}">
           <div class="grow"><b>${x.name}</b>${x.id === L.defaultSplit(S.days) ? ' <span class="pill on tiny-pill">recommended</span>' : ''}<div class="muted small">${esc(x.blurb)}</div></div>${S.split === x.id ? '<span class="pill on">✓</span>' : ''}</button>`).join('')}
@@ -595,11 +603,15 @@ async function renderBuilder() {
       </div>
       <div class="card"><div class="step-h"><span class="step-n">4</span><b>Name & details</b></div>
         <label for="name">Name</label><input id="name" value="${esc(S.name)}" placeholder="e.g. Whole Body AC VIII">
-        <p class="muted small">RIR is set for you${S.goal === 'hypertrophy' ? '' : ' (main lifts)'}: ${Array.from({ length: S.weeks }, (_, i) => { const r = L.targetRir(i + 1, S.weeks, S.goal, 'compound'); return r.deload ? 'deload' : r.rir; }).join(' → ')}. It holds steady for any muscle whose feedback says recovery is behind.</p>
+        <p class="muted small">RIR is set for you${S.goal === 'hypertrophy' ? '' : ' (main lifts)'}: ${Array.from({ length: S.weeks }, (_, i) => { const r = L.targetRir(i + 1, S.weeks, S.goal, 'compound'); return r.deload ? 'deload' : (S.minRirCompound ? Math.max(1, r.rir) : r.rir); }).join(' → ')}. It holds steady for any muscle whose feedback says recovery is behind.</p>
+        <label class="switch"><input type="checkbox" id="minRir" ${S.minRirCompound ? 'checked' : ''}> <span>Keep main (compound) lifts at least 1 rep from failure</span></label>
+        <div class="muted tiny">Isolation lifts still reach 0 RIR in the last hard week. Good for heavy or spine-loading lifts.</div>
       </div>
-      <div class="card"><b>Muscle priorities</b><div class="muted small">Focus = grow (≥2×/week). Maintain = hold size with low volume. Weekly start sets shown.</div>
-        ${L.MUSCLES.map(m => `<div class="prio"><div>${m} <span class="muted small">${L.weeklyTarget(m, S.priorities[m], S.focus, S.goal)} sets</span></div>
-          <div class="seg c3">${L.PRIORITIES.map(p => `<button type="button" data-m="${m}" data-p="${p}" class="${S.priorities[m] === p ? 'on' : ''}">${p[0].toUpperCase() + p.slice(1)}</button>`).join('')}</div></div>`).join('')}
+      <div class="card"><b>Muscle priorities</b><div class="muted small">Weekly starting sets shown. <b>Emphasize</b> = grow hard, sets rise when recovery is good. <b>Grow</b> = build with conservative volume, sets rise only if progress needs it. <b>Maintain</b> = keep it, low volume. <b>Skip</b> = leave out.</div>
+        ${(() => { const n = L.MUSCLES.filter(m => L.normPriority(S.priorities[m], S.focus) === 'emphasize').length;
+          return n > L.MAX_EMPHASIZE ? `<div class="card warn small" style="margin:8px 0">You're emphasizing ${n} muscles. Recovery is shared — emphasizing ${L.MAX_EMPHASIZE} or fewer at a time usually grows them faster. Consider moving some to Grow.</div>` : ''; })()}
+        ${L.MUSCLES.map(m => { const pr = L.normPriority(S.priorities[m], S.focus); return `<div class="prio"><div>${m} <span class="muted small">${L.weeklyTarget(m, pr, S.focus, S.goal)} sets</span></div>
+          <div class="seg c4">${L.PRIORITIES.map(p => `<button type="button" data-m="${m}" data-p="${p}" class="${pr === p ? 'on' : ''}" title="${esc(L.PRIORITY_INFO[p])}">${p[0].toUpperCase() + p.slice(1)}</button>`).join('')}</div></div>`; }).join('')}
       </div>
       <button class="primary block" id="next">Next: build the days ›</button>`;
     $$('[data-focus]').forEach(b => b.onclick = () => { S.focus = b.dataset.focus; S.priorities = L.templatePriorities(S.focus); step1(); });
@@ -607,6 +619,8 @@ async function renderBuilder() {
     $$('[data-split]').forEach(b => b.onclick = () => { S.split = b.dataset.split; S.plan = []; step1(); });
     $('#name').oninput = e => S.name = e.target.value;
     $('#weeks').onchange = e => { S.weeks = +e.target.value; step1(); };
+    $('#minutes').onchange = e => { S.minutes = +e.target.value; try { localStorage.setItem('wl_session_minutes', S.minutes); } catch {} S.plan = []; };
+    $('#minRir').onchange = e => { S.minRirCompound = e.target.checked; step1(); };
     $('#days').onchange = e => { S.days = +e.target.value; S.split = null; S.plan = []; step1(); };
     $$('[data-p]').forEach(b => b.onclick = () => {
       S.priorities[b.dataset.m] = b.dataset.p;
@@ -615,13 +629,21 @@ async function renderBuilder() {
     $('#next').onclick = () => {
       if (!S.name.trim()) return toast('Give it a name', true);
       S.days = +$('#days').value; syncPlan(); S.step = 2;
-      if (!S.plan.some(d => d.slots.length)) S.plan = L.autofill({ plan: S.plan, priorities: S.priorities, focus: S.focus, goal: S.goal, split: S.split, library: P.library, favorites: P.favorites, mode: 'all' });
+      if (!S.plan.some(d => d.slots.length)) S.plan = buildFit('all');
       step2();
     };
   };
 
+  // Doc §2.3 — autofill, then fit each day into the time available; remember what had to be trimmed.
+  const buildFit = mode => {
+    const raw = L.autofill({ plan: S.plan, priorities: S.priorities, focus: S.focus, goal: S.goal, split: S.split, library: P.library, favorites: P.favorites, mode });
+    const f = L.fitToTime(raw, { minutes: S.minutes, priorities: S.priorities, focus: S.focus, library: P.library });
+    S.trimmed = f.trimmed; return f.days;
+  };
   const step2 = () => {
     const targets = L.weeklyTargets(S.priorities, S.focus, S.goal), placed = L.placedSets(S.plan);
+    const libMap = new Map(P.library.map(e => [e.id, e])), mins = S.plan.map(d => L.sessionMinutes(d, libMap));
+    const trimmedTxt = Object.entries(S.trimmed || {}).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]).map(([m, n]) => `${m} −${n}`).join(', ');
     const dayTotals = S.plan.map(d => d.slots.reduce((a, s) => a + (Number(s.sets) || 0), 0));
     app.innerHTML = `
       ${P.removed.length ? `<div class="card small muted">Autofill is skipping ${P.removed.length} exercise${P.removed.length > 1 ? 's' : ''} because of your preferences${P.favorites.size ? ` and putting your ${P.favorites.size} favorite${P.favorites.size > 1 ? 's' : ''} first` : ''}. <a href="#/settings">Change</a></div>` : ''}
@@ -633,6 +655,7 @@ async function renderBuilder() {
           <button class="sm" id="fillLeft">Fill what's left</button>
           <button class="sm" id="clear">Clear (manual)</button>
         </div>
+        ${trimmedTxt ? `<div class="card warn small" style="margin:10px 0 0">To fit ~${S.minutes} min a workout, these weekly sets were trimmed (lowest priority first): <b>${esc(trimmedTxt)}</b>. Want them back? Add a day, allow more time, or set fewer muscles to Emphasize/Grow.</div>` : ''}
         <h2>Weekly sets: placed / target</h2>
         <div class="chips">${L.MUSCLES.filter(m => targets[m] || placed[m]).map(m => {
           const p = placed[m], t = targets[m]; const cls = p < t ? 'under' : p > t * 1.25 + 1 ? 'over' : 'ok';
@@ -640,8 +663,8 @@ async function renderBuilder() {
       </div>
       ${S.plan.map((d, di) => `<div class="card">
         <div class="row"><input data-label="${di}" value="${esc(d.label)}" style="flex:1">
-          <span class="pill ${dayTotals[di] > 25 ? 'warn' : ''}">${dayTotals[di]} sets</span></div>
-        ${dayTotals[di] > 25 ? '<div class="muted small" style="color:var(--warn);margin-top:6px">Over ~25 sets — consider another training day or moving a muscle to Maintain.</div>' : ''}
+          <span class="pill ${mins[di] > S.minutes + 2 ? 'warn' : ''}">${dayTotals[di]} sets · ~${mins[di]} min</span></div>
+        ${mins[di] > S.minutes + 2 ? `<div class="muted small" style="color:var(--warn);margin-top:6px">About ${mins[di]} min — longer than your ${S.minutes} min. Remove a slot, add a day, or move a muscle to Maintain.</div>` : ''}
         ${d.slots.map((s, si) => `<div class="slot">
           <select data-sm="${di}.${si}">${[...L.MUSCLES, 'Cardio'].map(m => `<option ${m === s.muscle ? 'selected' : ''}>${m}</option>`).join('')}</select>
           <select data-se="${di}.${si}">${exOptions(s.muscle, s.exerciseId)}</select>
@@ -653,8 +676,8 @@ async function renderBuilder() {
       <div class="spacer"></div><button class="ghost block" id="saveTpl">☆ Save this plan as a template</button>`;
     const at = s => s.split('.').map(Number);
     { const nc = $('#noCarry'); if (nc) nc.onclick = () => { S.carry = null; step2(); }; }
-    $('#fillAll').onclick = () => { S.plan = L.autofill({ plan: S.plan, priorities: S.priorities, focus: S.focus, goal: S.goal, split: S.split, library: P.library, favorites: P.favorites, mode: 'all' }); step2(); };
-    $('#fillLeft').onclick = () => { S.plan = L.autofill({ plan: S.plan, priorities: S.priorities, focus: S.focus, goal: S.goal, split: S.split, library: P.library, favorites: P.favorites, mode: 'fill' }); step2(); };
+    $('#fillAll').onclick = () => { S.plan = buildFit('all'); step2(); };
+    $('#fillLeft').onclick = () => { S.plan = buildFit('fill'); step2(); };
     $('#clear').onclick = () => { S.plan = S.plan.map(d => ({ label: d.label, slots: [] })); step2(); };
     $('#back1').onclick = () => { S.step = 1; step1(); };
     $$('[data-label]').forEach(i => i.oninput = e => S.plan[+i.dataset.label].label = e.target.value);
@@ -687,11 +710,13 @@ async function renderBuilder() {
     const libById = new Map(lib.map(e => [e.id, e]));
     for (let w = 1; w <= S.weeks; w++) {
       S.plan.forEach((d, i) => days.push({ week: w, day_index: i + 1, label: d.label,
-        exercises: d.slots.map(s => { const { rir, deload } = L.targetRir(w, S.weeks, S.goal, libById.get(s.exerciseId)?.kind);
-          return { exercise_id: s.exerciseId, target_sets: deload ? L.deloadSets(s.sets) : Number(s.sets), target_rir: rir }; }) }));
+        exercises: d.slots.map(s => { const kind = libById.get(s.exerciseId)?.kind, { rir, deload } = L.targetRir(w, S.weeks, S.goal, kind);
+          // optional floor: compounds never prescribed below 1 RIR (review #2 — not every lift needs to reach failure)
+          const t = !deload && S.minRirCompound && kind === 'compound' ? Math.max(1, rir) : rir;
+          return { exercise_id: s.exerciseId, target_sets: deload ? L.deloadSets(s.sets) : Number(s.sets), target_rir: t }; }) }));
     }
     const { data: mesoId, error } = await sb.rpc('create_mesocycle', { p: { client_key: S.clientKey, name: S.name.trim(), weeks: S.weeks,
-      days_per_week: S.days, focus: S.focus, goal: L.goalOf(S.goal), priorities: S.priorities, started_on: today(), days,
+      days_per_week: S.days, focus: S.focus, goal: L.goalOf(S.goal), priorities: Object.fromEntries(L.MUSCLES.map(m => [m, L.normPriority(S.priorities[m], S.focus)])), started_on: today(), days,
       carry_meso_id: S.carry?.meso || null, carry_week: S.carry?.week || null } });
     if (error) {
       btn.disabled = false; btn.textContent = 'Create mesocycle';
@@ -793,12 +818,17 @@ async function applyAdjustment(fb, R, meso) {
   const target = !srcDeload && check(await sb.from('workout_days').select('id, week, completed_at')
     .eq('mesocycle_id', meso.id).eq('week', src.week + 1).eq('day_index', src.day_index).maybeSingle());
   if (fb.muscle_group !== 'Cardio' && target && !target.completed_at && !L.rirForWeek(target.week, meso.weeks).deload && !fb.adjusted) {
-    const adj = L.setAdjustment({ R, L: fb.workload, J: fb.joint_pain, P: fb.pump, F: fb.performance });
-    const weekWes = check(await sb.from('workout_exercises').select('id, workout_day_id, exercise_id, target_sets, target_rir, position, exercises!inner(muscle_group), workout_days!inner(week, mesocycle_id)')
-      .eq('workout_days.mesocycle_id', meso.id).eq('workout_days.week', target.week).eq('exercises.muscle_group', fb.muscle_group));
+    // Mesos imported from RP (or made before v1.9) have no stored priorities: keep their original behaviour (Emphasize rules).
+    const rawP = meso.priorities?.[fb.muscle_group];
+    const priority = rawP ? L.normPriority(rawP, meso.focus) : 'emphasize';
+    const adj = L.setAdjustment({ R, L: fb.workload, J: fb.joint_pain, P: fb.pump, F: fb.performance, priority });
+    const bothWeeks = check(await sb.from('workout_exercises').select('id, workout_day_id, exercise_id, target_sets, target_rir, position, exercises!inner(muscle_group), workout_days!inner(week, mesocycle_id)')
+      .eq('workout_days.mesocycle_id', meso.id).in('workout_days.week', [src.week, target.week]).eq('exercises.muscle_group', fb.muscle_group));
+    const weekWes = bothWeeks.filter(w => w.workout_days.week === target.week);
+    const prevWeeklyTotal = bothWeeks.filter(w => w.workout_days.week === src.week).reduce((a, w) => a + (w.target_sets || 0), 0);
     const sess = weekWes.filter(w => w.workout_day_id === target.id).sort((a, b) => a.position - b.position);
-    const changes = L.distributeDelta(sess, adj.delta, {
-      sessionTotal: sess.reduce((a, w) => a + w.target_sets, 0), weeklyTotal: weekWes.reduce((a, w) => a + w.target_sets, 0) });
+    const weeklyTotal = weekWes.reduce((a, w) => a + w.target_sets, 0);
+    const changes = L.distributeDelta(sess, adj.delta, { sessionTotal: sess.reduce((a, w) => a + w.target_sets, 0), weeklyTotal, prevWeeklyTotal });
     const srcWes = check(await sb.from('workout_exercises').select('target_rir, exercises!inner(muscle_group)').eq('workout_day_id', src.id).eq('exercises.muscle_group', fb.muscle_group));
     const srcRir = srcWes[0]?.target_rir;
     // Everything below goes to the database as ONE call that runs at most once per feedback entry
@@ -820,8 +850,11 @@ async function applyAdjustment(fb, R, meso) {
       for (const d of pDeload) check(await sb.from('workout_exercises').update({ target_sets: d.target_sets }).eq('workout_day_id', d.workout_day_id).eq('exercise_id', d.exercise_id));
       check(await sb.from('muscle_feedback').update({ ...update, adjusted: true }).eq('id', fb.id)); applied = true;
     } else applied = check(rr);
-    const msg = adj.delta > 0 ? `+${adj.delta} set${adj.delta > 1 ? 's' : ''}` : adj.delta < 0 ? `${adj.delta} set` : 'sets held';
-    if (applied) toast(`${fb.muscle_group}: ${changes.length || adj.delta === 0 ? msg : 'at cap, held'} next week${adj.holdRir ? ', RIR held' : ''}`);
+    // Explain the decision like a coach (review #2): what changed, and why.
+    const applied_delta = changes.reduce((a, c) => a + c.target_sets - (sess.find(w => w.id === c.id)?.target_sets || 0), 0);
+    const after = weeklyTotal + applied_delta;
+    const why = adj.delta > 0 && applied_delta < adj.delta ? `${adj.why.replace(/ — (one|two) sets? added$/, '')}, but it's at the weekly limit for this muscle — ${applied_delta > 0 ? `+${applied_delta} only` : 'held'}` : adj.why;
+    if (applied) toast(`${fb.muscle_group}: ${applied_delta ? `${weeklyTotal} → ${after}` : `kept at ${weeklyTotal}`} weekly sets — ${why}${adj.holdRir ? '; RIR held' : ''}.`, false, 5000);
     return;
   }
   check(await sb.from('muscle_feedback').update(update).eq('id', fb.id));
@@ -1023,7 +1056,7 @@ async function renderWorkout(dayId, mode) {
         <div class="row"><div class="grow"><h3>${esc(ex.name)} <span class="trend" data-trend="${we.id}"></span></h3>
           <div class="muted small">${esc(ex.muscle_group)} · ${we.target_sets} sets · ${deload ? 'deload' : `${we.target_rir} RIR`} · ${ex.rep_min}–${ex.rep_max} reps${!deload && !isCardio(we) && prev[we.exercise_id]?.sets.length && ex.load_type === 'weighted' ? (m => ` · <span class="prog-mode" title="How this lift progresses week to week">${m.mode === 'load' ? `progresses +${fmt(m.step)} ${unit()}` : 'progresses by reps'}</span>`)(modeFor(we)) : ''}</div>
           ${(w => w ? `<div class="muted tiny range">Weight window ${fmt(w.light)}–${fmt(w.heavy)} ${unit()} · change the weight and the reps re-target to match last time</div>` : '')(windowFor(we))}</div>
-          ${infoBtn(we)}<button class="ghost sm" data-edit="${esc(ex.muscle_group)}" aria-label="Edit ratings" title="Edit ratings">✎</button></div>
+          ${infoBtn(we)}${!day.completed_at && !preview ? `<button class="ghost sm" data-replace="${we.id}" aria-label="Replace ${esc(ex.name)}" title="Replace exercise">⇄</button>` : ''}<button class="ghost sm" data-edit="${esc(ex.muscle_group)}" aria-label="Edit ratings" title="Edit ratings">✎</button></div>
         ${(n => n && n !== 'Deload' && !day.completed_at ? `<div class="muted tiny prog-note">${/faster|extra rep/i.test(n) ? '⤴︎' : /holding|smaller|same weight/i.test(n) ? '⏸︎' : '↗︎'} This week: ${esc(n)}</div>` : '')(isCardio(we) ? null : suggestionFor(we, 0)?.note)}
         ${we.flag ? `<div class="pill bad" style="margin-top:6px">${esc(we.flag)}</div>` : ''}
         ${liftFlag(we)}${histNote(we)}
@@ -1039,6 +1072,8 @@ async function renderWorkout(dayId, mode) {
           }).join('')}
         </div>
         <div class="row" style="margin-top:8px"><button class="ghost sm" data-addset>+ set</button><button class="ghost sm" data-rmset>− set</button>
+          ${!deload && ex.load_type !== 'cardio' ? (r1 => `<label class="rir1 tiny" title="Optional: how many reps you really had left on set 1. Left on “target”, the app assumes you hit ${we.target_rir} RIR.">set 1 RIR <select data-rir1 aria-label="Actual reps in reserve on set 1">
+            <option value="">target ${we.target_rir}</option>${[0, 1, 2, 3, 4, 5].map(v => `<option value="${v}" ${r1 != null && r1 !== we.target_rir && r1 === v ? 'selected' : ''}>${v}${v === 5 ? '+' : ''}</option>`).join('')}</select></label>`)(we.sets.find(x => x.set_index === 1)?.rir) : ''}
           <span class="grow muted tiny right">${p?.sets.length ? (p.carried ? `last meso wk ${p.wk}: ` : 'last wk: ') + p.sets.map(s => `${fmt(s.weight)}×${s.reps ?? '–'}`).join(', ')
             : staleCarry[we.exercise_id] ? `${esc(staleCarry[we.exercise_id].mname)} wk ${staleCarry[we.exercise_id].wk} (${staleCarry[we.exercise_id].sets.map(s => `${fmt(s.weight)}×${s.reps ?? '–'}`).join(', ')}) — not in your last meso, so not used. Pick a fresh weight for ${deload ? 'deload' : `${we.target_rir} RIR`}`
             : 'first week — pick weights for ' + (deload ? '' : `${we.target_rir} RIR`)}</span></div>
@@ -1150,7 +1185,10 @@ async function renderWorkout(dayId, mode) {
       const wIn = row.querySelector('[data-f="weight"]'), rIn = row.querySelector('[data-f="reps"]');
       const weight = wIn.value === '' ? null : Number(wIn.value), reps = rIn.value === '' ? null : Number(rIn.value);
       return { workout_exercise_id: we.id, set_index: +row.dataset.idx, weight: weight == null ? (we.exercises.load_type === 'weighted' ? null : 0) : toLb(weight),
-        reps, rir: we.target_rir, completed_at: done ? (row.dataset.at || new Date().toISOString()) : null };
+        // Actual RIR is recorded only when you give it (set 1, optional). Otherwise null = "assumed on target",
+        // and every calculation falls back to the prescribed RIR (review #2: don't present the target as measured).
+        reps, rir: +row.dataset.idx === 1 && row.closest('[data-we]')?.querySelector('[data-rir1]')?.value !== '' && row.closest('[data-we]')?.querySelector('[data-rir1]') ? Number(row.closest('[data-we]').querySelector('[data-rir1]').value) : null,
+        completed_at: done ? (row.dataset.at || new Date().toISOString()) : null };
     };
     if (row.classList.contains('done')) row.dataset.saved = JSON.stringify(payloadFor(true)); // what the server already has
     const save = async markDone => {
@@ -1198,7 +1236,7 @@ async function renderWorkout(dayId, mode) {
       const jump = !odd && lastW > 0 && we.exercises.load_type === 'weighted' ? (+wIn.value - lastW) / lastW : 0;
       if (odd) toast(`${fmtNum(+wIn.value)} ${unit()} is ${odd.kind === 'high' ? 'way more' : 'way less'} than last time (${fmtNum(lastW)} ${unit()}) — typo? It still saves if it's right.`, true);
       else if (jump > L.GUARD.weeklyPct + 1e-9 && +wIn.value - lastW > L.increment(we.exercises, unit()))
-        toast(`Big jump: +${Math.round(jump * 100)}% over last week (${fmtNum(lastW)} → ${fmtNum(+wIn.value)} ${unit()}). Jumps over ~10% a week raise injury risk — about ${fmtNum(Math.max(lastW + L.increment(we.exercises, unit()), Math.floor(lastW * 1.1 / L.increment(we.exercises, unit())) * L.increment(we.exercises, unit())))} is the safer max. It still saves if you go for it.`, true);
+        toast(`Big jump: +${Math.round(jump * 100)}% over last week (${fmtNum(lastW)} → ${fmtNum(+wIn.value)} ${unit()}). Bigger jumps cost reps and raise injury risk — about ${fmtNum(Math.max(lastW + L.increment(we.exercises, unit()), Math.floor(lastW * (1 + L.GUARD.weeklyPct) / L.increment(we.exercises, unit())) * L.increment(we.exercises, unit())))} is the safer max. It still saves if you go for it.`, true);
       else if (r?.outside) toast(r.outside === 'heavy' ? `Heavy for this lift — matching last time needs only ~${r.lo} reps (range ${we.exercises.rep_min}–${we.exercises.rep_max})`
         : `Light for this lift — you'd need ~${r.lo} reps to match last time (range ${we.exercises.rep_min}–${we.exercises.rep_max})`, true);
       // carry the new weight to later sets that are still on the suggested weight
@@ -1243,6 +1281,9 @@ async function renderWorkout(dayId, mode) {
   $$('[data-we]').forEach(card => {
     const we = wes.find(w => w.id === card.dataset.we);
     card.querySelectorAll('.set').forEach(r => wireSet(we, r));
+    const r1 = card.querySelector('[data-rir1]');
+    if (r1) r1.onchange = () => { const row1 = card.querySelector('.set[data-idx="1"]'); if (row1?.classList.contains('done')) row1.querySelector('[data-f="reps"]').dispatchEvent(new Event('change'));
+      toast(r1.value === '' ? 'Set 1 will use the target RIR' : `Logged: ${r1.value} reps left on set 1 — next week's targets use it`); };
     card.querySelector('[data-addset]').onclick = () => {
       const setsEl = card.querySelector('.sets'); const last = setsEl.querySelector('.set:last-child');
       const row = last.cloneNode(true); const idx = +last.dataset.idx + 1;
@@ -1301,6 +1342,47 @@ async function renderWorkout(dayId, mode) {
     const m = b.dataset.edit;
     if (!isRated(m) && !muscleComplete(m)) return toast(`Finish ${m}'s sets first — ratings open automatically`);
     openRating(m, !isRated(m));
+  });
+  // Replace an exercise — just today, or today and every later week of this meso (same day). Doc §5.7.
+  $$('[data-replace]').forEach(b => b.onclick = async () => {
+    const we = wes.find(w => w.id === b.dataset.replace), m = we.exercises.muscle_group;
+    const [lib, prefs] = await Promise.all([loadExercises(), loadPrefs()]);
+    const P2 = L.applyPreferences(lib, { prefs, equipment: profile?.equipment || null, avoidTags: profile?.avoid_tags || [] });
+    const ok = L.candidatesFor(m, P2.library, P2.favorites).filter(e => e.id !== we.exercise_id && e.load_type !== 'cardio');
+    const logged = we.sets.filter(x => x.completed_at).length;
+    let pick = null;
+    openSheet(`<h3>Replace ${esc(we.exercises.name)}</h3>
+      <p class="muted small">Same muscle (${esc(m)}), favorites first; exercises you've excluded or that don't fit your equipment are hidden.</p>
+      <input id="rpSearch" placeholder="Search ${esc(m)} exercises" autocomplete="off">
+      <div id="rpList" class="rp-list">${ok.map(e => `<button class="list-btn" data-rp="${e.id}"><div class="grow"><b>${esc(e.name)}</b> <span class="muted tiny">${esc(e.equipment || '')}${P2.favorites.has(e.id) ? ' · ★' : ''}</span></div></button>`).join('') || '<p class="muted">No other exercises for this muscle.</p>'}</div>
+      <div id="rpScope" hidden>
+        <p class="small">Replace with <b id="rpName"></b>:</p>
+        ${logged ? `<p class="small" style="color:var(--warn)">${logged} logged set${logged > 1 ? 's' : ''} of ${esc(we.exercises.name)} will be removed from today.</p>` : ''}
+        <button class="primary block" data-scope="today">Just today</button>
+        <button class="block" data-scope="future" style="margin-top:6px">Today and every later week (this day)</button>
+        <p class="muted tiny">The new exercise starts fresh: no history means you pick the weight the first time, then it progresses normally.</p></div>`,
+      panel => {
+        const list = panel.querySelector('#rpList');
+        panel.querySelector('#rpSearch').oninput = e => { const q = e.target.value.toLowerCase(); list.querySelectorAll('[data-rp]').forEach(x => x.hidden = !x.textContent.toLowerCase().includes(q)); };
+        list.querySelectorAll('[data-rp]').forEach(x => x.onclick = () => { pick = ok.find(e => e.id === x.dataset.rp);
+          list.querySelectorAll('[data-rp]').forEach(y => y.classList.toggle('on', y === x)); panel.querySelector('#rpName').textContent = pick.name; panel.querySelector('#rpScope').hidden = false; });
+        panel.querySelectorAll('[data-scope]').forEach(x => x.onclick = async () => {
+          if (!pick) return;
+          if (logged) check(await sb.from('sets').delete().eq('workout_exercise_id', we.id));
+          const q = qLoad(); Object.keys(q).filter(k => k.startsWith(we.id + ':')).forEach(k => delete q[k]); qStore(q); syncBadge();
+          check(await sb.from('workout_exercises').update({ exercise_id: pick.id, flag: null }).eq('id', we.id));
+          let n = 0;
+          if (x.dataset.scope === 'future') {
+            const later = check(await sb.from('workout_exercises').select('id, workout_days!inner(id, week, day_index, mesocycle_id, completed_at)')
+              .eq('exercise_id', we.exercise_id).eq('workout_days.mesocycle_id', meso.id).eq('workout_days.day_index', day.day_index).gt('workout_days.week', day.week));
+            const ids = later.filter(w => !w.workout_days.completed_at).map(w => w.id);
+            if (ids.length) check(await sb.from('workout_exercises').update({ exercise_id: pick.id }).in('id', ids));
+            n = ids.length;
+          }
+          closeSheet(); toast(`${we.exercises.name} → ${pick.name}${x.dataset.scope === 'future' ? ` today + ${n} later week${n === 1 ? '' : 's'}` : ' for today'}`, false, 3500);
+          renderWorkout(dayId);
+        });
+      });
   });
   wes.forEach(refreshTrend);
   if (preview) {   // look, don't touch: nothing can be logged until the day is started
@@ -1570,10 +1652,10 @@ function renderLearn(sub) {
     app.innerHTML = `<div class="card small muted">Hypertrophy ranges for most people: <b>10–20 hard sets per muscle per week</b>, 2–8 per session, each muscle 2×/week.
         The app starts lower (numbers below) and adds sets only when your recovery feedback says you can handle them — up to 12 per session and 22 per week.</div>
       ${LEARN.MUSCLE_GUIDE.map(g => `<div class="card"><div class="row"><b class="grow">${g.m}</b>
-          <span class="pill">start ${d[g.size].focus} focus · ${d[g.size].whole} whole · ${d[g.size].maintain} hold</span></div>
+          <span class="pill">start ${d[g.size].emphasize} emphasize · ${d[g.size].grow} grow · ${d[g.size].maintain} maintain</span></div>
         <div class="kv small"><div class="k">Reps</div><div class="v">${esc(g.reps)}</div><div class="k">Go-to exercises</div><div class="v">${esc(g.ex)}</div></div>
         <div class="muted small">${esc(g.note)}</div></div>`).join('')}
-      <div class="card small muted">“start” = weekly sets in week 1 of a new mesocycle: <b>focus</b> on an upper/lower focus plan, <b>whole</b> on a whole-body plan, <b>hold</b> for maintained muscles.</div>`;
+      <div class="card small muted">“start” = weekly sets in week 1 of a new mesocycle by the muscle's priority: <b>Emphasize</b> (grow hard, sets rise when recovery is good), <b>Grow</b> (conservative, sets rise only if progress needs it), <b>Maintain</b> (low volume).</div>`;
   } else {
     setHeader('Learn', '#/explore', 'explore');
     app.innerHTML = `<div class="card small muted">Short, plain-language guides to what the research says — and how the app uses it. Every page links its sources.</div>
@@ -1796,6 +1878,12 @@ async function renderSettings() {
         <div class="muted tiny" style="margin-top:6px">Want to keep one of these? Star it in the Exercise library — favorites are always allowed.</div></details>
       <div class="spacer"></div><button class="block" id="savePrefs">Save preferences</button>
       <button class="ghost block sm" data-go="#/exercises">Favorites &amp; exclusions → Exercise library</button></div>
+    <div class="card"><h3>Smallest weight jumps</h3>
+      <div class="muted small">What your gym can actually load (microplates, dumbbell pairs, pin stacks). Suggestions round to these and add about 2.5% at a time — never more than 5 lb / 2.5 kg in one step.</div>
+      ${['Machine', 'Cable', 'Barbell', 'Dumbbell'].map(k => { const v = L.increment({ equipment: k }, unit()); const opts = unit() === 'kg' ? [0.5, 1, 1.25, 2, 2.5, 5] : [1, 2.5, 5, 10];
+        return `<div class="row inc-row"><label class="grow" for="inc-${k}">${k === 'Machine' ? 'Machines (pin / plate)' : k === 'Cable' ? 'Cables' : k === 'Barbell' ? 'Barbell & sled (per jump, both sides)' : 'Dumbbells (next pair up)'}</label>
+          <select id="inc-${k}" data-inc="${k}">${opts.map(o => `<option ${o === v ? 'selected' : ''}>${o}</option>`).join('')}</select><span class="muted small">${unit()}</span></div>`; }).join('')}
+      <button class="block" id="saveInc">Save weight jumps</button></div>
     <div class="card small"><a href="${DOC_URL}" target="_blank" rel="noopener">Training Logic & Evidence</a> <span class="muted">— why the app sets your weights, sets and RIR the way it does.</span></div>
     <button class="block" id="pw">Change password</button><div class="spacer"></div>
     <button class="block" id="out">Sign out</button>
@@ -1815,6 +1903,11 @@ async function renderSettings() {
     profile = check(await sb.from('profiles').update({ equipment: picked.length === EQUIPMENT.length ? null : picked, avoid_tags: tags })
       .eq('id', session.user.id).select().single());
     toast('Preferences saved — new mesocycles will use them');
+  };
+  $('#saveInc').onclick = () => {
+    const cur = loadIncrements(); cur[unit()] = Object.fromEntries($$('[data-inc]').map(x => [x.dataset.inc, Number(x.value)]));
+    try { localStorage.setItem('wl_increments', JSON.stringify(cur)); } catch {}
+    L.setIncrements(cur); toast('Saved — suggestions now use these jumps');
   };
   $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
   $('#out').onclick = async () => { await sb.auth.signOut(); go('#/'); };

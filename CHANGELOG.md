@@ -12,6 +12,35 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.9.0 — 2026-11-21 · "Training engine"
+
+**Weight steps — "less is more", from your history**
+- Analysed 2,376 week-to-week changes in your logs: weight jumps of **≤4% kept your reps 94–97%** of the time; **above 4% only 27–39%**.
+- A progression step is now **about 2.5% of the load, rounded down, at most 5 lb (2.5 kg)** and never more than your usual jump. Sled 315 → **320** (was 325); pec dec 185 → **187.5**; leg press 295 → 300.
+- Default smallest jumps **2.5 lb** (1.25 kg); dumbbells 5 lb (2 kg). **Settings → Smallest weight jumps** lets you match your gym.
+- Weekly cap tightened from +10% to **+5%**. Light loads (one step > ~5%) progress by reps first.
+- Weight-vs-reps is decided from several signals (the meso's pattern, room in the rep range, load size), not one past change.
+
+**Muscle priorities: Emphasize / Grow / Maintain / Skip** (replaces Focus)
+- Emphasize grows sets when recovery is good; **Grow** holds sets when performance is improving and adds one only when it stalls; Maintain never adds. Warning when more than 3 muscles are emphasized.
+- **Weekly per-muscle limit:** at most +2 sets per muscle per week across all sessions.
+- **Every set change explains itself** ("Chest: kept at 10 weekly sets — performance improved and recovery was good, so no extra volume is needed yet").
+
+**Workouts fit your time**
+- Builder asks **time per workout**; each day shows estimated minutes; long days are trimmed lowest-priority first and the builder lists what was trimmed. No muscle over 10 sets in a session. (A 2-day full-body plan went from 38/35 sets to ~17/18 at 60 min.)
+
+**Replace an exercise mid-meso** — ⇄ on any exercise: **just today**, or **today and every later week** of that day.
+
+**Optional actual RIR** — "set 1 RIR" under each exercise; left on target, the app treats it as assumed, not measured.
+
+**Builder option: keep compounds at least 1 RIR** from failure.
+
+**Database:** the one-time, all-or-nothing recovery adjustment (`apply_feedback_adjustment`) is now live (approved 2026-11-21; verified on the live database with a rolled-back test: applied once, retry ignored).
+
+**Tests:** every split 2–6 days × 3 templates × 60/75/90 min fits its time and caps; priority rules; weekly cap; step sizes from history; browser test for replace, RIR and the time builder.
+
+---
+
 ## 1.8.0 — 2026-11-21 (00:30 MT) · "Pick your day + reliability"
 
 **New**
@@ -23,7 +52,7 @@ Versions follow **MAJOR.MINOR.PATCH**:
 - **kg users:** the big-jump/typo warnings converted last week's weight to kg twice (e.g. compared 45 kg against ~20 kg). Fixed.
 - **Finishing offline:** before scoring the workout, the app now waits for in-flight saves, syncs anything saved offline, and includes sets still waiting on the phone — feedback no longer misses logged sets.
 - **Progression history:** only **finished** sets count, and when a lift appears twice a week the same day is compared (like with like).
-- **Recovery set changes are now one database transaction that can only run once per rating** — a dropped connection + retry can no longer add the sets twice. *(Needs the database update `20261121070000_atomic_feedback_adjustment` — pending approval; until then the app uses the previous method.)*
+- **Recovery set changes are now one database transaction that can only run once per rating** — a dropped connection + retry can no longer add the sets twice. *(Database update `20261121070000_atomic_feedback_adjustment` applied 2026-11-21 in 1.9.0.)*
 - **Offline queue is per account** (switching accounts on one phone can't mix up sets) and sets the server refuses are kept aside instead of being dropped; network/server hiccups keep retrying.
 - **Removing a set** first drops its queued offline save (it can't come back later), and keeps the row if the server didn't delete it.
 - **Cardio:** a tap while a save is in progress is no longer lost.

@@ -74,7 +74,7 @@ export const MUSCLE_GUIDE = [
   { m: 'Abs', size: 'minor', reps: '10–20', ex: 'Machine/cable crunch, hanging leg raise', note: 'Treat like any muscle: load it and progress it.' },
   { m: 'Forearms', size: 'minor', reps: '12–25', ex: 'Wrist curls, hammer curls', note: 'Heavy pulling and carries cover a lot of grip work.' },
 ];
-export const APP_DEFAULTS = { large: { focus: 10, whole: 8, maintain: 4 }, small: { focus: 8, whole: 6, maintain: 4 }, minor: { focus: 6, whole: 3, maintain: 3 } };
+export const APP_DEFAULTS = { large: { emphasize: 10, grow: 8, maintain: 4 }, small: { emphasize: 8, grow: 6, maintain: 4 }, minor: { emphasize: 6, grow: 4, maintain: 3 } };
 
 // Short articles. Each block: paragraphs, optional bullets/example, sources.
 export const ARTICLES = [

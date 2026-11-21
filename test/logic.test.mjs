@@ -52,11 +52,11 @@ for (const focus of ['upper', 'lower', 'whole']) {
 // Load progression (doc §4 examples)
 const bench = { load_type: 'weighted', equipment: 'Barbell', rep_min: 5, rep_max: 12 };
 assert.deepEqual(L.suggestSet({ prev: { weight: 185, reps: 10, rir: 3 }, ex: bench, targetRir: 2, unit: 'lb' }), { weight: 185, reps: 11 });
-assert.deepEqual(L.suggestSet({ prev: { weight: 185, reps: 12, rir: null }, ex: bench, targetRir: 2, prevTargetRir: 3, unit: 'lb' }), { weight: 190, reps: 11 });
+assert.deepEqual(L.suggestSet({ prev: { weight: 185, reps: 12, rir: null }, ex: bench, targetRir: 2, prevTargetRir: 3, unit: 'lb' }), { weight: 187.5, reps: 11 });
 assert.equal(L.suggestSet({ prev: { weight: 185, reps: 10 }, ex: bench, targetRir: 2, prevTargetRir: 3, jointHold: true, unit: 'lb' }).weight, 185);
 assert.equal(L.suggestSet({ prev: null, ex: bench, targetRir: 2 }), null);
 const assisted = { load_type: 'assisted', equipment: 'Machine', rep_min: 8, rep_max: 15 };
-assert.equal(L.suggestSet({ prev: { weight: 50, reps: 15 }, ex: assisted, targetRir: 1, prevTargetRir: 2, unit: 'lb' }).weight, 45);
+assert.equal(L.suggestSet({ prev: { weight: 50, reps: 15 }, ex: assisted, targetRir: 1, prevTargetRir: 2, unit: 'lb' }).weight, 47.5);
 
 // Set adjustment (doc §5)
 assert.deepEqual(L.setAdjustment({ R: 0, L: 0, J: 0, P: 1, F: 1 }).delta, 2);
@@ -115,7 +115,7 @@ console.log('SLIP TESTS PASSED');
   assert.equal(L.repsAtLoad({ prev, ex, weight: 290, targetRir: 2 }).outside, 'heavy');
   assert.equal(L.repsAtLoad({ prev, ex, weight: 100, targetRir: 2 }).outside, 'light');
   const wr = L.weightRange({ prev, ex, targetRir: 2, unit: 'lb' });
-  assert.ok(wr.light < 200 && wr.heavy > 200 && wr.heavy % 5 === 0 && wr.light % 5 === 0);
+  assert.ok(wr.light < 200 && wr.heavy > 200 && wr.heavy % 2.5 === 0 && wr.light % 2.5 === 0);
   // round-trip: the ends of the window land inside the rep range
   assert.ok(L.repsAtLoad({ prev, ex, weight: wr.heavy, targetRir: 2 }).lo >= 8);
   assert.ok(L.repsAtLoad({ prev, ex, weight: wr.light, targetRir: 2 }).lo <= 30);
@@ -313,7 +313,7 @@ console.log('GUARDRAIL TESTS PASSED');
 {
   const ex = { load_type: 'weighted', equipment: 'Machine', rep_min: 8, rep_max: 15 };
   const a = L.suggestSet({ prev: { weight: 70, reps: 30, rir: null }, ex, targetRir: 3, prevTargetRir: 1, unit: 'lb' });
-  assert.deepEqual([a.weight, a.reps], [75, 15], '70×30 rehab set → 75×15, not 75×26');
+  assert.deepEqual([a.weight, a.reps], [72.5, 15], '70×30 rehab set → 72.5×15 (re-solved, then the +5% weekly cap), not 75×26');
   const b = L.suggestSet({ prev: { weight: 200, reps: 3, rir: 1 }, ex, targetRir: 2, unit: 'lb' });
   assert.equal(b.reps, 8); assert.ok(b.weight < 200);
   const c = L.suggestSet({ prev: { weight: 70, reps: 11, rir: 1 }, ex: { ...ex, rep_min: 6, rep_max: 20 }, targetRir: 0, unit: 'lb' });
@@ -355,15 +355,21 @@ console.log('GUARDRAIL TESTS PASSED');
 {
   const sled = { name: 'Sled push', load_type: 'weighted', equipment: 'Barbell', rep_min: 5, rep_max: 30 };
   const m = L.progressionMode([{ weight: 305, reps: 27 }, { weight: 315, reps: 27 }], sled, 'lb');
-  assert.deepEqual(m, { mode: 'load', step: 10 });
+  assert.deepEqual(m, { mode: 'load', step: 5 }, 'his jump was +10, but steps are ~2.5% and never over 5 lb');
   const a = L.suggestSet({ prev: { weight: 315, reps: 27, rir: 1 }, ex: sled, targetRir: 0, unit: 'lb', mode: m });
-  assert.deepEqual([a.weight, a.reps], [325, 27], 'sled: 315×27 → 325×27 (range 27–28), like RP 325×28 — not 315×28');
+  assert.deepEqual([a.weight, a.reps], [320, 27], 'sled: 315×27 → 320×27 (+5 lb, range 27–28)');
   const row = { name: 'Barbell Bent Over Row', load_type: 'weighted', equipment: 'Barbell', rep_min: 6, rep_max: 20 };
   const r = L.suggestSet({ prev: { weight: 70, reps: 11, rir: 1 }, ex: row, targetRir: 0, unit: 'lb', mode: L.progressionMode([{ weight: 70, reps: 10 }, { weight: 70, reps: 11 }], row, 'lb') });
   assert.deepEqual([r.weight, r.reps], [70, 12], 'row keeps adding reps');
   const pd = { name: 'Pec Dec Flye', load_type: 'weighted', equipment: 'Machine', rep_min: 8, rep_max: 15 };
   const p = L.suggestSet({ prev: { weight: 185, reps: 8, rir: 1 }, ex: pd, targetRir: 0, unit: 'lb', mode: L.progressionMode([{ weight: 180, reps: 8 }, { weight: 185, reps: 8 }], pd, 'lb') });
-  assert.deepEqual([p.weight, p.reps], [190, 8], 'pec dec: 185×8 → 190×8 (what he did)');
+  assert.deepEqual([p.weight, p.reps], [187.5, 8], 'pec dec: 185×8 → 187.5×8 (2.5% of 185 rounds down to 2.5 lb)');
+  // several changes: majority decides; reps at the top of the range force weight; tiny loads use reps
+  assert.equal(L.progressionMode([{ weight: 100, reps: 8 }, { weight: 105, reps: 8 }, { weight: 105, reps: 9 }, { weight: 110, reps: 9 }], pd, 'lb').mode, 'load');
+  assert.equal(L.progressionMode([{ weight: 100, reps: 13 }, { weight: 100, reps: 15 }], pd, 'lb').mode, 'load', 'at rep max → add weight');
+  assert.equal(L.progressionMode([{ weight: 20, reps: 10 }, { weight: 22.5, reps: 10 }], pd, 'lb').mode, 'reps', '2.5 lb is >5% of 22.5 lb → reps');
+  assert.equal(L.loadStep(315, sled, 'lb'), 5); assert.equal(L.loadStep(100, pd, 'lb'), 2.5); assert.equal(L.loadStep(100, pd, 'kg'), 2.5);
+  assert.equal(L.loadStep(400, pd, 'lb', 2.5), 2.5, 'never more than his usual jump');
   assert.equal(L.progressionMode([], pd, 'lb').mode, 'load'); assert.equal(L.progressionMode([], row, 'lb').mode, 'reps');
   const d = L.suggestSet({ prev: { weight: 315, reps: 27, rir: 0 }, ex: sled, targetRir: 4, deload: true, unit: 'lb', mode: m });
   assert.equal(d.weight, 315, 'deload never adds weight');
@@ -373,17 +379,17 @@ console.log('GUARDRAIL TESTS PASSED');
 // --- Feedback sets the progression speed (doc §4.3) ---
 {
   const sled = { name: 'Sled push', load_type: 'weighted', equipment: 'Barbell', rep_min: 5, rep_max: 30 };
-  const m = { mode: 'load', step: 10 }, prev = { weight: 315, reps: 27, rir: 1 }, base = { prev, ex: sled, targetRir: 0, unit: 'lb', mode: m };
+  const m = { mode: 'load', step: 5 }, prev = { weight: 315, reps: 27, rir: 1 }, base = { prev, ex: sled, targetRir: 0, unit: 'lb', mode: m };
   const S = fb => L.progressionSpeed(fb);
   assert.equal(S(null).speed, 'normal'); assert.equal(S({ workload: 1, pump: 2 }).speed, 'normal');
   assert.equal(S({ workload: 0, pump: 0 }).speed, 'fast'); assert.equal(S({ workload: 2 }).speed, 'slow');
   assert.equal(S({ workload: 3 }).speed, 'hold'); assert.equal(S({ workload: 0, joint_pain: 2 }).speed, 'hold');
   const n = L.suggestSet({ ...base, speed: S({ workload: 1 }) }), f = L.suggestSet({ ...base, speed: S({ workload: 0, pump: 0 }) });
   const sl = L.suggestSet({ ...base, speed: S({ workload: 2 }) }), h = L.suggestSet({ ...base, speed: S({ workload: 3 }) });
-  assert.deepEqual([n.weight, n.reps], [325, 27], 'normal: +10 lb');
-  assert.deepEqual([f.weight, f.reps], [325, 27], 'easy but a 0-RIR week: no faster jump (guardrail)');
+  assert.deepEqual([n.weight, n.reps], [320, 27], 'normal: +5 lb');
+  assert.deepEqual([f.weight, f.reps], [320, 27], 'easy but a 0-RIR week: no faster jump (guardrail)');
   const f1 = L.suggestSet({ ...base, prev: { weight: 315, reps: 27, rir: 2 }, targetRir: 1, speed: S({ workload: 0, pump: 0 }) });
-  assert.deepEqual([f1.weight, f1.reps], [335, 27], 'easy at 1 RIR: +20 lb');
+  assert.deepEqual([f1.weight, f1.reps], [325, 27], 'easy at 1 RIR: +10 lb (two steps, inside the 5% weekly cap)');
   assert.deepEqual([sl.weight, sl.reps], [315, 28], 'pushed limit: same weight, +1 rep');
   assert.deepEqual([h.weight, h.reps], [315, 27], 'too much: hold');
   const row = { name: 'Row', load_type: 'weighted', equipment: 'Barbell', rep_min: 6, rep_max: 20 }, rb = { prev: { weight: 70, reps: 11, rir: 1 }, ex: row, targetRir: 0, unit: 'lb', mode: { mode: 'reps', step: 5 } };
@@ -391,8 +397,8 @@ console.log('GUARDRAIL TESTS PASSED');
   assert.equal(L.suggestSet({ ...rb, speed: S({ workload: 0 }) }).reps, 12, 'easy but 0 RIR week: normal +1');
   assert.equal(L.suggestSet({ ...rb, prev: { weight: 70, reps: 11, rir: 2 }, targetRir: 1, speed: S({ workload: 0 }) }).reps, 13, 'easy at 1 RIR: +2 reps');
   assert.equal(L.suggestSet({ ...rb, speed: S({ workload: 2 }) }).reps, 11, 'pushed limit: match last week');
-  const small = L.suggestSet({ prev: { weight: 50, reps: 10, rir: 2 }, ex: { load_type: 'weighted', equipment: 'Machine', rep_min: 8, rep_max: 15 }, targetRir: 1, unit: 'lb', mode: { mode: 'load', step: 5 }, speed: S({ workload: 0 }) });
-  assert.equal(small.weight, 55, 'fast never jumps more than ~10% (50 → 55, not 60)');
+  const small = L.suggestSet({ prev: { weight: 50, reps: 10, rir: 2 }, ex: { load_type: 'weighted', equipment: 'Machine', rep_min: 8, rep_max: 15 }, targetRir: 1, unit: 'lb', mode: { mode: 'load', step: 2.5 }, speed: S({ workload: 0 }) });
+  assert.equal(small.weight, 52.5, 'fast never jumps more than ~5% (50 → 52.5, not 55)');
   assert.equal(L.suggestSet({ ...base, deload: true, targetRir: 4, speed: S({ workload: 0 }) }).weight, 315, 'deload unaffected');
   console.log('PROGRESSION SPEED TESTS PASSED');
 }
@@ -401,17 +407,17 @@ console.log('GUARDRAIL TESTS PASSED');
 {
   const m = { load_type: 'weighted', equipment: 'Machine', rep_min: 8, rep_max: 15 };
   const S = fb => L.progressionSpeed(fb);
-  // weekly cap: +10% (or one step on light loads)
+  // weekly cap: +5% (or one step on light loads)
   const big = L.suggestSet({ prev: { weight: 100, reps: 10, rir: 3 }, ex: m, targetRir: 1, unit: 'lb', mode: { mode: 'load', step: 10 } });
-  assert.equal(big.weight, 110, '+20 lb planned on 100 → capped at 110'); assert.match(big.note, /10% a week/);
-  const light = L.suggestSet({ prev: { weight: 20, reps: 10, rir: 1 }, ex: m, targetRir: 0, unit: 'lb', mode: { mode: 'load', step: 5 } });
-  assert.equal(light.weight, 25, 'one step allowed even when it is >10% of a light load');
+  assert.equal(big.weight, 105, '+20 lb planned on 100 → capped at 105'); assert.match(big.note, /5% a week/);
+  const light = L.suggestSet({ prev: { weight: 20, reps: 10, rir: 1 }, ex: m, targetRir: 0, unit: 'lb', mode: { mode: 'load', step: 2.5 } });
+  assert.equal(light.weight, 22.5, 'one step allowed even when it is >5% of a light load');
   // meso ceiling: +20% over week 1, then reps instead
-  const ce = L.suggestSet({ prev: { weight: 120, reps: 10, rir: 1 }, ex: m, targetRir: 0, unit: 'lb', mode: { mode: 'load', step: 5 }, mesoStart: 100 });
+  const ce = L.suggestSet({ prev: { weight: 120, reps: 10, rir: 1 }, ex: m, targetRir: 0, unit: 'lb', mode: { mode: 'load', step: 2.5 }, mesoStart: 100 });
   assert.deepEqual([ce.weight, ce.reps], [120, 11], 'at the +20% ceiling → reps instead'); assert.match(ce.note, /ceiling/);
   // no faster jumps on spinal-loading lifts or with any joint pain
-  const ax = L.suggestSet({ prev: { weight: 200, reps: 8, rir: 2 }, ex: { ...m, tags: ['axial'] }, targetRir: 1, unit: 'lb', mode: { mode: 'load', step: 10 }, speed: S({ workload: 0 }) });
-  assert.equal(ax.weight, 210, 'axial lift: normal step only');
+  const ax = L.suggestSet({ prev: { weight: 200, reps: 8, rir: 2 }, ex: { ...m, tags: ['axial'] }, targetRir: 1, unit: 'lb', mode: { mode: 'load', step: 5 }, speed: S({ workload: 0 }) });
+  assert.equal(ax.weight, 205, 'axial lift: normal step only');
   assert.equal(S({ workload: 0, joint_pain: 1 }).speed, 'normal', 'any joint pain → no faster jumps');
   // rep jump never more than +2 at the same or heavier weight
   const r = L.suggestSet({ prev: { weight: 50, reps: 8, rir: 3 }, ex: { ...m, equipment: 'Dumbbell' }, targetRir: 0, unit: 'lb' });
@@ -424,4 +430,48 @@ console.log('GUARDRAIL TESTS PASSED');
   assert.equal(L.setAdjustment({ R: 0, L: 0, J: 0, P: 0, F: 1 }).delta, 2, 'everything great → +2');
   assert.equal(L.setAdjustment({ R: 0, L: 0, J: 1, P: 0, F: 1 }).delta, 1, 'any joint pain → at most +1');
   console.log('JOINT PAIN VOLUME TESTS PASSED');
+}
+
+// --- v1.9 training engine: priorities, time fitting, weekly volume cap, explanations, step sizes ---
+{
+  // priorities
+  assert.deepEqual(L.PRIORITIES, ['emphasize', 'grow', 'maintain', 'skip']);
+  assert.equal(L.normPriority('focus', 'upper'), 'emphasize'); assert.equal(L.normPriority('focus', 'whole'), 'grow');
+  assert.equal(L.weeklyTarget('Chest', 'emphasize', 'custom', 'hypertrophy'), 10);
+  assert.equal(L.weeklyTarget('Chest', 'grow', 'custom', 'hypertrophy'), 8);
+  assert.equal(L.weeklyTarget('Chest', 'maintain', 'custom', 'hypertrophy'), 4);
+  // volume rules by priority
+  const good = { R: 0, L: 1, J: 0, P: 2, F: 0 };
+  assert.equal(L.setAdjustment({ ...good, priority: 'emphasize' }).delta, 1);
+  assert.equal(L.setAdjustment({ ...good, priority: 'grow' }).delta, 1, 'grow: performance flat → +1');
+  const g = L.setAdjustment({ ...good, F: 1, priority: 'grow' });
+  assert.equal(g.delta, 0, 'grow: performance up → hold'); assert.match(g.why, /no extra volume is needed yet/);
+  assert.equal(L.setAdjustment({ ...good, priority: 'maintain' }).delta, 0);
+  assert.equal(L.setAdjustment({ R: 0, L: 0, J: 0, P: 0, F: 0, priority: 'grow' }).delta, 1, 'grow never jumps +2');
+  assert.ok(L.setAdjustment({ R: 3 }).why.length > 10, 'every rule explains itself');
+  // weekly cap: two sessions can't add 4 sets in one week
+  const ex = [{ id: 'a', target_sets: 3 }];
+  assert.deepEqual(L.distributeDelta(ex, 2, { sessionTotal: 3, weeklyTotal: 10, prevWeeklyTotal: 8 }), [], 'already +2 this week → nothing more');
+  assert.equal(L.distributeDelta(ex, 2, { sessionTotal: 3, weeklyTotal: 9, prevWeeklyTotal: 8 })[0].target_sets, 4, 'room for +1 only');
+  // time fitting on every split, 2–6 days, 60/75/90 minutes
+  const lib = []; let k = 0;
+  for (const m of L.MUSCLES) for (const kind of ['compound', 'isolation', 'isolation']) lib.push({ id: 'x' + k++, name: m + k, muscle_group: m, kind, load_type: 'weighted' });
+  for (const days of [2, 3, 4, 5, 6]) for (const sp of L.splitsFor(days)) for (const focus of ['whole', 'upper', 'lower']) for (const minutes of [60, 75, 90]) {
+    const pr = L.templatePriorities(focus);
+    const raw = L.autofill({ plan: Array.from({ length: days }, (_, i) => ({ label: 'Day ' + (i + 1), slots: [] })), priorities: pr, focus, library: lib, mode: 'all', goal: 'hypertrophy', split: sp.id });
+    const f = L.fitToTime(raw, { minutes, priorities: pr, focus, library: lib });
+    for (const [i, d] of f.days.entries()) {
+      assert.ok(f.minutes[i] <= minutes + 2, `${days}d ${sp.id} ${focus} ${minutes}min: day ${i + 1} is ${f.minutes[i]} min`);
+      const per = {}; for (const s of d.slots) per[s.muscle] = (per[s.muscle] || 0) + s.sets;
+      assert.ok(Object.values(per).every(n => n <= L.SESSION_MUSCLE_CAP), 'no muscle over 10 sets in a session');
+    }
+  }
+  // lowest priority is trimmed first
+  const pr = { ...L.templatePriorities('upper') };
+  const raw = L.autofill({ plan: [{ label: 'A', slots: [] }, { label: 'B', slots: [] }], priorities: pr, focus: 'upper', library: lib, mode: 'all', goal: 'hypertrophy', split: 'full_body' });
+  const f = L.fitToTime(raw, { minutes: 75, priorities: pr, focus: 'upper', library: lib });
+  const placedBefore = L.placedSets(raw), placedAfter = L.placedSets(f.days);
+  assert.equal(placedAfter.Chest, placedBefore.Chest, 'emphasized chest untouched while maintain muscles can be cut');
+  assert.ok(Object.keys(f.trimmed).every(m => L.normPriority(pr[m], 'upper') !== 'emphasize'));
+  console.log('V1.9 ENGINE TESTS PASSED');
 }

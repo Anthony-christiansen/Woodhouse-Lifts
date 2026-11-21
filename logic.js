@@ -9,14 +9,28 @@ export const MINOR = ['Traps', 'Abs', 'Forearms'];
 const LARGE = ['Chest', 'Back', 'Quads', 'Hamstrings', 'Glutes'];
 const sizeOf = m => LARGE.includes(m) ? 'large' : MINOR.includes(m) ? 'minor' : 'small';
 
-// Doc §2.1 step 1 — starting weekly sets (low end of the productive range; feedback grows them).
+// Doc §2.1 step 1 — starting weekly sets per priority (start conservatively; feedback grows them, doc §5).
+//   Emphasize: grow this muscle hard, adding sets when recovery allows.   Grow: build it, nearer the minimum
+//   effective volume — sets only go up when progress needs it.   Maintain: keep it with little recovery cost.
 const TARGETS = {
-  focus:    { large: 10, small: 8, minor: 6 },
-  whole:    { large: 8,  small: 6, minor: 3 },
-  maintain: { large: 4,  small: 4, minor: 3 },
-  skip:     { large: 0,  small: 0, minor: 0 },
+  emphasize: { large: 10, small: 8, minor: 6 },
+  grow:      { large: 8,  small: 6, minor: 4 },
+  maintain:  { large: 4,  small: 4, minor: 3 },
+  skip:      { large: 0,  small: 0, minor: 0 },
 };
-export const PRIORITIES = ['focus', 'maintain', 'skip'];
+export const PRIORITIES = ['emphasize', 'grow', 'maintain', 'skip'];
+export const PRIORITY_INFO = {
+  emphasize: 'Grow this muscle aggressively — sets rise when recovery is good.',
+  grow: 'Build muscle with conservative volume — sets rise only when progress needs it.',
+  maintain: 'Keep what you have with low volume, saving recovery for the rest.',
+  skip: 'Leave this muscle out of this meso.',
+};
+export const MAX_EMPHASIZE = 3;   // RP-style: emphasize a few muscles at a time; recovery is shared
+// Mesos made before v1.9 stored 'focus' (and the Balanced template used a lower table for it).
+export function normPriority(p, focus) {
+  if (p === 'focus') return focus === 'whole' || focus === 'custom' ? 'grow' : 'emphasize';
+  return PRIORITIES.includes(p) ? p : 'skip';
+}
 
 // Doc §2.0 — weekly split: which muscles each training day is allowed to hold. Separate from the emphasis
 // templates below (which muscles get extra volume). null = any muscle may go on that day.
@@ -51,15 +65,15 @@ export function templatePriorities(focus) {
   const p = {};
   for (const m of MUSCLES) {
     if (MINOR.includes(m)) p[m] = 'maintain';
-    else if (focus === 'upper') p[m] = UPPER.includes(m) ? 'focus' : 'maintain';
-    else if (focus === 'lower') p[m] = LOWER.includes(m) ? 'focus' : 'maintain';
-    else p[m] = 'focus';
+    else if (focus === 'upper') p[m] = UPPER.includes(m) ? 'emphasize' : 'maintain';
+    else if (focus === 'lower') p[m] = LOWER.includes(m) ? 'emphasize' : 'maintain';
+    else p[m] = 'grow';
   }
   return p;
 }
 
 export function weeklyTarget(muscle, priority, focus, goal) {
-  const table = priority === 'focus' && (focus === 'whole' || focus === 'custom') ? TARGETS.whole : TARGETS[priority] || TARGETS.skip;
+  const table = TARGETS[normPriority(priority, focus)] || TARGETS.skip;
   const base = table[sizeOf(muscle)], v = GOALS[goalOf(goal)].volume;
   return v === 1 || !base ? base : Math.max(2, Math.round(base * v)); // hypertrophy: unchanged
 }
@@ -187,8 +201,8 @@ export function autofill({ plan, priorities, focus, library, mode, goal, favorit
       const i = [...onDay[m]].sort((a, b) => load[a] - load[b])[0];
       const slot = days[i].slots.filter(s => s.muscle === m).pop(); slot.sets += remaining; load[i] += remaining; continue;
     }
-    const want = everyDay && priorities[m] !== 'maintain' ? avail.length
-      : Math.max(1, frequency(targets[m], priorities[m], allowed ? allowed.size : nDays) - onDay[m].size);
+    const want = everyDay && normPriority(priorities[m], focus) !== 'maintain' ? avail.length
+      : Math.max(1, frequency(targets[m], normPriority(priorities[m], focus), allowed ? allowed.size : nDays) - onDay[m].size);
     const f = Math.min(want, avail.length);
     // Spread evenly from the lightest available day (doc §2.1 step 3).
     const start = avail.slice().sort((a, b) => load[a] - load[b] || a - b)[0];
@@ -213,6 +227,50 @@ export function autofill({ plan, priorities, focus, library, mode, goal, favorit
   }
   for (const d of days) d.slots.sort(slotOrder(lib));
   return days;
+}
+
+/**
+ * Doc §2.3 — fit each workout into the time you have. Estimate per working set INCLUDING rest:
+ * compound 3 min, isolation 2 min; plus 6 min to warm up and 1 min per exercise for setup.
+ * A muscle never gets more than 10 sets in one session. If a day runs long, sets come off the LOWEST
+ * priority muscle first (Skip → Maintain → Grow → Emphasize), then from the muscle with the most sets that day.
+ * Floors per session: Emphasize keeps at least 2 sets, Grow 1; Maintain can be dropped from that day.
+ * Returns { days, trimmed: { muscle: setsRemoved }, minutes: [per-day estimate] }.
+ */
+export const SESSION_MUSCLE_CAP = 10;
+export const SET_MIN = { compound: 3, isolation: 2 }, SESSION_OVERHEAD = 6, EXERCISE_SETUP = 1;
+export function sessionMinutes(day, lib) {
+  const get = id => (lib instanceof Map ? lib.get(id) : lib?.find?.(e => e.id === id));
+  let m = SESSION_OVERHEAD;
+  for (const s of day.slots || []) { if (!s.sets) continue; const k = get(s.exerciseId)?.kind === 'compound' ? 'compound' : 'isolation'; m += EXERCISE_SETUP + s.sets * SET_MIN[k]; }
+  return Math.round(m);
+}
+const PRI_RANK = { skip: 0, maintain: 1, grow: 2, emphasize: 3 };
+export function fitToTime(plan, { minutes, priorities = {}, focus = null, library = [] } = {}) {
+  const lib = new Map(library.map(e => [e.id, e]));
+  const days = plan.map(d => ({ ...d, slots: d.slots.map(x => ({ ...x })) }));
+  const trimmed = {};
+  const cut = (d, s) => { s.sets--; trimmed[s.muscle] = (trimmed[s.muscle] || 0) + 1; if (s.sets <= 0) d.slots.splice(d.slots.indexOf(s), 1); };
+  for (const d of days) {
+    // per-muscle session cap
+    for (const m of new Set(d.slots.map(x => x.muscle))) {
+      let tot = d.slots.filter(x => x.muscle === m).reduce((a, x) => a + (x.sets || 0), 0);
+      while (tot > SESSION_MUSCLE_CAP) { const s = d.slots.filter(x => x.muscle === m).sort((a, b) => b.sets - a.sets)[0]; cut(d, s); tot--; }
+    }
+    if (!minutes) continue;
+    let guard = 200;
+    while (sessionMinutes(d, lib) > minutes && guard--) {
+      const perMuscle = {}; for (const x of d.slots) perMuscle[x.muscle] = (perMuscle[x.muscle] || 0) + (x.sets || 0);
+      // floors per session: Emphasize keeps ≥ 2 sets, Grow ≥ 1; Maintain/Skip can be dropped from a day entirely
+      const floor = m => ({ emphasize: 2, grow: 1 })[normPriority(priorities[m], focus)] ?? 0;
+      const cands = d.slots.filter(x => x.sets > 0 && perMuscle[x.muscle] > floor(x.muscle));
+      if (!cands.length) break;
+      cands.sort((a, b) => PRI_RANK[normPriority(priorities[a.muscle], focus)] - PRI_RANK[normPriority(priorities[b.muscle], focus)]
+        || perMuscle[b.muscle] - perMuscle[a.muscle] || b.sets - a.sets);
+      cut(d, cands[0]);
+    }
+  }
+  return { days, trimmed, minutes: days.map(d => sessionMinutes(d, lib)) };
 }
 
 export function placedSets(plan) {
@@ -274,7 +332,7 @@ export function warmupPlan({ ex, workWeight, firstForMuscle = true, unit = 'lb' 
     return [{ weight: null, reps: 8, note: lt === 'assisted' ? 'Extra assistance, easy' : 'Easy, smooth reps' },
             { weight: null, reps: 4, note: lt === 'assisted' ? 'Close to working assistance' : 'A little harder' }];
   }
-  const inc = increment(ex, unit);
+  const inc = Math.max(increment(ex, unit), unit === 'kg' ? 2.5 : 5);   // warm-ups: round to easy plate jumps
   const bar = ex?.equipment === 'Barbell' ? (unit === 'kg' ? 20 : 45) : 0;
   const round = w => Math.max(bar, Math.round(w / inc) * inc);
   const steps = ex?.kind === 'compound' ? [[0.5, 8], [0.7, 4], [0.85, 2]] : [[0.5, 10], [0.75, 4]];
@@ -463,9 +521,33 @@ export function combineTrends(trends) {
 }
 
 // Doc §4 — load increments.
+/**
+ * Doc §4.6 — smallest weight jump per equipment. Defaults are the small end (2.5 lb / 1.25 kg; dumbbells come in
+ * 5 lb / 2 kg pairs). Users can change these in Settings to match their gym (setIncrements).
+ */
+const INC_DEFAULT = { lb: { Dumbbell: 5, other: 2.5 }, kg: { Dumbbell: 2, other: 1.25 } };
+let INC = JSON.parse(JSON.stringify(INC_DEFAULT));
+export function setIncrements(custom) {
+  INC = JSON.parse(JSON.stringify(INC_DEFAULT));
+  for (const u of ['lb', 'kg']) for (const [k, v] of Object.entries(custom?.[u] || {})) if (Number(v) > 0) INC[u][k] = Number(v);
+}
+export const incrementDefaults = () => JSON.parse(JSON.stringify(INC_DEFAULT));
 export function increment(ex, unit) {
-  if (unit === 'kg') return ex?.equipment === 'Dumbbell' ? 2 : 2.5;
-  return 5;
+  const t = INC[unit === 'kg' ? 'kg' : 'lb'];
+  return t[ex?.equipment] ?? t.other;
+}
+/**
+ * Doc §4.6 — how much weight to add in one progression step. From Anthony's logged history (2,376 week-to-week
+ * changes, 2023–2026): when the weight went up by ≤ 4% he kept his reps 94–97% of the time; above 4% he kept
+ * them only 27–39% of the time. So a step is about 2.5% of the load, rounded DOWN to the gym's increment, at least
+ * one increment, never more than 5 lb (2.5 kg), and never more than the lifter's own usual jump for that lift.
+ */
+export const STEP_PCT = 0.025, STEP_MAX = { lb: 5, kg: 2.5 };   // "less is more": one step is never more than 5 lb / 2.5 kg
+export function loadStep(weight, ex, unit, observed = null) {
+  const inc = increment(ex, unit), w = Number(weight) || 0, cap = Math.max(inc, STEP_MAX[unit === 'kg' ? 'kg' : 'lb']);
+  let step = Math.min(cap, Math.max(inc, Math.floor(w * STEP_PCT / inc) * inc));
+  if (observed > 0) step = Math.max(inc, Math.min(step, Math.floor(observed / inc) * inc || inc));
+  return step;
 }
 
 /**
@@ -481,15 +563,26 @@ export function increment(ex, unit) {
  * trail: [{ weight, reps }] top sets by meso week, oldest first. Returns { mode: 'load'|'reps', step }.
  */
 export function progressionMode(trail, ex, unit) {
+  // Doc §4.0 (v1.9) — decided from several signals, not one past change:
+  //  1. how this lift has moved across the meso so far (majority of week-to-week changes; latest breaks a tie),
+  //  2. room in the rep range: at the top → add weight; well below the top → reps are fine,
+  //  3. light loads: if one weight step is more than ~5% of the load (e.g. 5 lb on a 40 lb dumbbell), add reps.
   const inc = increment(ex, unit);
   const t = (trail || []).filter(x => x && x.weight != null && x.reps != null);
-  for (let i = t.length - 1; i > 0; i--) {
+  let load = 0, reps = 0, latest = null, steps = [];
+  for (let i = 1; i < t.length; i++) {
     const dw = Number(t[i].weight) - Number(t[i - 1].weight), dr = Number(t[i].reps) - Number(t[i - 1].reps);
-    if (dw > 0) return { mode: 'load', step: dw };
-    if (dw === 0 && dr > 0) return { mode: 'reps', step: inc };
+    if (dw > 0) { load++; latest = 'load'; steps.push(dw); } else if (dw === 0 && dr > 0) { reps++; latest = 'reps'; }
   }
-  const byEquip = ['Machine', 'Cable'].includes(ex?.equipment) || /sled/i.test(ex?.name || '');
-  return { mode: ex?.load_type === 'weighted' && byEquip ? 'load' : 'reps', step: inc };
+  const last = t[t.length - 1], w = last ? Number(last.weight) : 0, r = last ? Number(last.reps) : null;
+  const max = ex?.rep_max ?? 30;
+  const observed = steps.length ? steps.sort((a, b) => a - b)[Math.floor((steps.length - 1) / 2)] : null;   // median jump
+  const step = loadStep(w, ex, unit, observed);
+  let mode = load > reps ? 'load' : reps > load ? 'reps' : latest;
+  if (!mode) mode = ex?.load_type === 'weighted' && (['Machine', 'Cable'].includes(ex?.equipment) || /sled/i.test(ex?.name || '')) ? 'load' : 'reps';
+  if (r != null && r >= max) mode = 'load';                                        // no more room for reps
+  if (mode === 'load' && w > 0 && inc / w > 0.05 && r != null && r < max - 1) mode = 'reps';   // jump too big for the load
+  return { mode, step };
 }
 /**
  * Doc §4.3 — how fast to progress this week, from last session's feedback for that muscle (autoregulation: the
@@ -510,13 +603,13 @@ export function progressionSpeed(fb) {
 }
 /**
  * Doc §4.5 — injury guardrails, applied to every suggestion after the progression rules:
- *  - Weekly load cap: at most +10% over last week's weight for that set (ACSM: 2–10% increases), or one load step
- *    when a single step is already more than 10% (light lifts).
+ *  - Weekly load cap: at most +5% over last week's weight for that set (ACSM allows 2–10%; Anthony's own history
+ *    shows reps hold at ≤4% jumps and fall apart above it), or one load step when a single step is bigger (light lifts).
  *  - Meso ceiling: at most +20% over the lift's week-1 weight in this meso; past that, reps go up instead.
  *  - "Faster" is switched off at 0 RIR (failure weeks), on spinal-loading (axial) lifts, and with any joint pain.
  *  - Reps never jump more than +2 in a week.
  */
-export const GUARD = { weeklyPct: 0.10, mesoPct: 0.20, maxRepJump: 2 };
+export const GUARD = { weeklyPct: 0.05, mesoPct: 0.20, maxRepJump: 2 };
 export function suggestSet(args) {
   const { prev, ex, unit, targetRir, deload } = args;
   let speed = args.speed;
@@ -526,7 +619,7 @@ export function suggestSet(args) {
   if (!r || deload || !prev || prev.weight == null || r.weight == null || ex?.load_type !== 'weighted') return r;
   const inc = increment(ex, unit), w0 = Number(prev.weight), notes = [];
   const weekCap = Math.max(w0 + inc, Math.floor(w0 * (1 + GUARD.weeklyPct) / inc) * inc);
-  if (r.weight > weekCap) { r.weight = weekCap; notes.push('capped at about +10% a week'); }
+  if (r.weight > weekCap) { r.weight = weekCap; notes.push('capped at about +5% a week'); }
   if (args.mesoStart > 0) {
     const ceil = Math.floor(args.mesoStart * (1 + GUARD.mesoPct) / inc) * inc;
     if (r.weight > Math.max(ceil, w0)) { r.weight = Math.max(ceil, w0); r.reps = Math.min((ex?.rep_max ?? 30), Number(prev.reps) + 1); notes.push('at this meso\'s +20% ceiling — adding reps instead'); }
@@ -546,7 +639,7 @@ function suggestSetCore({ prev, ex, targetRir, prevTargetRir, deload, jointHold,
       const step = mode.step > 0 ? mode.step : increment(ex, unit), w0 = Number(prev.weight), u = unit || 'lb';
       if (sp === 'slow') return { weight: w0, reps: Number(prev.reps) + drop, note: `Same weight, +${drop} rep — ${speed.why}` };
       let add = step * drop;
-      if (sp === 'fast') { const inc = increment(ex, unit); add = Math.min(step * (drop + 1), Math.max(step * drop, Math.round(w0 * 0.10 / inc) * inc)); }
+      if (sp === 'fast') add = step * (drop + 1);   // the weekly cap below keeps this within ~5%
       return { weight: Math.max(barFloor(ex, unit), w0 + add), reps: Number(prev.reps), note: `+${add} ${u}, same reps${sp === 'fast' && add > step * drop ? ` — faster: ${speed.why}` : ''}` };
     }
   }
@@ -635,20 +728,27 @@ export function weightRange({ prev, ex, targetRir, prevTargetRir, bodyweight, un
  * Doc §5 — next week's set change for one muscle in one session.
  * R recovery, L workload, J joint pain, P pump (0–3), F performance (−1/0/1). Missing → treated as neutral.
  */
-export function setAdjustment({ R, L, J, P, F }) {
+export function setAdjustment({ R, L, J, P, F, priority = 'emphasize' }) {
   const n = v => (v == null ? null : Number(v));
   R = n(R); L = n(L); J = n(J); P = n(P); F = n(F);
   // holdRir: next week keeps this week's RIR for this muscle instead of stepping closer to failure (doc §5.1).
-  if (J === 3) return { delta: -1, holdRir: true, flag: 'Joint pain — consider swapping this exercise', rule: 1 };
-  if (R === 3) return { delta: -1, holdRir: true, rule: 2 };
-  if (F === -1 && R != null && R >= 2) return { delta: -1, holdRir: true, rule: 3 };
-  if (J === 2) return { delta: 0, rule: 4 };
-  if (L === 3) return { delta: 0, holdRir: true, rule: 5 };
+  if (J === 3) return { delta: -1, holdRir: true, flag: 'Joint pain — consider swapping this exercise', rule: 1, why: 'joint pain was high — one set fewer, and the exercise is flagged to swap' };
+  if (R === 3) return { delta: -1, holdRir: true, rule: 2, why: 'you were still beat up from last time — one set fewer' };
+  if (F === -1 && R != null && R >= 2) return { delta: -1, holdRir: true, rule: 3, why: 'performance dropped and recovery was poor — one set fewer' };
+  if (J === 2) return { delta: 0, rule: 4, why: 'joint discomfort — sets held' };
+  if (L === 3) return { delta: 0, holdRir: true, rule: 5, why: 'the workload was too much — sets held' };
   if (R != null && R <= 1 && L != null && L <= 1 && (F == null || F >= 0)) {
+    // Doc §5.5 — what a "ready for more" signal means depends on the muscle's priority.
+    if (priority === 'maintain' || priority === 'skip') return { delta: 0, rule: 8, why: 'maintain muscle — volume stays low on purpose' };
+    if (priority === 'grow') {
+      if (F === 1) return { delta: 0, rule: 9, why: 'performance improved and recovery was good, so no extra volume is needed yet' };
+      return { delta: 1, rule: 10, why: 'recovery was good but performance didn\'t move — one set added' };
+    }
     // +2 only with no joint discomfort at all; any joint pain (even "Low") limits the increase to +1 (review #2)
-    return { delta: R === 0 && L === 0 && (P == null || P <= 1) && !(J >= 1) ? 2 : 1, rule: 6 };
+    const two = R === 0 && L === 0 && (P == null || P <= 1) && !(J >= 1);
+    return { delta: two ? 2 : 1, rule: 6, why: two ? 'recovered fully with an easy workload and low pump — two sets added' : 'recovery and workload were good — one set added' };
   }
-  return { delta: 0, rule: 7 };
+  return { delta: 0, rule: 7, why: 'recovery and workload were in the normal range — sets held' };
 }
 
 /** Deload sets = half of the final accumulation week's (already adjusted) sets, rounded up (doc §1.8). */
@@ -656,8 +756,12 @@ export const deloadSets = lastWeekSets => Math.max(1, Math.ceil((lastWeekSets ||
 export const SESSION_CAP = 12, WEEKLY_CAP = 22;
 
 /** Apply a delta to one muscle's exercises in a session; returns [{id, target_sets}] changes. */
-export function distributeDelta(exs, delta, { sessionTotal, weeklyTotal }) {
-  if (delta > 0) delta = Math.max(0, Math.min(delta, SESSION_CAP - sessionTotal, WEEKLY_CAP - weeklyTotal));
+// Doc §5.5 — at most +2 sets per muscle per week in total, however many sessions train it (so two sessions can't
+// each add +2 and jump the week by 4). prevWeeklyTotal = that muscle's sets this week.
+export const WEEKLY_STEP_CAP = 2;
+export function distributeDelta(exs, delta, { sessionTotal, weeklyTotal, prevWeeklyTotal = null }) {
+  if (delta > 0) delta = Math.max(0, Math.min(delta, SESSION_CAP - sessionTotal, WEEKLY_CAP - weeklyTotal,
+    prevWeeklyTotal == null ? Infinity : prevWeeklyTotal + WEEKLY_STEP_CAP - weeklyTotal));
   if (!delta || !exs.length) return [];
   const list = exs.map(e => ({ id: e.id, target_sets: e.target_sets || 0 }));
   if (delta > 0) { list[list.length - 1].target_sets += delta; return [list[list.length - 1]]; }
