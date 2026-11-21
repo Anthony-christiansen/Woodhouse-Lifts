@@ -4,7 +4,7 @@ import * as L from './logic.js?v=5';
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
   { auth: { persistSession: true, autoRefreshToken: true } });
-const DOC_URL = 'https://docs.google.com/document/d/1zz3iiRduLlWdOPXbuIbzT3tDFEVrtJQVhwFxm0kdM14';
+const DOC_URL = 'https://docs.google.com/document/d/1R1DWOjoxgMkf5Mf9xdSKGG_d7fq-8daxWfPxhHeDc4M';
 
 const app = document.getElementById('app');
 const titleEl = document.getElementById('title');
@@ -36,8 +36,9 @@ function setHeader(title, back, tab) {
   gearBtn.hidden = !session || tab !== 'home'; gearBtn.onclick = () => go('#/settings');
   tabs.querySelectorAll('a').forEach(a => a.classList.toggle('on', a.dataset.tab === tab));
 }
-function openSheet(html, wire) {
+function openSheet(html, wire, locked = false) {
   sheet.innerHTML = `<div class="panel">${html}</div>`; sheet.hidden = false;
+  if (locked) sheet.dataset.lock = '1'; else delete sheet.dataset.lock;
   sheet.onclick = e => { if (e.target === sheet && !sheet.dataset.lock) closeSheet(); };
   wire?.(sheet.querySelector('.panel'));
 }
@@ -616,8 +617,9 @@ async function renderWorkout(dayId) {
       const ex = we.exercises; const n = Math.max(we.sets.length, we.target_sets || 0, 1);
       const p = prev[we.exercise_id];
       return `<div class="card" data-we="${we.id}" data-muscle="${esc(ex.muscle_group)}">
-        <div class="row"><div class="grow"><h3>${esc(ex.name)}</h3>
-          <div class="muted small">${esc(ex.muscle_group)} · ${we.target_sets} sets · ${deload ? 'deload' : `${we.target_rir} RIR`} · ${ex.rep_min}–${ex.rep_max} reps</div></div></div>
+        <div class="row"><div class="grow"><h3>${esc(ex.name)} <span class="trend" data-trend="${we.id}"></span></h3>
+          <div class="muted small">${esc(ex.muscle_group)} · ${we.target_sets} sets · ${deload ? 'deload' : `${we.target_rir} RIR`} · ${ex.rep_min}–${ex.rep_max} reps</div></div>
+          <button class="ghost sm" data-edit="${esc(ex.muscle_group)}" aria-label="Edit ratings" title="Edit ratings">✎</button></div>
         ${we.flag ? `<div class="pill bad" style="margin-top:6px">${esc(we.flag)}</div>` : ''}
         <div class="sets"><div class="set-head"><div>#</div><div>${wLabel(ex)}</div><div>reps</div><div></div></div>
           ${Array.from({ length: n }, (_, i) => {
@@ -643,29 +645,57 @@ async function renderWorkout(dayId) {
     return done ? `<button class="ghost sm" data-open="${esc(m)}">✓ ${esc(m)} rated · pump ${RATINGS.pump.opts[f.pump]}, ${RATINGS.workload.opts[f.workload].toLowerCase()}, joints ${RATINGS.joint_pain.opts[f.joint_pain].toLowerCase()}</button>`
       : `<button class="sm block" data-open="${esc(m)}">Rate ${esc(m)} (pump · workload · joints)</button>`;
   }
-  const wireRate = () => $$('[data-open]').forEach(b => b.onclick = () => openRating(b.dataset.open));
+  const wireRate = () => $$('[data-open]').forEach(b => b.onclick = () => openRating(b.dataset.open, !isRated(b.dataset.open) && muscleComplete(b.dataset.open)));
   wireRate();
 
   const muscleComplete = m => $$(`[data-muscle="${CSS.escape(m)}"] .set`).every(r => r.classList.contains('done'));
-  function openRating(m) {
+  // Progression indicator per exercise: best estimated strength today vs last time (doc §1.7).
+  function exerciseTrend(we) {
+    const card = app.querySelector(`[data-we="${we.id}"]`); if (!card) return null;
+    const cur = [...card.querySelectorAll('.set.done')].map(r => ({ weight: Number(r.querySelector('[data-f="weight"]').value) || 0,
+      reps: Number(r.querySelector('[data-f="reps"]').value), rir: we.target_rir })).filter(x => x.reps);
+    const p = prev[we.exercise_id]; if (!cur.length || !p?.sets.length) return null;
+    const a = L.bestE1rm(cur, we.exercises, profile?.bodyweight), b = L.bestE1rm(p.sets.map(x => ({ ...x, rir: x.rir ?? p.rir })), we.exercises, profile?.bodyweight);
+    if (a == null || b == null) return null;
+    return { t: L.performanceTrend(a, b), pct: (a - b) / b * 100, vs: p.carried ? 'last meso' : 'last week' };
+  }
+  const trendHtml = tr => !tr ? '' : `<span class="pill ${tr.t > 0 ? 'on' : tr.t < 0 ? 'bad' : ''}" title="vs ${tr.vs}">${tr.t > 0 ? '▲' : tr.t < 0 ? '▼' : '●'} ${tr.pct > 0 ? '+' : ''}${tr.pct.toFixed(1)}%</span>`;
+  const exComplete = we => { const c = app.querySelector(`[data-we="${we.id}"]`); return !!c && [...c.querySelectorAll('.set')].every(r => r.classList.contains('done')); };
+  function refreshTrend(we) { const el = app.querySelector(`[data-trend="${we.id}"]`); if (el) el.innerHTML = exComplete(we) ? trendHtml(exerciseTrend(we)) : ''; }
+  const isRated = m => feedback[m] && feedback[m].pump != null && feedback[m].workload != null && feedback[m].joint_pain != null;
+
+  // required = locked: can't dismiss or move on until all three are answered. Editing later via ✎ is not locked.
+  function openRating(m, required = true) {
     const f = { ...(feedback[m] || {}) };
-    openSheet(`<h3>${esc(m)} — how was that?</h3><div class="muted small">Rate right after your last set for this muscle.</div>
+    const exs = wes.filter(w => !isCardio(w) && w.exercises.muscle_group === m);
+    openSheet(`<h3>${esc(m)} — how was that?</h3>
+      <div class="muted small">${required ? 'Required before you continue.' : 'Adjust your ratings.'}</div>
+      <div class="card" style="margin:10px 0 4px;padding:10px"><div class="muted tiny">Progression</div>
+        ${exs.map(w => { const tr = exComplete(w) ? exerciseTrend(w) : null;
+          return `<div class="mover"><span>${esc(w.exercises.name)}</span>${tr ? trendHtml(tr) : `<span class="muted tiny">${exComplete(w) ? 'no history yet' : 'not finished'}</span>`}</div>`; }).join('')}</div>
       ${['pump', 'workload', 'joint_pain'].map(k => `<div class="fb-row"><label>${RATINGS[k].label}</label>${segHtml(k, f[k])}</div>`).join('')}
       <div class="spacer"></div><button class="primary block" id="saveRate">Save</button>
-      <button class="ghost block" id="later">Later</button>`, panel => {
+      ${required ? '' : '<button class="ghost block" id="later">Cancel</button>'}`, panel => {
       panel.querySelectorAll('[data-k]').forEach(b => b.onclick = () => {
         f[b.dataset.k] = +b.dataset.v;
         panel.querySelectorAll(`[data-k="${b.dataset.k}"]`).forEach(x => x.classList.toggle('on', x === b));
       });
-      panel.querySelector('#later').onclick = closeSheet;
+      const later = panel.querySelector('#later'); if (later) later.onclick = closeSheet;
       panel.querySelector('#saveRate').onclick = async () => {
         if (f.pump == null || f.workload == null || f.joint_pain == null) return toast('Pick one for each', true);
         const row = check(await sb.from('muscle_feedback').upsert({ workout_day_id: dayId, muscle_group: m, pump: f.pump, workload: f.workload, joint_pain: f.joint_pain },
           { onConflict: 'workout_day_id,muscle_group' }).select().single());
         feedback[m] = row; closeSheet();
         const slot = app.querySelector(`[data-rate="${CSS.escape(m)}"]`); if (slot) { slot.innerHTML = rateLine(m, row); wireRate(); }
+        enforceRatings();
       };
-    });
+    }, required);
+  }
+  // Any muscle whose sets are all done but isn't rated gets the locked prompt.
+  function enforceRatings() {
+    if (!sheet.hidden) return;
+    const m = muscles.find(x => muscleComplete(x) && !isRated(x));
+    if (m) openRating(m, true);
   }
 
   function wireSet(we, row) {
@@ -685,7 +715,9 @@ async function renderWorkout(dayId) {
       row.dataset.at = payload.completed_at || ''; wIn.classList.remove('sug');
       row.classList.toggle('done', done);
       const m = we.exercises.muscle_group;
-      if (markDone && done && muscleComplete(m) && !(feedback[m]?.workload != null)) openRating(m);
+      refreshTrend(we);
+      if (markDone && done && exComplete(we)) { const tr = exerciseTrend(we); if (tr && !muscleComplete(m)) toast(`${we.exercises.name}: ${tr.t > 0 ? '▲ up' : tr.t < 0 ? '▼ down' : '● same'} ${tr.pct > 0 ? '+' : ''}${tr.pct.toFixed(1)}% vs ${tr.vs}`); }
+      if (markDone && done) enforceRatings();
     };
     row.querySelector('.check').onclick = () => save(true);
     row.querySelectorAll('input').forEach(i => { i.oninput = () => i.classList.remove('sug'); i.onchange = () => save(false); });
@@ -722,6 +754,13 @@ async function renderWorkout(dayId) {
     };
   });
 
+  $$('[data-edit]').forEach(b => b.onclick = () => {
+    const m = b.dataset.edit;
+    if (!isRated(m) && !muscleComplete(m)) return toast(`Finish ${m}'s sets first — ratings open automatically`);
+    openRating(m, !isRated(m));
+  });
+  wes.filter(w => !isCardio(w)).forEach(refreshTrend);
+  if (!day.completed_at) enforceRatings();
   const sk = $('#skipDay'); if (sk) sk.onclick = async () => {
     if (!confirm('Skip this workout? Logged sets are kept.')) return;
     check(await sb.from('workout_days').update({ skipped_at: new Date().toISOString() }).eq('id', dayId)); go('#/meso/' + meso.id);

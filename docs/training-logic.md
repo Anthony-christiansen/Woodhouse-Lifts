@@ -198,7 +198,7 @@ When rule 1, 2, 3 or 5 fires (joint pain 3, still sore, performance down with sl
 ### 5.2 When the questions appear
 
 - **Before you start a session:** recovery questions for any muscle in today's session whose last session hasn't been rated yet. You must answer these first, because they set next week's volume for that earlier session.
-- **As soon as every set for a muscle is checked off:** pump, workload and joint pain for that muscle pop up automatically. You can also open them from the "Rate" button.
+- **As soon as every set for a muscle is checked off:** pump, workload and joint pain for that muscle open in a **locked** sheet. It shows each of that muscle's exercises with its progression indicator (▲ up / ● same / ▼ down vs. last week, by estimated strength), and you can't dismiss it or continue until all three are answered. Every exercise also shows its progression badge as soon as its last set is checked. Tap ✎ on any exercise to adjust ratings afterward.
 - **When you tap Finish:** the app calculates performance trend per muscle and saves it.
 
 ### 5.3 Order of days
