@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import * as L from './logic.js?v=22';
-import * as LEARN from './learn.js?v=22';
+import * as L from './logic.js?v=23';
+import * as LEARN from './learn.js?v=23';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -17,7 +17,7 @@ let authReturn = (() => {
   return null;
 })();
 let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
-export const APP_VERSION = '1.5.0'; // keep in sync with CHANGELOG.md
+export const APP_VERSION = '1.6.0'; // keep in sync with CHANGELOG.md
 const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
 const DOC_URL = 'https://docs.google.com/document/d/1lVTXsfzhUqOJ4bQRp0rp8nKUJsZa62Uasf7cR_FITlE';
 
@@ -931,7 +931,8 @@ async function renderWorkout(dayId) {
     const p = prev[we.exercise_id]; if (!p?.sets.length) return null;
     const base = baseFor(we, i);
     return L.suggestSet({ prev: base, ex: we.exercises, targetRir: we.target_rir, prevTargetRir: p.rir, deload,
-      jointHold: (prevFb[we.exercises.muscle_group]?.joint_pain ?? 0) >= 2, unit: unit(), mode: modeFor(we) });
+      jointHold: (prevFb[we.exercises.muscle_group]?.joint_pain ?? 0) >= 2, unit: unit(), mode: modeFor(we),
+      speed: L.progressionSpeed(prevFb[we.exercises.muscle_group]) });
   };
   const lastOfMuscle = {}; wes.filter(w => !isCardio(w)).forEach(w => lastOfMuscle[w.exercises.muscle_group] = w.id);
   const firstOfMuscle = {}; wes.filter(w => !isCardio(w)).forEach(w => { firstOfMuscle[w.exercises.muscle_group] ??= w.id; });
@@ -975,6 +976,7 @@ async function renderWorkout(dayId) {
           <div class="muted small">${esc(ex.muscle_group)} · ${we.target_sets} sets · ${deload ? 'deload' : `${we.target_rir} RIR`} · ${ex.rep_min}–${ex.rep_max} reps${!deload && !isCardio(we) && prev[we.exercise_id]?.sets.length && ex.load_type === 'weighted' ? (m => ` · <span class="prog-mode" title="How this lift progresses week to week">${m.mode === 'load' ? `progresses +${fmt(m.step)} ${unit()}` : 'progresses by reps'}</span>`)(modeFor(we)) : ''}</div>
           ${(w => w ? `<div class="muted tiny range">Weight window ${fmt(w.light)}–${fmt(w.heavy)} ${unit()} · change the weight and the reps re-target to match last time</div>` : '')(windowFor(we))}</div>
           ${infoBtn(we)}<button class="ghost sm" data-edit="${esc(ex.muscle_group)}" aria-label="Edit ratings" title="Edit ratings">✎</button></div>
+        ${(n => n && n !== 'Deload' && !day.completed_at ? `<div class="muted tiny prog-note">${/faster|extra rep/i.test(n) ? '⤴︎' : /holding|smaller|same weight/i.test(n) ? '⏸︎' : '↗︎'} This week: ${esc(n)}</div>` : '')(isCardio(we) ? null : suggestionFor(we, 0)?.note)}
         ${we.flag ? `<div class="pill bad" style="margin-top:6px">${esc(we.flag)}</div>` : ''}
         ${liftFlag(we)}${histNote(we)}
         <div class="sets"><div class="set-head"><div>#</div><div>${wLabel(ex)}</div><div>reps</div><div></div></div>

@@ -260,3 +260,4 @@ details.drill-m summary::-webkit-details-marker { display: none; }
 .hbar { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; } .hbar i { display: block; height: 100%; background: var(--accent); }
 details.drill-m b { text-align: right; }
 button.card.stat.center .chev { top: 6px; right: 8px; font-size: 12px; }
+.prog-note { margin-top: 4px; }

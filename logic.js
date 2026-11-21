@@ -491,17 +491,41 @@ export function progressionMode(trail, ex, unit) {
   const byEquip = ['Machine', 'Cable'].includes(ex?.equipment) || /sled/i.test(ex?.name || '');
   return { mode: ex?.load_type === 'weighted' && byEquip ? 'load' : 'reps', step: inc };
 }
-export function suggestSet({ prev, ex, targetRir, prevTargetRir, deload, jointHold, unit, mode = null }) {
+/**
+ * Doc §4.3 — how fast to progress this week, from last session's feedback for that muscle (autoregulation: the
+ * effort you reported adjusts the next load, as in RPE/RIR and APRE methods). Workload drives it; pump does not
+ * change the load (pump isn't a reliable hypertrophy signal) — pump and soreness adjust SETS instead (§5).
+ *   joint pain ≥ 2 or workload "Too much"   → hold   (same weight & reps)
+ *   workload "Pushed my limit"              → slow   (smaller jump)
+ *   workload "Easy"                         → fast   (one extra step)
+ *   otherwise / no feedback                 → normal
+ */
+export function progressionSpeed(fb) {
+  if (!fb) return { speed: 'normal', why: null };
+  if ((fb.joint_pain ?? 0) >= 2) return { speed: 'hold', why: 'joint pain last time' };
+  if (fb.workload === 3) return { speed: 'hold', why: 'you rated last time "Too much"' };
+  if (fb.workload === 2) return { speed: 'slow', why: 'you pushed your limit last time' };
+  if (fb.workload === 0) return { speed: 'fast', why: (fb.pump ?? 1) <= 1 ? 'last time felt easy with little pump' : 'last time felt easy' };
+  return { speed: 'normal', why: null };
+}
+export function suggestSet({ prev, ex, targetRir, prevTargetRir, deload, jointHold, unit, mode = null, speed = null }) {
+  const sp = speed?.speed || 'normal';
+  if (sp === 'hold' && prev && prev.reps != null && !deload) jointHold = true;
   // Load progression: the week's RIR drop is taken as more weight at the same reps (RP style), not +1 rep.
   if (mode?.mode === 'load' && prev && prev.reps != null && prev.weight != null && !deload && !jointHold && ex?.load_type === 'weighted') {
     const loggedRir = prev.rir != null ? Number(prev.rir) : (prevTargetRir ?? targetRir);
     const drop = loggedRir - targetRir, min = ex?.rep_min ?? 5, max = ex?.rep_max ?? 30;
     if (drop > 0 && Number(prev.reps) >= min && Number(prev.reps) <= max) {
-      const step = mode.step > 0 ? mode.step : increment(ex, unit);
-      return { weight: Math.max(barFloor(ex, unit), Number(prev.weight) + step * drop), reps: Number(prev.reps), note: `+${step * drop} ${unit || 'lb'}, same reps` };
+      const step = mode.step > 0 ? mode.step : increment(ex, unit), w0 = Number(prev.weight), u = unit || 'lb';
+      if (sp === 'slow') return { weight: w0, reps: Number(prev.reps) + drop, note: `Same weight, +${drop} rep — ${speed.why}` };
+      let add = step * drop;
+      if (sp === 'fast') { const inc = increment(ex, unit); add = Math.min(step * (drop + 1), Math.max(step * drop, Math.round(w0 * 0.10 / inc) * inc)); }
+      return { weight: Math.max(barFloor(ex, unit), w0 + add), reps: Number(prev.reps), note: `+${add} ${u}, same reps${sp === 'fast' && add > step * drop ? ` — faster: ${speed.why}` : ''}` };
     }
   }
-  const r = suggestSetRaw({ prev, ex, targetRir, prevTargetRir, deload, jointHold, unit });
+  const r = suggestSetRaw({ prev, ex, targetRir, prevTargetRir, deload, jointHold, unit, extraReps: sp === 'fast' ? 1 : sp === 'slow' ? -1 : 0 });
+  if (r && sp !== 'normal' && !deload && r.note == null && speed?.why) r.note = sp === 'fast' ? `+1 extra rep — ${speed.why}` : `Smaller jump — ${speed.why}`;
+  if (r && sp === 'hold' && !deload && speed?.why) r.note = `Holding — ${speed.why}`;
   return r && r.weight != null ? { ...r, weight: Math.max(barFloor(ex, unit), r.weight) } : r;
 }
 // Guardrail: barbell suggestions never go below the empty bar.
@@ -517,13 +541,15 @@ export function weightSanity(prevWeight, newWeight) {
   if (b <= a * 0.5) return { kind: 'low', ratio: b / a };
   return null;
 }
-function suggestSetRaw({ prev, ex, targetRir, prevTargetRir, deload, jointHold, unit }) {
+function suggestSetRaw({ prev, ex, targetRir, prevTargetRir, deload, jointHold, unit, extraReps = 0 }) {
   if (!prev || prev.reps == null) return null;
   const weight = prev.weight == null ? (ex?.load_type === 'weighted' ? null : 0) : Number(prev.weight);
   const loggedRir = prev.rir != null ? Number(prev.rir) : (prevTargetRir ?? targetRir);
   const min = ex?.rep_min ?? 5, max = ex?.rep_max ?? 30;
   if (jointHold) return { weight, reps: Number(prev.reps), note: 'Holding — joint pain last time' };
-  let reps = Number(prev.reps) + (loggedRir - targetRir);
+  // reps mode: +1 rep per RIR dropped; fast adds one more, slow adds one fewer (never below last week's reps)
+  let reps = Number(prev.reps) + Math.max(0, (loggedRir - targetRir) + (deload ? 0 : extraReps));
+  if (loggedRir - targetRir < 0) reps = Number(prev.reps) + (loggedRir - targetRir);
   if (deload) return { weight, reps: Math.max(1, Math.min(reps, Number(prev.reps))), note: 'Deload' };
   const inc = increment(ex, unit);
   let w = weight;

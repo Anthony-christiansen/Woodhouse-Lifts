@@ -369,3 +369,27 @@ console.log('GUARDRAIL TESTS PASSED');
   assert.equal(d.weight, 315, 'deload never adds weight');
   console.log('PROGRESSION MODE TESTS PASSED');
 }
+
+// --- Feedback sets the progression speed (doc §4.3) ---
+{
+  const sled = { name: 'Sled push', load_type: 'weighted', equipment: 'Barbell', rep_min: 5, rep_max: 30 };
+  const m = { mode: 'load', step: 10 }, prev = { weight: 315, reps: 27, rir: 1 }, base = { prev, ex: sled, targetRir: 0, unit: 'lb', mode: m };
+  const S = fb => L.progressionSpeed(fb);
+  assert.equal(S(null).speed, 'normal'); assert.equal(S({ workload: 1, pump: 2 }).speed, 'normal');
+  assert.equal(S({ workload: 0, pump: 0 }).speed, 'fast'); assert.equal(S({ workload: 2 }).speed, 'slow');
+  assert.equal(S({ workload: 3 }).speed, 'hold'); assert.equal(S({ workload: 0, joint_pain: 2 }).speed, 'hold');
+  const n = L.suggestSet({ ...base, speed: S({ workload: 1 }) }), f = L.suggestSet({ ...base, speed: S({ workload: 0, pump: 0 }) });
+  const sl = L.suggestSet({ ...base, speed: S({ workload: 2 }) }), h = L.suggestSet({ ...base, speed: S({ workload: 3 }) });
+  assert.deepEqual([n.weight, n.reps], [325, 27], 'normal: +10 lb');
+  assert.deepEqual([f.weight, f.reps], [335, 27], 'easy: +20 lb (capped at 10% of load)');
+  assert.deepEqual([sl.weight, sl.reps], [315, 28], 'pushed limit: same weight, +1 rep');
+  assert.deepEqual([h.weight, h.reps], [315, 27], 'too much: hold');
+  const row = { name: 'Row', load_type: 'weighted', equipment: 'Barbell', rep_min: 6, rep_max: 20 }, rb = { prev: { weight: 70, reps: 11, rir: 1 }, ex: row, targetRir: 0, unit: 'lb', mode: { mode: 'reps', step: 5 } };
+  assert.equal(L.suggestSet({ ...rb, speed: S({ workload: 1 }) }).reps, 12);
+  assert.equal(L.suggestSet({ ...rb, speed: S({ workload: 0 }) }).reps, 13, 'easy: +2 reps');
+  assert.equal(L.suggestSet({ ...rb, speed: S({ workload: 2 }) }).reps, 11, 'pushed limit: match last week');
+  const small = L.suggestSet({ prev: { weight: 50, reps: 10, rir: 1 }, ex: { load_type: 'weighted', equipment: 'Machine', rep_min: 8, rep_max: 15 }, targetRir: 0, unit: 'lb', mode: { mode: 'load', step: 5 }, speed: S({ workload: 0 }) });
+  assert.equal(small.weight, 55, 'fast never jumps more than ~10% (50 → 55, not 60)');
+  assert.equal(L.suggestSet({ ...base, deload: true, targetRir: 4, speed: S({ workload: 0 }) }).weight, 315, 'deload unaffected');
+  console.log('PROGRESSION SPEED TESTS PASSED');
+}

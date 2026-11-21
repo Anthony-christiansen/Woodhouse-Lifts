@@ -12,6 +12,20 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.6.0 — 2026-11-20 (23:40 MT) · "Feedback sets the pace"
+
+**New — your ratings now change how fast a lift progresses (autoregulation).**
+- Workload **Easy** → faster: one extra step (by-weight lifts: e.g. sled 315×27 → **335×27**, capped at ~10% of the load; by-reps lifts: row 70×11 → **70×13**).
+- **Pretty good** / no rating → normal (325×27; 70×12).
+- **Pushed my limit** → slower: by-weight lifts keep the weight and add a rep (315×28); by-reps lifts match last week (70×11).
+- **Too much** or joint pain 2+ → hold (same as last week).
+- **Pump doesn't change the load** (research doesn't support pump as a growth signal); it stays in the set/volume rules.
+- Each exercise shows why, e.g. "⤴︎ This week: +20 lb, same reps — faster: last time felt easy with little pump".
+
+**Docs:** Training Logic §4.3 (speed rules) and new §4.4 — every rule in the app graded against the research (strong / moderate / practice-based), with 3 new sources on autoregulation (Huang 2025, Mann 2010, Suchomel 2021).
+
+---
+
 ## 1.5.0 — 2026-11-20 (23:15 MT) · "Weight or reps, like RP"
 
 **Fixed — suggestions always added a rep, even on lifts that progress by weight.**

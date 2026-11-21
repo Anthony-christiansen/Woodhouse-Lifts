@@ -275,6 +275,39 @@ Light and heavy loads build similar muscle when sets end near failure (Schoenfel
 
 ---
 
+### 4.3 Progression speed from your feedback (autoregulation)
+
+The ratings you give after each muscle now set **how big next week's jump is** for that muscle's lifts. This is autoregulation: the effort you report adjusts the next load. Rating-based (RPE/RIR) and performance-based (APRE) autoregulation have produced equal or better strength gains than fixed week-to-week increases [34, 35, 36, 16].
+
+| Last session's rating for the muscle | Speed | By-weight lift (e.g. sled 315×27, step +10) | By-reps lift (e.g. row 70×11) |
+|---|---|---|---|
+| Workload **Easy** | **Faster** — one extra step | **335 × 27** (+20 lb, never more than ~10% of the load) | **70 × 13** (+2 reps) |
+| Workload **Pretty good**, or no rating | Normal | 325 × 27 | 70 × 12 |
+| Workload **Pushed my limit** | **Slower** — smaller jump | **315 × 28** (same weight, +1 rep) | **70 × 11** (match last week) |
+| Workload **Too much**, or joint pain 2+ | **Hold** | 315 × 27 | 70 × 11 |
+
+- The reason shows on the exercise, e.g. "⤴︎ This week: +20 lb, same reps — faster: last time felt easy with little pump" or "⏸︎ This week: Holding — you rated last time "Too much"".
+- **Pump does not change the load.** Pump and cell swelling are not supported as drivers of muscle growth [14], so pump only feeds the set (volume) rules in §5, together with soreness and workload. It appears in the note as context only.
+- The "Fast" cap: a weight jump is at most about 10% of the load (50 lb → 55, not 60), so a good day on a light lift can't produce a big leap.
+- Deload weeks are never affected.
+
+### 4.4 How this logic lines up with the research
+
+| Rule in the app | Evidence | Strength of evidence |
+|---|---|---|
+| 10–20 hard sets per muscle per week, more ≈ more growth with diminishing returns (§1.1) | Dose–response meta-analyses [1, 2, 26] | Strong |
+| Sets taken close to failure (0–3 RIR) | Proximity-to-failure meta-regression and RCTs [4, 5, 6] | Strong for "close to failure works"; moderate on the exact best RIR |
+| Wide rep range (about 5–30) grows muscle when close to failure | Load meta-analyses [9, 25] | Strong |
+| Each muscle trained about 2×/week | Frequency meta-analyses [10, 11] | Moderate (volume matters more than frequency) |
+| Progressive overload week to week (add reps or load) | ACSM position stand [25] | Strong as a principle |
+| RIR stepping down across a meso (3 → 0) then a deload | Common periodization practice; deload studies are mixed [17, 18, 19] | Moderate–limited; practice-based |
+| Adjusting load from reported effort (§4.3) | Autoregulation reviews and network meta-analysis [16, 34, 35, 36] | Moderate (mostly strength outcomes; few hypertrophy trials) |
+| By-weight vs by-reps progression (§4.0) | Both are forms of double progression [36]; no trial shows one beats the other for growth | Practice-based |
+| Pump / soreness as signals | Not reliable indicators of growth [13, 14, 15] | Used only for volume nudges, never for load |
+| Lift status uses performance, not RIR-credited estimates (§6.1) | RIR self-ratings are imprecise, especially far from failure [7, 8] | Design choice to avoid false "stalled" flags |
+
+Honest limits: most autoregulation studies measure strength, not muscle size, and the exact sizes of the steps (+1 step for Easy, smaller for Pushed) are sensible defaults, not values tested in a trial. They're kept small on purpose and can be tuned.
+
 ## 5. Set (volume) adjustment, per muscle per session
 
 Inputs:
@@ -450,3 +483,6 @@ Rules, checked in this order:
 Sources 25–31 back the in-app **Learn** pages (goal guides for strength, athleticism, maintenance and cardio).
 32. Kłobuchowski W et al. Exercise-Based Strategies from Warm-Up to Training: A Systematic Review of Performance Enhancement and Injury Prevention. *Sports (Basel)* 2026. https://doi.org/10.3390/sports14050187
 33. Xu K et al. Optimizing Post-activation Performance Enhancement in Athletic Tasks: A Systematic Review with Meta-analysis. *Sports Med* 2025. https://doi.org/10.1007/s40279-024-02170-6
+34. Huang Z et al. Autoregulated resistance training for maximal strength enhancement: A systematic review and network meta-analysis. *J Exerc Sci Fit* 2025. https://doi.org/10.1016/j.jesf.2025.07.006
+35. Mann JB et al. The effect of autoregulatory progressive resistance exercise vs. linear periodization on strength improvement in college athletes. *J Strength Cond Res* 2010. https://doi.org/10.1519/JSC.0b013e3181def4a6
+36. Suchomel TJ et al. Training for Muscular Strength: Methods for Monitoring and Adjusting Training Intensity. *Sports Med* 2021. https://doi.org/10.1007/s40279-021-01488-9
