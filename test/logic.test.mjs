@@ -220,3 +220,91 @@ console.log('PREFERENCE TESTS PASSED');
   assert.equal(L.warmupPlan({ ex: { load_type: 'cardio' } })[0].weight, null);
 }
 console.log('WARM-UP TESTS PASSED');
+
+// Lift status (doc §6.1)
+{
+  const ser = (...v) => v.map((e, i) => ({ e, date: `2026-10-${10 + i}` }));
+  assert.equal(L.liftStatus(ser(100)).status, 'new');
+  assert.equal(L.liftStatus(ser(100, 102, 104, 106.5)).status, 'pr');
+  assert.equal(L.liftStatus(ser(100, 110, 105, 106)).status, 'regressing');          // 105, 106 both >3% under 110
+  assert.equal(L.liftStatus(ser(100, 105, 105.4, 104.8, 105.2)).status, 'stalled');   // best of last 3 within 1% of earlier best
+  assert.equal(L.liftStatus(ser(100, 103, 102.5)).status, 'progressing');             // not a PR (103 > 102.5), up vs first
+  assert.equal(L.liftStatus(ser(100, 100.5)).status, 'steady');
+  // older history counts: a "PR" in the window that doesn't beat the all-time best isn't a PR
+  assert.notEqual(L.liftStatus(ser(100, 102, 104), 120).status, 'pr');
+  assert.notEqual(L.liftStatus(ser(100, 102, 104), 120).status, 'regressing', 'an old peak alone is not a recent drop');
+  // one odd high week long ago doesn't make a steady lift "down" (Pallof Press case)
+  assert.notEqual(L.liftStatus(ser(47, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45)).status, 'regressing');
+  assert.equal(L.liftStatus(ser(47, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45)).status, 'stalled');
+  const st = L.liftStatus(ser(100, 105, 105, 105, 105), null, { name: 'Leg Extension', rir: 2 });
+  assert.ok(st.rec.includes('add 1 rep'), 'stalled recommendation is concrete');
+  assert.ok(L.liftStatus(ser(100, 110, 105, 106), null, { rir: 1 }).rec.includes('1 RIR'));
+}
+console.log('LIFT STATUS TESTS PASSED');
+{
+  const ser = (...v) => v.map((e, i) => ({ e, date: `2026-10-${10 + i}` }));
+  assert.equal(L.prsSince(ser(100, 105, 104, 110), null, '2026-10-11').count, 2);   // 105 and 110
+  assert.equal(L.prsSince(ser(100, 105, 104, 110), 120, '2026-10-01').count, 0);    // older best of 120 not beaten
+  assert.equal(L.prsSince(ser(100, 105, 104, 110), null, '2026-10-13').count, 1);   // only 110 is inside the meso
+}
+console.log('PR COUNT TESTS PASSED');
+
+// Weekly bests (doc §6.1): heavy/light days don't read as ups and downs; an unfinished light week is ignored
+{
+  const S = (d, e) => ({ date: d, e });
+  const alt = [S('2026-10-05', 256), S('2026-10-08', 233), S('2026-10-12', 256), S('2026-10-15', 238), S('2026-10-19', 263), S('2026-10-22', 244),
+               S('2026-10-26', 263), S('2026-10-29', 240), S('2026-11-02', 260), S('2026-11-05', 239)];
+  const wb = L.weeklyBest(alt, new Date('2026-11-20T12:00:00'));
+  assert.deepEqual(wb.map(x => x.e), [256, 256, 263, 263, 260]);
+  assert.ok(!['regressing', 'stalled'].includes(L.liftStatus(wb).status), 'alternating days never read as down');
+  const wb2 = L.weeklyBest([...alt, S('2026-11-09', 262), S('2026-11-12', 240)], new Date('2026-11-20T12:00:00'));
+  assert.equal(L.liftStatus(wb2).status, 'stalled', 'three flat weeks after the best → stalled');
+  const partial = [S('2026-11-09', 260), S('2026-11-17', 230)];   // this week only the light day so far
+  assert.deepEqual(L.weeklyBest(partial, new Date('2026-11-18T12:00:00')).map(x => x.e), [260], 'light current week dropped');
+  const better = [S('2026-11-09', 260), S('2026-11-17', 270)];
+  assert.equal(L.weeklyBest(better, new Date('2026-11-18T12:00:00')).length, 2, 'current week kept when it is already better');
+}
+console.log('WEEKLY BEST TESTS PASSED');
+
+// Splits (doc §2.0)
+{
+  const lib = L.MUSCLES.flatMap(m => [0, 1, 2].map(k => ({ id: m + k, name: m + ' ' + k, muscle_group: m, kind: k ? 'isolation' : 'compound', load_type: 'weighted', equipment: 'Machine' })));
+  const pr = L.templatePriorities('whole');
+  const mk = (split, n) => L.autofill({ plan: Array.from({ length: n }, (_, i) => ({ label: 'Day ' + (i + 1), slots: [] })), priorities: pr, focus: 'whole', library: lib, mode: 'all', split });
+  const musclesOn = d => new Set(d.slots.map(s => s.muscle));
+  // PPL x6: push days hold only push muscles, etc.; every muscle trained 2×
+  const ppl = mk('ppl', 6);
+  assert.deepEqual(ppl.map(d => d.label), ['Push', 'Pull', 'Legs', 'Push', 'Pull', 'Legs']);
+  for (const d of ppl) for (const m of musclesOn(d)) assert.ok(({ Push: ['Chest', 'Shoulders', 'Triceps'], Pull: ['Back', 'Biceps', 'Traps', 'Forearms'], Legs: ['Quads', 'Hamstrings', 'Glutes', 'Calves', 'Abs'] })[d.label].includes(m), `${m} on ${d.label}`);
+  for (const m of ['Chest', 'Back', 'Quads']) assert.equal(ppl.filter(d => musclesOn(d).has(m)).length, 2, `${m} 2×/week on PPL`);
+  // Upper/Lower x4
+  const ul = mk('upper_lower', 4);
+  assert.deepEqual(ul.map(d => d.label), ['Upper', 'Lower', 'Upper', 'Lower']);
+  assert.ok(!musclesOn(ul[0]).has('Quads') && !musclesOn(ul[1]).has('Chest'));
+  // Full body: every focus muscle on every day
+  const fb = mk('full_body', 3);
+  for (const d of fb) for (const m of ['Chest', 'Back', 'Quads', 'Hamstrings', 'Glutes', 'Shoulders']) assert.ok(musclesOn(d).has(m), `${m} every day on full body`);
+  // Full-body split (default): days differ, big muscles 2×
+  const fbs = mk('full_body_split', 4);
+  assert.ok(fbs.some(d => !musclesOn(d).has('Chest')), 'not every muscle every day');
+  for (const m of ['Chest', 'Back', 'Quads']) assert.ok(fbs.filter(d => musclesOn(d).has(m)).length >= 2);
+  // weekly volume identical across splits for the same plan
+  const tot = days => days.reduce((a, d) => a + d.slots.reduce((b, s) => b + s.sets, 0), 0);
+  assert.equal(tot(mk('ppl', 6)), tot(mk('full_body_split', 6)));
+  // recommendations by days available
+  assert.equal(L.defaultSplit(6), 'full_body_split'); assert.equal(L.defaultSplit(4), 'full_body_split'); assert.equal(L.defaultSplit(2), 'full_body');
+  assert.ok(L.splitsFor(5).some(x => x.id === 'ppl_ul') && !L.splitsFor(5).some(x => x.id === 'ppl'));
+  // no split param → original behaviour
+  assert.deepEqual(L.autofill({ plan: [{ label: 'Day 1', slots: [] }, { label: 'Day 2', slots: [] }], priorities: pr, focus: 'whole', library: lib, mode: 'all' }).map(d => d.label), ['Day 1', 'Day 2']);
+}
+console.log('SPLIT TESTS PASSED');
+
+// Weight guardrails
+{
+  assert.equal(L.weightSanity(225, 2250).kind, 'high'); assert.equal(L.weightSanity(225, 22.5).kind, 'low');
+  assert.equal(L.weightSanity(225, 245), null); assert.equal(L.weightSanity(null, 100), null);
+  const bb = { kind: 'compound', load_type: 'weighted', equipment: 'Barbell', rep_min: 8, rep_max: 12 };
+  const sg = L.suggestSet({ prev: { weight: 45, reps: 3, rir: 0 }, ex: bb, targetRir: 3, prevTargetRir: 3, unit: 'lb' });
+  assert.ok(sg.weight >= 45, 'never below the empty bar');
+}
+console.log('GUARDRAIL TESTS PASSED');

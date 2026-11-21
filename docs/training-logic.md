@@ -106,6 +106,23 @@ Why:
 
 ## 2. Mesocycle templates
 
+### 2.0 Splits: how the week is laid out
+
+Building a meso is four steps: **Goal** (§1.10) → **Days & split** → **Emphasis** (the table below) → name. The split decides which muscles go on which day. The emphasis decides how many sets each muscle gets.
+
+| Split | Days allowed | Default for | Week layout (example) |
+|---|---|---|---|
+| Full-body split | 2–6 | 3, 4, 5, 6 days | Full body A · B · C … — each day trains part of the body; each muscle on about 2 days a week |
+| Full body | 2–4 | 2 days | 3 days: Full body · Full body · Full body (every muscle every day, fewer sets each day) |
+| Upper / Lower | 2, 4, 6 | — | Upper · Lower · Upper · Lower |
+| Push / Pull / Legs | 3, 6 | — | Push · Pull · Legs · Push · Pull · Legs |
+| PPL + Upper/Lower | 5 | — | Push · Pull · Legs · Upper · Lower |
+
+- Push = chest, shoulders, triceps. Pull = back, biceps, traps, forearms. Legs = quads, hamstrings, glutes, calves, abs. Upper days add traps and forearms; Lower days add abs.
+- Only splits that fit the chosen day count are offered; changing days resets to the default split (marked "recommended").
+- Why the full-body split is the default for 3+ days: frequency of 2×/week per muscle is enough when weekly sets are equal (§1.4), and spreading muscles across days keeps each session shorter than doing everything every day.
+- 3-day PPL trains each muscle once a week. That's allowed (volume matters more than frequency, §1.4), but the full-body split gets 2× for the same days.
+
 | Template | Focused muscles (≈10 sets/wk start, ≥2×/wk) | Maintained (≈4 sets/wk) |
 |---|---|---|
 | Upper focus | Chest, Back, Shoulders, Biceps, Triceps | Quads, Hamstrings, Glutes, Calves |
@@ -230,6 +247,11 @@ If you type a weight other than the suggestion, the app re-targets the reps so t
 - **Too heavy** turns a hypertrophy set into a low-rep strength set.
 - **Too light** needs so many reps that the set becomes an endurance grind and RIR is hard to judge.
 
+**Guardrails against bad weights.**
+- **Typo check.** If the weight you type is **≥ 1.5×** or **≤ 0.5×** the same set last time, the box turns amber and a note asks if it's a typo. Example: 70 lb last time, 700 typed → flagged. 70 → 90 is not flagged (1.29×). The app **never blocks** the weight: big real changes happen (new variation, coming back from time off, an injury).
+- **Empty-bar floor.** Suggestions for barbell lifts never go below 45 lb (20 kg).
+- There is no fixed upper limit: strength varies too much between people for one number to be safe.
+
 Light and heavy loads build similar muscle when sets end near failure (Schoenfeld 2017, ACSM 2026), so any weight in the window is a valid choice. The window just keeps the effort comparable week to week. Deload weeks skip re-targeting.
 
 ---
@@ -322,6 +344,23 @@ In week 1 of a new mesocycle, each exercise's weight is auto-matched from your l
 - **Cardio:** sessions, minutes, RPE and load per week.
 
 ---
+
+### 6.1 Lift status flags (home screen, chart, and in the workout)
+
+Each lift in your current mesocycle gets a status from its best estimated strength per session (§1.7). Deload sessions, myo-rep mini-sets and warm-ups are left out, and ±1% counts as "the same". Each lift is judged on its **best session per week**, so a heavier day and a lighter day in the same week don't read as ups and downs. Only the **last 6 months** count. The current week counts only once it's at least as good as the week before. The rules are checked in this order:
+
+| Status | Rule | What the app tells you to do |
+|---|---|---|
+| 🏆 PR | Latest week beats every week in the last 6 months by more than 1% | Keep the plan. Add a rep, or a small weight jump once you pass the top of the rep range. |
+| 📉 Down | The last 2 weeks are both more than 3% below your best of the 4 weeks before them | Usually fatigue. Keep the weight, match last time's reps at today's RIR, and rate recovery honestly so the set rules (§5) can trim volume. If it drops again next week, take an early deload or a lighter week. |
+| ⚠️ Stalled | 4+ weeks, and the best of the last 3 is within ±1% of your best of the 6 weeks before them | Keep the weight and add 1 rep to the first set (double progression). Still stuck next week? Drop 5–10% and build back over 2–3 weeks, or swap to a close variation next mesocycle. |
+| Up | Latest is more than 1% above the oldest session in the window | Keep going. |
+| Steady / New | Anything else, or fewer than 2 sessions | Keep chasing a rep at the same weight. |
+
+**Where it shows:**
+- **Home:** "This meso's lifts", with lifts that need attention listed first, and "PRs this meso". Tap any lift to open its chart.
+- **Chart page:** the status and recommendation at the top; a This meso / 3 months / All range; 🏆 PR markers; and a dashed line where the meso started.
+- **Workout:** a flag on the lift itself for Stalled, Down or last-time PR. Tap it for the full recommendation and a link to the chart. Today's unfinished session is left out, so the flag is about how the lift went in earlier sessions.
 
 ## 7. Sources (all retrieved from PubMed)
 

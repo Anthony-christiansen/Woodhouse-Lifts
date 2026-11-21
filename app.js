@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import * as L from './logic.js?v=13';
-import * as LEARN from './learn.js?v=13';
+import * as L from './logic.js?v=15';
+import * as LEARN from './learn.js?v=15';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -17,7 +17,7 @@ let authReturn = (() => {
   return null;
 })();
 let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
-export const APP_VERSION = '1.0.0'; // keep in sync with CHANGELOG.md
+export const APP_VERSION = '1.1.0'; // keep in sync with CHANGELOG.md
 const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
 const DOC_URL = 'https://docs.google.com/document/d/15VaqDYH6QBzqn1T-7rAyGJPmPbj07q4MZhZ9rYWffrg';
 
@@ -37,6 +37,7 @@ const go = h => { location.hash = h; };
 const unit = () => profile?.unit || 'lb';
 // Weights are stored in lb; W() shows them in the user's unit, toLb() converts what they type back.
 const W = v => L.toUnit(v, unit()), toLb = v => L.fromUnit(v, unit());
+const fmtNum = n => (Math.round(n * 100) / 100).toString();
 const bwD = () => W(profile?.bodyweight); // bodyweight in display units
 const fmt = n => (n == null ? '–' : Number(n) % 1 ? Number(n).toFixed(1) : String(Number(n)));
 // Local calendar date (not UTC — an evening workout in Utah must not land on tomorrow).
@@ -127,6 +128,28 @@ function syncBadge() {
 window.addEventListener('online', () => flushQueue());
 document.addEventListener('visibilitychange', () => { if (!document.hidden) flushQueue(); });
 setInterval(() => { if (Object.keys(qLoad()).length) flushQueue(); }, 20000);
+
+// ---------- per-lift insights (doc §6.1) ----------
+// For a list of exercise ids: recent sessions + earlier best from the database (lift_recent), then the
+// training engine's status (PR / Up / Steady / Stalled / Down) and a concrete recommendation.
+const STATUS_ORDER = { regressing: 0, stalled: 1, pr: 2, progressing: 3, steady: 4, new: 5 };
+const statusPill = st => `<span class="pill st-${st.status}">${st.label}${st.pct != null && st.status !== 'new' ? ` ${st.pct > 0 ? '+' : ''}${st.pct.toFixed(1)}%` : ''}</span>`;
+async function liftInsights(ids, { excludeSessions = [], since = null, rirFor = {} } = {}) {
+  if (!ids.length) return {};
+  const rows = check(await sb.rpc('lift_recent', { p_ids: ids, p_n: 30, p_days: 182 }));
+  const by = {};
+  for (const r of rows) {
+    if (excludeSessions.includes(r.session_id)) continue; // e.g. today's unfinished session
+    (by[r.exercise_id] = by[r.exercise_id] || { id: r.exercise_id, name: r.name, prior: r.prior_best == null ? null : Number(r.prior_best), sessions: [] })
+      .sessions.push({ e: Number(r.best_e1rm), date: r.done_at.slice(0, 10), top: { weight: r.top_weight, reps: r.top_reps } });
+  }
+  for (const x of Object.values(by)) {
+    x.weeks = L.weeklyBest(x.sessions);   // judge on each week's best session (heavy + light days don't look like ups and downs)
+    x.status = L.liftStatus(x.weeks, x.prior, { name: x.name, rir: rirFor[x.id] ?? null });
+    x.prs = since ? L.prsSince(x.weeks, x.prior, since) : { count: 0, last: null };
+  }
+  return by;
+}
 
 let prefsCache = null;
 async function loadPrefs(force = false) {
@@ -382,12 +405,21 @@ async function renderHome() {
   const ws = weekStart(); const eightAgo = new Date(ws); eightAgo.setDate(eightAgo.getDate() - 7 * 7);
   // Lifting totals, weekly sets, PRs and strength trend are computed in the database (dashboard_stats) — a few KB, not the whole history.
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-  const [cSess, cSets, stats, warnings, mesoCount] = await Promise.all([
+  // Home stats follow the CURRENT mesocycle's lifts (falls back to all lifts when there's no meso).
+  const mesoLifts = meso ? check(await sb.from('workout_exercises').select('exercise_id, exercises!inner(name, load_type), workout_days!inner(mesocycle_id)')
+    .eq('workout_days.mesocycle_id', meso.id)) : [];
+  const liftIds = [...new Set(mesoLifts.filter(x => x.exercises.load_type !== 'cardio').map(x => x.exercise_id))];
+  const [cSess, cSets, stats, warnings, mesoCount, insights] = await Promise.all([
     cardioSince(isoDay(eightAgo)), workoutCardioSince(eightAgo.toISOString()),
     sb.rpc('dashboard_stats', { p_tz: tz }).then(check),
     meso ? slipFor(meso) : Promise.resolve([]),
     sb.from('mesocycles').select('id', { count: 'exact', head: true }).then(x => x.count || 0),
+    liftInsights(liftIds, { since: meso?.started_on || null }),
   ]);
+  const lifts = Object.values(insights).sort((a, b) => STATUS_ORDER[a.status.status] - STATUS_ORDER[b.status.status] || a.name.localeCompare(b.name));
+  const mesoPrs = lifts.filter(x => x.prs.count).map(x => ({ id: x.id, name: x.name, pct: x.prs.last.pct, date: x.prs.last.date, n: x.prs.count }))
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const prCount = meso ? lifts.reduce((a, x) => a + x.prs.count, 0) : (stats.prs || []).length;
   const bw = profile?.bodyweight;
   const cardio = cardioItems(cSess, cSets);
   const inWeek = (dstr, s) => { const d = new Date(dstr + 'T12:00'); const e = new Date(s); e.setDate(e.getDate() + 7); return d >= s && d < e; };
@@ -428,12 +460,17 @@ async function renderHome() {
       <div class="card stat"><span class="muted small">Workouts this week</span><span class="big">${wk.filter(d => d.completed_at).length}/${wk.length || 0}</span></div>
       <div class="card stat"><span class="muted small">Sets this week</span><span class="big">${setsPerWeek[7]}</span></div>
       <div class="card stat"><span class="muted small">Cardio this week</span><span class="big">${fmt(cMin)}<span class="muted small"> min</span></span><span class="muted tiny">load ${fmt(cLoad)}</span></div>
-      <div class="card stat"><span class="muted small">PRs (14 days)</span><span class="big">${prs.length}</span></div>
+      <div class="card stat"><span class="muted small">${meso ? 'PRs this meso' : 'PRs (14 days)'}</span><span class="big">${prCount}</span></div>
     </div>
     <div class="card"><b>Hard sets per week</b>${bars(setsPerWeek, maxSets, 'var(--accent)')}</div>
     <div class="card"><b>Cardio minutes per week</b> <span class="muted tiny">sessions + in-workout</span>${bars(cardioPerWeek, maxC, 'var(--info)')}</div>
-    ${prs.length ? `<div class="card"><b>Recent PRs 🏆</b>${prs.slice(0, 5).map(p => `<div class="mover"><span>${esc(p.name)}</span><span class="pill on">+${Number(p.pct).toFixed(1)}%</span></div>`).join('')}</div>` : ''}
-    ${movers.length ? `<div class="card"><b>Strength trend · last 8 weeks</b>
+    ${meso && lifts.length ? `<div class="card"><div class="row"><b class="grow">This meso’s lifts</b><span class="muted tiny">tap a lift for its chart</span></div>
+        ${lifts.filter(x => ['regressing', 'stalled'].includes(x.status.status)).length ? `<div class="muted small" style="margin:4px 0 2px">${lifts.filter(x => ['regressing', 'stalled'].includes(x.status.status)).length} need attention — you’ll see what to do on that lift in your next workout.</div>` : ''}
+        ${lifts.map((x, i) => `<button class="mover lift-row ${i >= 8 ? 'more' : ''}" data-go="#/progress/${x.id}" ${i >= 8 ? 'hidden' : ''}><span>${esc(x.name)}</span>${statusPill(x.status)}<span class="chev">›</span></button>`).join('')}
+        ${lifts.length > 8 ? `<button class="ghost sm" id="moreLifts">Show all ${lifts.length}</button>` : ''}</div>` : ''}
+    ${mesoPrs.length ? `<div class="card"><b>PRs this meso 🏆</b>${mesoPrs.slice(0, 5).map(p => `<button class="mover lift-row" data-go="#/progress/${p.id}"><span>${esc(p.name)}${p.n > 1 ? ` <span class="muted tiny">×${p.n}</span>` : ''}</span><span class="pill on">+${p.pct.toFixed(1)}%</span><span class="chev">›</span></button>`).join('')}</div>` : ''}
+    ${!meso && prs.length ? `<div class="card"><b>Recent PRs 🏆</b>${prs.slice(0, 5).map(p => `<div class="mover"><span>${esc(p.name)}</span><span class="pill on">+${Number(p.pct).toFixed(1)}%</span></div>`).join('')}</div>` : ''}
+    ${!meso && movers.length ? `<div class="card"><b>Strength trend · last 8 weeks</b>
         ${[...movers.slice(0, 3), ...movers.slice(-2).filter(m => m.pct < 0 && !movers.slice(0, 3).includes(m))].map(m => `<div class="mover"><span>${esc(m.name)}</span>
           <span class="pill ${m.pct > 0 ? 'on' : m.pct < 0 ? 'bad' : ''}">${m.pct > 0 ? '+' : ''}${Number(m.pct).toFixed(1)}%</span></div>`).join('')}
         <button class="ghost sm" data-go="#/progress">All exercises ›</button></div>` : ''}
@@ -450,6 +487,7 @@ async function renderHome() {
       <button class="tile" data-go="#/progress"><span class="ico">📈</span><b>Progress</b><span class="muted small">Strength per lift</span></button>
     </div>`;
   $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
+  $('#moreLifts') && ($('#moreLifts').onclick = e => { $$('.lift-row.more').forEach(r => r.hidden = false); e.target.remove(); });
 }
 
 // ---------- mesocycles ----------
@@ -494,22 +532,30 @@ async function renderBuilder() {
       .map(e => `<option value="${e.id}" ${e.id === sel ? 'selected' : ''}>${P.favorites.has(e.id) ? '★ ' : ''}${esc(e.name)}</option>`).join('');
 
   const step1 = () => {
+    if (!S.split || !L.SPLITS[S.split]?.days.includes(S.days)) S.split = L.defaultSplit(S.days);
+    const splits = L.splitsFor(S.days);
+    const preview = L.splitLayout(S.split, S.days).map(d => d.label).join(' · ');
     app.innerHTML = `
-      <div class="card"><div class="muted small">Step 1 of 2 · Goal</div>
-        <div class="seg c3" role="radiogroup" aria-label="Training goal">${Object.entries(L.GOALS).map(([k, g]) => `<button type="button" role="radio" aria-checked="${S.goal === k}" data-goal="${k}" class="${S.goal === k ? 'on' : ''}">${g.name}</button>`).join('')}</div>
-        <div class="muted small" style="margin-top:6px">${L.GOALS[L.goalOf(S.goal)].blurb} <a href="#/learn/${S.goal === 'athletic' ? 'athletic' : S.goal}">Why?</a></div>
+      <div class="card"><div class="step-h"><span class="step-n">1</span><b>Goal</b></div>
+        <div class="goal-tiles" role="radiogroup" aria-label="Training goal">${Object.entries(L.GOALS).map(([k, g]) => `<button type="button" role="radio" aria-checked="${S.goal === k}" data-goal="${k}" class="goal-tile ${S.goal === k ? 'on' : ''}"><b>${g.name}</b><span class="tiny">${esc(g.blurb)}</span></button>`).join('')}</div>
+        <a class="small" href="#/learn/${S.goal}">How ${L.GOALS[L.goalOf(S.goal)].name.toLowerCase()} training works ›</a>
       </div>
-      <div class="card"><div class="muted small">Base template</div>
+      <div class="card"><div class="step-h"><span class="step-n">2</span><b>Days & split</b></div>
+        <div class="row"><div class="grow"><label for="days">Training days / week</label>
+          <select id="days">${[2, 3, 4, 5, 6].map(n => `<option ${n === S.days ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
+          <div class="grow"><label for="weeks">Weeks (last is deload)</label>
+          <select id="weeks">${[3, 4, 5, 6, 7, 8].map(n => `<option ${n === S.weeks ? 'selected' : ''}>${n}</option>`).join('')}</select></div></div>
         <div class="spacer"></div>
+        ${splits.map(x => `<button class="list-btn" data-split="${x.id}" aria-pressed="${S.split === x.id}" style="${S.split === x.id ? 'border-color:var(--accent)' : ''}">
+          <div class="grow"><b>${x.name}</b>${x.id === L.defaultSplit(S.days) ? ' <span class="pill on tiny-pill">recommended</span>' : ''}<div class="muted small">${esc(x.blurb)}</div></div>${S.split === x.id ? '<span class="pill on">✓</span>' : ''}</button>`).join('')}
+        <div class="muted small">Your week: <b>${esc(preview)}</b></div>
+      </div>
+      <div class="card"><div class="step-h"><span class="step-n">3</span><b>Emphasis</b></div>
         ${Object.entries(L.TEMPLATES).map(([k, t]) => `<button class="list-btn" data-focus="${k}" style="${S.focus === k ? 'border-color:var(--accent)' : ''}">
           <div class="grow"><b>${t.name}</b><div class="muted small">${t.blurb}</div></div>${S.focus === k ? '<span class="pill on">✓</span>' : ''}</button>`).join('')}
       </div>
-      <div class="card">
-        <label>Name</label><input id="name" value="${esc(S.name)}" placeholder="e.g. Whole Body AC VI">
-        <div class="row"><div class="grow"><label>Weeks (last is deload)</label>
-          <select id="weeks">${[3, 4, 5, 6, 7, 8].map(n => `<option ${n === S.weeks ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
-          <div class="grow"><label>Training days / week</label>
-          <select id="days">${[2, 3, 4, 5, 6].map(n => `<option ${n === S.days ? 'selected' : ''}>${n}</option>`).join('')}</select></div></div>
+      <div class="card"><div class="step-h"><span class="step-n">4</span><b>Name & details</b></div>
+        <label for="name">Name</label><input id="name" value="${esc(S.name)}" placeholder="e.g. Whole Body AC VIII">
         <p class="muted small">RIR is set for you${S.goal === 'hypertrophy' ? '' : ' (main lifts)'}: ${Array.from({ length: S.weeks }, (_, i) => { const r = L.targetRir(i + 1, S.weeks, S.goal, 'compound'); return r.deload ? 'deload' : r.rir; }).join(' → ')}. It holds steady for any muscle whose feedback says recovery is behind.</p>
       </div>
       <div class="card"><b>Muscle priorities</b><div class="muted small">Focus = grow (≥2×/week). Maintain = hold size with low volume. Weekly start sets shown.</div>
@@ -519,9 +565,10 @@ async function renderBuilder() {
       <button class="primary block" id="next">Next: build the days ›</button>`;
     $$('[data-focus]').forEach(b => b.onclick = () => { S.focus = b.dataset.focus; S.priorities = L.templatePriorities(S.focus); step1(); });
     $$('[data-goal]').forEach(b => b.onclick = () => { S.goal = b.dataset.goal; step1(); });
+    $$('[data-split]').forEach(b => b.onclick = () => { S.split = b.dataset.split; S.plan = []; step1(); });
     $('#name').oninput = e => S.name = e.target.value;
     $('#weeks').onchange = e => { S.weeks = +e.target.value; step1(); };
-    $('#days').onchange = e => { S.days = +e.target.value; };
+    $('#days').onchange = e => { S.days = +e.target.value; S.split = null; S.plan = []; step1(); };
     $$('[data-p]').forEach(b => b.onclick = () => {
       S.priorities[b.dataset.m] = b.dataset.p;
       step1();
@@ -529,7 +576,7 @@ async function renderBuilder() {
     $('#next').onclick = () => {
       if (!S.name.trim()) return toast('Give it a name', true);
       S.days = +$('#days').value; syncPlan(); S.step = 2;
-      if (!S.plan.some(d => d.slots.length)) S.plan = L.autofill({ plan: S.plan, priorities: S.priorities, focus: S.focus, goal: S.goal, library: P.library, favorites: P.favorites, mode: 'all' });
+      if (!S.plan.some(d => d.slots.length)) S.plan = L.autofill({ plan: S.plan, priorities: S.priorities, focus: S.focus, goal: S.goal, split: S.split, library: P.library, favorites: P.favorites, mode: 'all' });
       step2();
     };
   };
@@ -539,7 +586,7 @@ async function renderBuilder() {
     const dayTotals = S.plan.map(d => d.slots.reduce((a, s) => a + (Number(s.sets) || 0), 0));
     app.innerHTML = `
       ${P.removed.length ? `<div class="card small muted">Autofill is skipping ${P.removed.length} exercise${P.removed.length > 1 ? 's' : ''} because of your preferences${P.favorites.size ? ` and putting your ${P.favorites.size} favorite${P.favorites.size > 1 ? 's' : ''} first` : ''}. <a href="#/settings">Change</a></div>` : ''}
-      <div class="card"><div class="muted small">Step 2 of 2 · ${L.GOALS[L.goalOf(S.goal)].name} · ${esc(L.TEMPLATES[S.focus].name)} · ${S.days} days</div>
+      <div class="card"><div class="muted small">Step 2 of 2 · ${L.GOALS[L.goalOf(S.goal)].name} · ${esc(L.SPLITS[S.split]?.name || '')} · ${esc(L.TEMPLATES[S.focus].name)} emphasis · ${S.days} days</div>
         <div class="spacer"></div>
         <div class="grid3">
           <button class="sm primary" id="fillAll">Autofill all</button>
@@ -565,8 +612,8 @@ async function renderBuilder() {
       <div class="row"><button id="back1" class="grow">‹ Template</button><button class="primary grow" id="create">Create mesocycle</button></div>
       <div class="spacer"></div><button class="ghost block" id="saveTpl">☆ Save this plan as a template</button>`;
     const at = s => s.split('.').map(Number);
-    $('#fillAll').onclick = () => { S.plan = L.autofill({ plan: S.plan, priorities: S.priorities, focus: S.focus, goal: S.goal, library: P.library, favorites: P.favorites, mode: 'all' }); step2(); };
-    $('#fillLeft').onclick = () => { S.plan = L.autofill({ plan: S.plan, priorities: S.priorities, focus: S.focus, goal: S.goal, library: P.library, favorites: P.favorites, mode: 'fill' }); step2(); };
+    $('#fillAll').onclick = () => { S.plan = L.autofill({ plan: S.plan, priorities: S.priorities, focus: S.focus, goal: S.goal, split: S.split, library: P.library, favorites: P.favorites, mode: 'all' }); step2(); };
+    $('#fillLeft').onclick = () => { S.plan = L.autofill({ plan: S.plan, priorities: S.priorities, focus: S.focus, goal: S.goal, split: S.split, library: P.library, favorites: P.favorites, mode: 'fill' }); step2(); };
     $('#clear').onclick = () => { S.plan = S.plan.map(d => ({ label: d.label, slots: [] })); step2(); };
     $('#back1').onclick = () => { S.step = 1; step1(); };
     $$('[data-label]').forEach(i => i.oninput = e => S.plan[+i.dataset.label].label = e.target.value);
@@ -796,6 +843,14 @@ async function renderWorkout(dayId) {
       if (!cur || d.completed_at > cur.at) prev[h.exercise_id] = { rir: h.target_rir, at: d.completed_at, carried: true, sets: h.sets.sort((a, b) => a.set_index - b.set_index).map(z => ({ ...z, weight: W(z.weight) })) };
     }
   }
+  // Per-lift status from earlier sessions (today excluded) → flag + recommendation on the lift (doc §6.1).
+  const liftIdsToday = [...new Set(wes.filter(w => !isCardio(w)).map(w => w.exercise_id))];
+  const insights = await liftInsights(liftIdsToday, { excludeSessions: wes.map(w => w.id),
+    rirFor: Object.fromEntries(wes.map(w => [w.exercise_id, w.target_rir])) }).catch(() => ({}));
+  const FLAG = { stalled: '⚠️', regressing: '📉', pr: '🏆' };
+  const liftFlag = we => { const x = insights[we.exercise_id]; if (!x || !FLAG[x.status.status] || day.completed_at) return '';
+    const st = x.status, head = st.status === 'pr' ? `New best last week (+${st.pct.toFixed(1)}%)` : st.status === 'stalled' ? 'Stalled — no progress in 3 weeks' : `Down ${Math.abs(st.pct).toFixed(1)}% for 2 weeks`;
+    return `<button class="lift-flag st-${st.status}" data-flag="${we.id}" aria-label="${esc(head)}: show recommendation"><span>${FLAG[st.status]}</span><span><b>${head}.</b> ${esc(st.rec.split('. ').slice(1, 2).join('') || '')}${st.status === 'pr' ? '' : ' <u>More</u>'}</span></button>`; };
   const feedback = {};
   check(await sb.from('muscle_feedback').select('*').eq('workout_day_id', dayId)).forEach(f => feedback[f.muscle_group] = f);
   if (!day.started_at && !day.completed_at) {
@@ -859,6 +914,7 @@ async function renderWorkout(dayId) {
           ${(w => w ? `<div class="muted tiny range">Weight window ${fmt(w.light)}–${fmt(w.heavy)} ${unit()} · change the weight and the reps re-target to match last time</div>` : '')(windowFor(we))}</div>
           ${infoBtn(we)}<button class="ghost sm" data-edit="${esc(ex.muscle_group)}" aria-label="Edit ratings" title="Edit ratings">✎</button></div>
         ${we.flag ? `<div class="pill bad" style="margin-top:6px">${esc(we.flag)}</div>` : ''}
+        ${liftFlag(we)}
         <div class="sets"><div class="set-head"><div>#</div><div>${wLabel(ex)}</div><div>reps</div><div></div></div>
           ${Array.from({ length: n }, (_, i) => {
             const s = we.sets.find(x => x.set_index === i + 1) || {}; const sg = suggestionFor(we, i);
@@ -1005,7 +1061,11 @@ async function renderWorkout(dayId) {
     row.querySelectorAll('input').forEach(i => { i.oninput = () => { i.classList.remove('sug'); if (i.dataset.f === 'weight') retarget(we, row); updateDirs(we, row); }; i.onchange = () => save(false); });
     row.querySelector('[data-f="weight"]').addEventListener('change', () => {
       const wIn = row.querySelector('[data-f="weight"]'), r = repsFor(we, +row.dataset.idx - 1, wIn.value);
-      if (r?.outside) toast(r.outside === 'heavy' ? `Heavy for this lift — matching last time needs only ~${r.lo} reps (range ${we.exercises.rep_min}–${we.exercises.rep_max})`
+      const last = baseFor(we, +row.dataset.idx - 1), lastW = last?.weight != null ? W(last.weight) : null;
+      const odd = L.weightSanity(lastW, wIn.value);
+      wIn.classList.toggle('odd', !!odd);
+      if (odd) toast(`${fmtNum(+wIn.value)} ${unit()} is ${odd.kind === 'high' ? 'way more' : 'way less'} than last time (${fmtNum(lastW)} ${unit()}) — typo? It still saves if it's right.`, true);
+      else if (r?.outside) toast(r.outside === 'heavy' ? `Heavy for this lift — matching last time needs only ~${r.lo} reps (range ${we.exercises.rep_min}–${we.exercises.rep_max})`
         : `Light for this lift — you'd need ~${r.lo} reps to match last time (range ${we.exercises.rep_min}–${we.exercises.rep_max})`, true);
       // carry the new weight to later sets that are still on the suggested weight
       let n = row.nextElementSibling;
@@ -1062,6 +1122,13 @@ async function renderWorkout(dayId) {
   });
 
   $('#warmOk') && ($('#warmOk').onclick = () => { try { localStorage.setItem('wl_warmup_seen', '1'); } catch {} $('#warmNote').outerHTML = '<div class="muted small warm-line">🔥 Warm up first — tap ⓘ on each muscle’s first exercise for ramp-up sets. Warm-ups aren’t logged.</div>'; });
+  const trendSheet = we => { const x = insights[we.exercise_id]; if (!x) return;
+    openSheet(`<h3>${esc(we.exercises.name)}</h3><div class="row" style="margin:6px 0">${statusPill(x.status)}<span class="muted small">best session each week, last ${x.weeks.length} week${x.weeks.length > 1 ? 's' : ''}</span></div>
+      <p>${esc(x.status.rec)}</p>
+      <div class="muted small">Last time: ${(t => t ? `${fmt(W(t.weight))} ${unit()} × ${t.reps}` : '—')(x.sessions[x.sessions.length - 1]?.top)}</div>
+      <div class="spacer"></div><button class="block" id="toChart">See the chart ›</button><div class="spacer"></div><button class="primary block" id="closeFlag">Got it</button>`,
+      panel => { panel.querySelector('#closeFlag').onclick = closeSheet; panel.querySelector('#toChart').onclick = () => { closeSheet(); go('#/progress/' + we.exercise_id); }; }); };
+  $$('[data-flag]').forEach(b => b.onclick = () => trendSheet(wes.find(w => w.id === b.dataset.flag)));
   $$('[data-info]').forEach(b => b.onclick = () => {
     const we = wes.find(w => w.id === b.dataset.info), ex = we.exercises;
     const first = isCardio(we) || firstOfMuscle[ex.muscle_group] === we.id;
@@ -1080,7 +1147,8 @@ async function renderWorkout(dayId) {
              <li>Full range of motion; control the lowering.</li>
              ${goal === 'athletic' && ex.kind === 'compound' ? '<li>Move each rep as fast as you can; end the set when speed drops.</li>' : ''}
              ${goal === 'strength' && ex.kind === 'compound' ? '<li>Rest 3–5 min between heavy sets.</li>' : '<li>Rest 1.5–3 min between work sets.</li>'}`}
-      </ul><a class="small" href="#/learn/warmup">Why warm up this way?</a>
+      </ul>${insights[we.exercise_id] && !isCardio(we) ? `<h2>Trend</h2><div class="row">${statusPill(insights[we.exercise_id].status)}<a class="small" href="#/progress/${we.exercise_id}">chart ›</a></div><p class="small">${esc(insights[we.exercise_id].status.rec)}</p>` : ''}
+      <a class="small" href="#/learn/warmup">Why warm up this way?</a>
       <div class="spacer"></div><button class="primary block" id="closeInfo">Done</button>`,
       panel => { panel.querySelector('#closeInfo').onclick = closeSheet; panel.querySelector('a').onclick = () => closeSheet(); });
   });
@@ -1275,7 +1343,7 @@ async function renderHistory() {
   $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
 }
 
-async function renderProgress(exId) {
+async function renderProgress(exId, rangeArg) {
   setHeader('Exercise progress', exId ? '#/progress' : '#/explore', 'explore');
   // Per-session strength is computed in the database (lift_sessions / strength_summary): deload weeks,
   // myo-rep mini-sets and cardio are excluded so sessions compare like for like.
@@ -1289,18 +1357,43 @@ async function renderProgress(exId) {
       : '<p class="muted">Log some sets and your progress shows up here.</p>';
     return $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
   }
-  const ss = (await fetchAll(() => sb.rpc('lift_sessions', { p_exercise_id: exId }).order('done_at').order('session_id')))
-    .map(s => ({ date: s.done_at, e: W(s.best_e1rm), top: { weight: W(s.top_weight), reps: s.top_reps }, n: s.n_sets, name: s.name }));
-  if (!ss.length) { app.innerHTML = '<p class="muted">No sets for this exercise yet.</p>'; return; }
+  const [all, meso] = await Promise.all([
+    fetchAll(() => sb.rpc('lift_sessions', { p_exercise_id: exId }).order('done_at').order('session_id')),
+    activeMeso()]);
+  if (!all.length) { app.innerHTML = '<p class="muted">No sets for this exercise yet.</p>'; return; }
+  const series = all.map(s => ({ date: s.done_at.slice(0, 10), at: s.done_at, e: W(s.best_e1rm), top: { weight: W(s.top_weight), reps: s.top_reps }, n: s.n_sets }));
+  // Status uses the last 12 sessions against the best before them — same rule as the home screen and the workout flag.
+  const recent = series.filter(x => x.date >= isoDay(new Date(Date.now() - 182 * 864e5)));
+  const status = L.liftStatus(L.weeklyBest(recent.length ? recent : series.slice(-2)), null, { name: all[0].name });
+  const mesoStart = meso?.started_on || null;
+  const ranges = { meso: 'This meso', '3m': '3 months', all: 'All' };
+  const range = ranges[rangeArg] ? rangeArg : (mesoStart && series.some(x => x.date >= mesoStart) ? 'meso' : 'all');
+  const from = range === 'meso' ? mesoStart : range === '3m' ? isoDay(new Date(Date.now() - 91 * 864e5)) : null;
+  const ss = series.filter(x => !from || x.date >= from);
+  // PR markers: sessions that beat every earlier session (whole history) by >1%.
+  let run = 0; const prDates = new Set(); for (const x of series) { if (run && x.e > run * 1.01) prDates.add(x.at); run = Math.max(run, x.e); }
   const vals = ss.map(s => s.e), min = Math.min(...vals), max = Math.max(...vals), span = max - min || 1;
-  const pts = ss.map((s, i) => `${ss.length === 1 ? 160 : 10 + i * 300 / (ss.length - 1)},${110 - (s.e - min) / span * 95}`).join(' ');
-  setHeader(ss[0].name, '#/progress', 'explore');
-  app.innerHTML = `<div class="card"><div class="muted small">Best estimated strength per session (${unit()}) · weight × (1 + (reps + RIR)/30)</div>
-      <svg class="chart" viewBox="0 0 320 120"><polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
-      ${pts.split(' ').map(p => `<circle cx="${p.split(',')[0]}" cy="${p.split(',')[1]}" r="3" fill="var(--accent)"/>`).join('')}</svg>
-      <div class="row muted tiny"><span class="grow">${fmt(Math.round(min))}</span><span>${fmt(Math.round(max))}</span></div></div>
+  const X = i => ss.length === 1 ? 160 : 10 + i * 300 / (ss.length - 1), Y = e => 110 - (e - min) / span * 95;
+  const pts = ss.map((s, i) => `${X(i)},${Y(s.e)}`).join(' ');
+  const mesoIdx = mesoStart && range !== 'meso' ? ss.findIndex(x => x.date >= mesoStart) : -1;
+  const first = ss[0], last = ss[ss.length - 1], change = first.e ? (last.e - first.e) / first.e * 100 : 0;
+  setHeader(all[0].name, '#/progress', 'explore');
+  app.innerHTML = `<div class="card insight st-${status.status}"><div class="row"><b class="grow">${status.status === 'new' ? 'Getting started' : 'Where this lift stands'}</b>${statusPill(status)}</div>
+      <p class="small" style="margin:6px 0 0">${esc(status.rec)}</p></div>
+    <div class="seg c3" role="tablist" aria-label="Chart range">${Object.entries(ranges).map(([k, v]) => `<button role="tab" aria-selected="${k === range}" class="${k === range ? 'on' : ''}" data-go="#/progress/${exId}/${k}" ${k === 'meso' && !mesoStart ? 'disabled' : ''}>${v}</button>`).join('')}</div>
+    <div class="card"><div class="muted small">Best estimated strength per session (${unit()}) · weight × (1 + (reps + RIR)/30)</div>
+      <svg class="chart" viewBox="0 0 320 120" role="img" aria-label="Estimated strength from ${fmt(Math.round(first.e))} to ${fmt(Math.round(last.e))} ${unit()}">
+      ${mesoIdx > 0 ? `<line x1="${X(mesoIdx)}" y1="8" x2="${X(mesoIdx)}" y2="114" stroke="#3a4150" stroke-dasharray="3 3"/><text x="${X(mesoIdx) + 3}" y="14" font-size="8" fill="#8b93a3">meso start</text>` : ''}
+      <polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
+      ${ss.map((s, i) => `<circle cx="${X(i)}" cy="${Y(s.e)}" r="${prDates.has(s.at) ? 4.5 : 3}" fill="${prDates.has(s.at) ? 'var(--warn)' : 'var(--accent)'}"/>`).join('')}</svg>
+      <div class="row muted tiny"><span class="grow">${fmt(Math.round(min))}</span><span>${fmt(Math.round(max))}</span></div>
+      <div class="grid3 keep" style="margin-top:8px">
+        <div class="stat center"><span class="big">${ss.length}</span><span class="muted tiny">sessions</span></div>
+        <div class="stat center"><span class="big">${change > 0 ? '+' : ''}${change.toFixed(1)}%</span><span class="muted tiny">change</span></div>
+        <div class="stat center"><span class="big">${[...prDates].filter(d => ss.some(x => x.at === d)).length}</span><span class="muted tiny">PRs <span style="color:var(--warn)">●</span></span></div></div></div>
     <div class="card"><table><tr><th>Date</th><th>Top set</th><th>Sets</th><th class="right">Est.</th></tr>
-      ${ss.slice().reverse().map(s => `<tr><td>${new Date(s.date).toLocaleDateString()}</td><td>${fmt(s.top.weight)} × ${s.top.reps}</td><td>${s.n}</td><td class="right">${fmt(Math.round(s.e))}</td></tr>`).join('')}</table></div>`;
+      ${ss.slice().reverse().map(s => `<tr><td>${new Date(s.at).toLocaleDateString()}${prDates.has(s.at) ? ' 🏆' : ''}</td><td>${fmt(s.top.weight)} × ${s.top.reps}</td><td>${s.n}</td><td class="right">${fmt(Math.round(s.e))}</td></tr>`).join('')}</table></div>`;
+  $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
 }
 
 async function renderVolume(mesoId) {

@@ -18,10 +18,32 @@ const TARGETS = {
 };
 export const PRIORITIES = ['focus', 'maintain', 'skip'];
 
+// Doc §2.0 — weekly split: which muscles each training day is allowed to hold. Separate from the emphasis
+// templates below (which muscles get extra volume). null = any muscle may go on that day.
+const PUSH = ['Chest', 'Shoulders', 'Triceps'], PULL = ['Back', 'Biceps', 'Traps', 'Forearms'], LEGS = ['Quads', 'Hamstrings', 'Glutes', 'Calves', 'Abs'];
+const UPPER_DAY = [...UPPER, 'Traps', 'Forearms'], LOWER_DAY = [...LOWER, 'Abs'];
+const D = { full: { label: 'Full body', m: null }, push: { label: 'Push', m: PUSH }, pull: { label: 'Pull', m: PULL }, legs: { label: 'Legs', m: LEGS },
+  upper: { label: 'Upper', m: UPPER_DAY }, lower: { label: 'Lower', m: LOWER_DAY } };
+export const SPLITS = {
+  full_body_split: { name: 'Full-body split', blurb: 'Every day trains part of the body; each muscle 2× a week on different days (like an RP whole-body split).',
+    days: [2, 3, 4, 5, 6], recommend: [3, 4, 5, 6], layout: n => Array.from({ length: n }, (_, i) => ({ ...D.full, label: `Full body ${'ABCDEF'[i]}` })), every: false },
+  full_body: { name: 'Full body', blurb: 'Every muscle, every session — fewer sets per muscle each day.',
+    days: [2, 3, 4], recommend: [2], layout: n => Array.from({ length: n }, () => ({ ...D.full })), every: true },
+  upper_lower: { name: 'Upper / Lower', blurb: 'Alternate upper-body and lower-body days.',
+    days: [2, 4, 6], recommend: [4], layout: n => Array.from({ length: n }, (_, i) => ({ ...(i % 2 ? D.lower : D.upper) })), every: false },
+  ppl: { name: 'Push / Pull / Legs', blurb: 'Push (chest, shoulders, triceps), Pull (back, biceps), Legs. 6 days hits everything twice.',
+    days: [3, 6], recommend: [6], layout: n => Array.from({ length: n }, (_, i) => ({ ...[D.push, D.pull, D.legs][i % 3] })), every: false },
+  ppl_ul: { name: 'PPL + Upper/Lower', blurb: 'Push, Pull, Legs, then Upper and Lower — everything twice in 5 days.',
+    days: [5], recommend: [5], layout: () => [D.push, D.pull, D.legs, D.upper, D.lower].map(x => ({ ...x })), every: false },
+};
+export const splitsFor = days => Object.entries(SPLITS).filter(([, x]) => x.days.includes(days)).map(([k, x]) => ({ id: k, ...x, recommended: x.recommend.includes(days) }));
+export const defaultSplit = days => splitsFor(days).find(x => x.recommended)?.id || 'full_body_split';
+export const splitLayout = (split, days) => (SPLITS[split] && SPLITS[split].days.includes(days) ? SPLITS[split] : SPLITS.full_body_split).layout(days);
+
 export const TEMPLATES = {
   upper:  { name: 'Upper focus', blurb: 'Grow chest, back, shoulders and arms; hold legs.' },
   lower:  { name: 'Lower focus', blurb: 'Grow quads, hamstrings, glutes and calves; hold upper body.' },
-  whole:  { name: 'Whole body', blurb: 'Grow everything evenly, every muscle 2×+ a week.' },
+  whole:  { name: 'Balanced', blurb: 'Grow everything evenly, every muscle 2×+ a week.' },
   custom: { name: 'Custom', blurb: 'Start from whole body and set each muscle yourself.' },
 };
 
@@ -123,13 +145,18 @@ const slotOrder = (lib) => (a, b) => {
  * plan: [{ label, slots: [{ muscle, exerciseId|null, sets }] }]
  * mode: 'all' (rebuild from scratch) | 'fill' (keep what's there, place only what's missing)
  */
-export function autofill({ plan, priorities, focus, library, mode, goal, favorites = null }) {
+export function autofill({ plan, priorities, focus, library, mode, goal, favorites = null, split = null }) {
   const nDays = plan.length;
   const lib = new Map(library.map(e => [e.id, e]));
   const days = mode === 'all'
     ? plan.map(d => ({ label: d.label, slots: [] }))
     : plan.map(d => ({ label: d.label, slots: d.slots.map(s => ({ ...s })) }));
   const targets = weeklyTargets(priorities, focus, goal);
+  // Split (doc §2.0): which days each muscle may go on. A muscle the split never schedules falls back to any day.
+  const layout = split ? splitLayout(split, nDays) : null;
+  if (layout && mode === 'all') days.forEach((d, i) => { if (!d.label || /^Day \d+$/.test(d.label)) d.label = layout[i].label; });
+  const allowedDays = m => { if (!layout) return null; const ok = layout.map((d, i) => (!d.m || d.m.includes(m) ? i : -1)).filter(i => i >= 0); return ok.length ? new Set(ok) : null; };
+  const everyDay = split && SPLITS[split]?.every;
   const used = {}; // muscle -> Set of exercise ids already in the week
   const take = (m, avoid) => {
     const cands = candidatesFor(m, library, favorites);
@@ -154,12 +181,14 @@ export function autofill({ plan, priorities, focus, library, mode, goal, favorit
   const order = MUSCLES.filter(m => targets[m] - placed[m] > 0).sort((a, b) => (targets[b] - placed[b]) - (targets[a] - placed[a]));
   for (const m of order) {
     const remaining = targets[m] - placed[m];
-    const avail = [...Array(nDays).keys()].filter(i => !onDay[m].has(i));
+    const allowed = allowedDays(m);
+    const avail = [...Array(nDays).keys()].filter(i => !onDay[m].has(i) && (!allowed || allowed.has(i)));
     if (!avail.length) { // every day already has this muscle: top up the lightest one
       const i = [...onDay[m]].sort((a, b) => load[a] - load[b])[0];
       const slot = days[i].slots.filter(s => s.muscle === m).pop(); slot.sets += remaining; load[i] += remaining; continue;
     }
-    const want = Math.max(1, frequency(targets[m], priorities[m], nDays) - onDay[m].size);
+    const want = everyDay && priorities[m] !== 'maintain' ? avail.length
+      : Math.max(1, frequency(targets[m], priorities[m], allowed ? allowed.size : nDays) - onDay[m].size);
     const f = Math.min(want, avail.length);
     // Spread evenly from the lightest available day (doc §2.1 step 3).
     const start = avail.slice().sort((a, b) => load[a] - load[b] || a - b)[0];
@@ -258,6 +287,76 @@ export function warmupPlan({ ex, workWeight, firstForMuscle = true, unit = 'lb' 
   return out.length ? out : [{ weight: null, reps: 8, note: 'One easy set of 8 with a light weight' }];
 }
 
+// Doc §6.1 — per-lift status. Callers pass WEEKLY bests (weeklyBest) from the last ~6 months; deloads,
+// myo-reps and warm-ups are already excluded. sessions: [{ e (e1RM), date }] oldest → newest.
+// priorBest: best e1RM from older (but still recent) weeks not in the list.
+// Statuses, checked in this order (±1% is treated as "the same", matching §1.7):
+//   new         fewer than 2 sessions
+//   pr          latest beats every earlier session by >1%
+//   regressing  the last 2 weeks are both >3% below the best of the 4 weeks before them
+//   stalled     4+ weeks and the best of the last 3 is within ±1% of the best of the 6 weeks before them
+//   progressing latest is >1% above the oldest session in the window
+//   steady      anything else
+export function liftStatus(sessions, priorBest = null, { name = 'this lift', rir = null } = {}) {
+  const s = (sessions || []).filter(x => x.e > 0);
+  const pct = (a, b) => (a - b) / b * 100;
+  if (s.length < 2) return { status: 'new', label: 'New', pct: null, rec: 'Log a couple of sessions and trends show up here.' };
+  const last = s[s.length - 1].e;
+  const before = Math.max(priorBest || 0, ...s.slice(0, -1).map(x => x.e));
+  if (last > before * 1.01) {
+    return { status: 'pr', label: 'PR', pct: pct(last, before),
+      rec: `New best on ${name} (+${pct(last, before).toFixed(1)}%). Keep the same plan — add a rep or a small jump in weight when you beat the top of the rep range.` };
+  }
+  if (s.length >= 3) {
+    // "Down" = a RECENT drop: last 2 weeks vs the best of the 4 weeks before them (one odd week months ago can't trigger it)
+    const a = s[s.length - 1].e, b = s[s.length - 2].e;
+    const earlierBest = Math.max(...s.slice(-6, -2).map(x => x.e));
+    if (a < earlierBest * 0.97 && b < earlierBest * 0.97) {
+      return { status: 'regressing', label: 'Down', pct: pct(a, earlierBest),
+        rec: `Down ${Math.abs(pct(a, earlierBest)).toFixed(1)}% for 2 weeks — usually fatigue, not lost strength. Today: keep the weight, aim to match last time's reps${rir != null ? ` at ${rir} RIR` : ''}, and rate recovery honestly so the app can trim sets. If it drops again next week, take an early deload or lighter week.` };
+    }
+  }
+  if (s.length >= 4) {
+    // "Stalled" = no new best for 3 weeks vs your recent peak (the 6 weeks before them)
+    const recent = Math.max(...s.slice(-3).map(x => x.e));
+    const earlier = Math.max(...s.slice(-9, -3).map(x => x.e));
+    if (recent <= earlier * 1.01 && recent >= earlier * 0.99) {
+      return { status: 'stalled', label: 'Stalled', pct: pct(recent, earlier),
+        rec: `No progress for 3 weeks. Today: keep the weight and add 1 rep to your first set only (double progression — reps before load). Still stuck next week? Drop the weight 5–10% and build back up over 2–3 weeks, or swap to a close variation next mesocycle.` };
+    }
+  }
+  const first = s[0].e;
+  if (last > first * 1.01) return { status: 'progressing', label: 'Up', pct: pct(last, first), rec: `Up ${pct(last, first).toFixed(1)}% over ${s.length} weeks — keep going.` };
+  return { status: 'steady', label: 'Steady', pct: pct(last, first), rec: 'Holding steady — keep chasing an extra rep at the same weight.' };
+}
+
+/**
+ * Doc §6.1 — collapse sessions to the best session per calendar week (Mon–Sun). Many programs train a lift on a
+ * heavier and a lighter day; comparing those to each other would look like constant ups and downs.
+ * If the latest (current) week is still below the week before, it's dropped — an unfinished week can only ever
+ * show improvement, never a false "down".
+ */
+export function weeklyBest(sessions, today = new Date()) {
+  const wk = d => { const x = new Date(String(d).slice(0, 10) + 'T12:00:00'); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x.toISOString().slice(0, 10); };
+  const by = new Map();
+  for (const x of sessions || []) { const k = wk(x.date); const cur = by.get(k); if (!cur || x.e > cur.e) by.set(k, { ...x, date: k }); }
+  const out = [...by.values()].sort((a, b) => a.date.localeCompare(b.date));
+  const thisWeek = wk(today.toISOString?.() ? today.toISOString().slice(0, 10) : today);
+  if (out.length >= 2 && out[out.length - 1].date === thisWeek && out[out.length - 1].e < out[out.length - 2].e) out.pop();
+  return out;
+}
+
+/** PRs set on or after `since` (ISO date): sessions that beat every earlier session (and priorBest) by >1%. */
+export function prsSince(sessions, priorBest, since) {
+  let best = priorBest || 0, n = 0, top = null;
+  for (const x of sessions || []) {
+    if (!(x.e > 0)) continue;
+    if (best > 0 && x.e > best * 1.01 && (!since || String(x.date) >= since)) { n++; top = { pct: (x.e - best) / best * 100, date: x.date }; }
+    best = Math.max(best, x.e);
+  }
+  return { count: n, last: top };
+}
+
 // Units: every weight is STORED in pounds (canonical). These convert at the screen boundary only,
 // so switching lb ↔ kg never changes the physical weight on record. 2-decimal rounding matches the
 // database (numeric(6,2)) and round-trips exactly: fromUnit(toUnit(x)) === x for any 0.01 kg value.
@@ -310,6 +409,23 @@ export function increment(ex, unit) {
  * Returns { weight, reps } or null when there's no history.
  */
 export function suggestSet({ prev, ex, targetRir, prevTargetRir, deload, jointHold, unit }) {
+  const r = suggestSetRaw({ prev, ex, targetRir, prevTargetRir, deload, jointHold, unit });
+  return r && r.weight != null ? { ...r, weight: Math.max(barFloor(ex, unit), r.weight) } : r;
+}
+// Guardrail: barbell suggestions never go below the empty bar.
+export const barFloor = (ex, unit) => (ex?.equipment === 'Barbell' && ex?.load_type === 'weighted' ? (unit === 'kg' ? 20 : 45) : 0);
+/**
+ * Guardrail: likely typo when a typed weight is 1.5× or more, or half or less, of the same set last time
+ * (e.g. 2250 for 225). Returns null when it looks fine.
+ */
+export function weightSanity(prevWeight, newWeight) {
+  const a = Number(prevWeight), b = Number(newWeight);
+  if (!(a > 0) || !(b > 0)) return null;
+  if (b >= a * 1.5) return { kind: 'high', ratio: b / a };
+  if (b <= a * 0.5) return { kind: 'low', ratio: b / a };
+  return null;
+}
+function suggestSetRaw({ prev, ex, targetRir, prevTargetRir, deload, jointHold, unit }) {
   if (!prev || prev.reps == null) return null;
   const weight = prev.weight == null ? (ex?.load_type === 'weighted' ? null : 0) : Number(prev.weight);
   const loggedRir = prev.rir != null ? Number(prev.rir) : (prevTargetRir ?? targetRir);

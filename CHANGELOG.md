@@ -12,6 +12,43 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.1.0 — 2026-11-20 (22:00 MT) · "Lift insights, splits and weight guardrails"
+
+**New**
+- **Home stats follow your current mesocycle.**
+  - **"This meso's lifts"** lists every lift in the meso with a status: 🏆 PR, Up, Steady, ⚠️ Stalled or 📉 Down. Lifts that need attention come first.
+  - **"PRs this meso"** replaces "PRs (14 days)".
+  - With no active meso, home falls back to the all-lifts view.
+- **Tap any lift on home to open its chart.** The chart page now has:
+  - the lift's status and a recommendation at the top
+  - a **This meso / 3 months / All** range switch
+  - 🏆 PR markers, and a dashed "meso start" line
+  - session count, % change and PR count for the range
+- **Flags on the lift in your workout.** When a lift is stalled or down (or hit a PR last time), a flag shows right on it with what to do today. Example: "Stalled — no progress in 3 weeks. Today: keep the weight and add 1 rep to your first set only." Tap it for the full recommendation and a link to the chart. The ⓘ sheet shows the trend too.
+
+- **Create meso is now 4 clear steps: Goal → Days & split → Emphasis → Name.**
+  - Goal is a big tile at the top (Hypertrophy / Strength / Athleticism), so it can't be missed.
+  - **Splits.** Pick days per week, then pick how the week is laid out. Options depend on the day count:
+    - **Full-body split** (2–6 days, the default for 3–6): each day trains part of the body; each muscle about 2× a week on different days. This is the layout of the current RP-style mesos.
+    - **Full body** (2–4 days, the default for 2): every muscle every session, fewer sets per muscle each day.
+    - **Upper / Lower** (2, 4 or 6 days).
+    - **Push / Pull / Legs** (3 or 6 days).
+    - **PPL + Upper/Lower** (5 days).
+  - The card shows your week before you build it, e.g. "Push · Pull · Legs · Push · Pull · Legs". Autofill names the days and only puts each muscle on its days.
+  - **Emphasis** (Upper focus / Lower focus / Balanced / Custom) is now separate from the split. "Whole body" was renamed "Balanced", since it is about which muscles grow, not the day layout.
+- **Weight guardrails.**
+  - **Typo check:** a weight 1.5× or more, or half or less, of the same set last time turns the box amber and asks "typo?". Example: 700 lb where you did 70 lb. It still saves if it's right — the app never blocks a real jump (e.g. after an injury or a new variation).
+  - **Empty-bar floor:** suggestions for barbell lifts never go below the bar (45 lb / 20 kg).
+  - The existing weight window (§4.1) still warns when a weight puts the reps outside the exercise's range.
+
+**Under the hood**
+- New `lift_recent` database function: the last 12 sessions per lift plus the earlier best, in one small request (doesn't let users see each other's data).
+- `liftStatus` / `prsSince` / `weeklyBest` in the training engine, with tests. Docs: Training Logic §6.1.
+- `SPLITS`, `splitsFor`, `defaultSplit`, `splitLayout`, `weightSanity`, `barFloor` in the training engine, with tests. Autofill takes a `split`. Docs: Training Logic §2.0 and §4.1.
+- Database migrations applied to production during this release: `lift_recent` and `lift_recent_horizon` (read-only functions; no data changed).
+
+---
+
 ## 1.0.0 — 2026-11-20 (21:00 MT) · "Reliable, personal, goal-aware"
 
 The first version built for a group: fixes from an external code review, plus training goals, preferences and warm-ups.

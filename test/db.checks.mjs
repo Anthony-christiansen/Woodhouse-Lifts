@@ -96,5 +96,11 @@ export async function runChecks(db) {
     ['Leg Press', false], ['Belt Squat', false], ['Goblet Squat', false], ['Hip Thrust', false], ['Seated Dumbbell Press', false], ['Bulgarian Split Squat', false]])
     assert.equal(tagged[n], v, `axial tag on ${n}`);
   console.log('PREFERENCES: RLS + axial tagging OK');
+  // ---- lift_recent: window + prior best, own data only
+  const lr = await as(db, A, `select * from public.lift_recent($1, 1)`, [[ex.press.id, ex.pull.id]]);
+  assert.equal(lr.length, 2, 'one session per lift with p_n = 1');
+  assert.ok(lr.every(r => r.prior_best === null), 'no older sessions yet');
+  assert.equal((await as(db, B, `select * from public.lift_recent($1, 12)`, [[ex.press.id]])).length, 0, 'B sees none of A\'s sessions');
+  console.log('LIFT_RECENT OK');
   console.log('ALL DB TESTS PASSED');
 }
