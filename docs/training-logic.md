@@ -291,6 +291,22 @@ The ratings you give after each muscle now set **how big next week's jump is** f
 - The "Fast" cap: a weight jump is at most about 10% of the load (50 lb → 55, not 60), so a good day on a light lift can't produce a big leap.
 - Deload weeks are never affected.
 
+### 4.5 Injury guardrails on increases and speed
+
+Getting stronger needs progressive load, but most non-contact soft-tissue injuries are linked to **excessive, rapid increases** in training load [38]. The ACSM recommends **2–10% load increases**, and only once you can beat the target by 1–2 reps [37]. Every suggestion passes these checks *after* the progression and speed rules (§4.0, §4.3):
+
+| Guardrail | Rule | Example |
+|---|---|---|
+| **Weekly load cap** | At most **+10%** over last week's weight for that set. On light loads where one step is already more than 10%, one step is allowed. | Planned 100 → 120 → capped at **110**. 20 lb cable → 25 is allowed (one step). |
+| **Meso ceiling** | At most **+20%** over that lift's week-1 weight in this meso; past it, the weight holds and **+1 rep** is suggested instead. | Week 1 = 100 lb, now 120 → stays **120 × 11**, not 125. |
+| **No faster jumps at failure** | "Faster" (§4.3) is switched off in 0-RIR weeks. | Easy rating in week 4 → normal step only. |
+| **No faster jumps on spinal-loading lifts** | Lifts tagged *axial* (squats, deadlifts, good mornings…) only ever take the normal step. | Easy on hack squat → +10, not +20. |
+| **No faster jumps with any joint pain** | Even a joint-pain rating of 1 cancels "faster"; 2+ holds the lift. | Easy + joint pain 1 → normal. |
+| **Rep jumps** | Never more than **+2 reps** a week at the same or heavier weight. | 50×8 at 3 RIR → 0 RIR = 50×10, not 50×11. |
+| **Your own big jumps** | Typing a weight more than ~10% (and more than one step) over last week shows a warning with the safer max. Over 1.5× asks if it's a typo. Neither blocks you. | 70 → 88: "Big jump: +26% … about 75 is the safer max". |
+
+When a guardrail trims a suggestion, the exercise note says so (e.g. "capped at about +10% a week" or "at this meso's +20% ceiling — adding reps instead"). Deload weeks are never affected. The 10% and 20% limits are deliberately conservative defaults built on the ACSM range; no trial has tested these exact caps.
+
 ### 4.4 How this logic lines up with the research
 
 | Rule in the app | Evidence | Strength of evidence |
@@ -303,6 +319,7 @@ The ratings you give after each muscle now set **how big next week's jump is** f
 | RIR stepping down across a meso (3 → 0) then a deload | Common periodization practice; deload studies are mixed [17, 18, 19] | Moderate–limited; practice-based |
 | Adjusting load from reported effort (§4.3) | Autoregulation reviews and network meta-analysis [16, 34, 35, 36] | Moderate (mostly strength outcomes; few hypertrophy trials) |
 | By-weight vs by-reps progression (§4.0) | Both are forms of double progression [36]; no trial shows one beats the other for growth | Practice-based |
+| Injury guardrails (§4.5) | ACSM 2–10% increments [37]; rapid load spikes linked to soft-tissue injury [38] | Moderate (guideline + sports-injury research); exact caps are conservative defaults |
 | Pump / soreness as signals | Not reliable indicators of growth [13, 14, 15] | Used only for volume nudges, never for load |
 | Lift status uses performance, not RIR-credited estimates (§6.1) | RIR self-ratings are imprecise, especially far from failure [7, 8] | Design choice to avoid false "stalled" flags |
 
@@ -486,3 +503,5 @@ Sources 25–31 back the in-app **Learn** pages (goal guides for strength, athle
 34. Huang Z et al. Autoregulated resistance training for maximal strength enhancement: A systematic review and network meta-analysis. *J Exerc Sci Fit* 2025. https://doi.org/10.1016/j.jesf.2025.07.006
 35. Mann JB et al. The effect of autoregulatory progressive resistance exercise vs. linear periodization on strength improvement in college athletes. *J Strength Cond Res* 2010. https://doi.org/10.1519/JSC.0b013e3181def4a6
 36. Suchomel TJ et al. Training for Muscular Strength: Methods for Monitoring and Adjusting Training Intensity. *Sports Med* 2021. https://doi.org/10.1007/s40279-021-01488-9
+37. American College of Sports Medicine. Position stand: Progression models in resistance training for healthy adults. *Med Sci Sports Exerc* 2009. https://doi.org/10.1249/MSS.0b013e3181915670
+38. Gabbett TJ. The training-injury prevention paradox: should athletes be training smarter and harder? *Br J Sports Med* 2016. https://doi.org/10.1136/bjsports-2015-095788

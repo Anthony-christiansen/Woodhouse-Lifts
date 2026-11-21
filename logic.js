@@ -505,10 +505,37 @@ export function progressionSpeed(fb) {
   if ((fb.joint_pain ?? 0) >= 2) return { speed: 'hold', why: 'joint pain last time' };
   if (fb.workload === 3) return { speed: 'hold', why: 'you rated last time "Too much"' };
   if (fb.workload === 2) return { speed: 'slow', why: 'you pushed your limit last time' };
-  if (fb.workload === 0) return { speed: 'fast', why: (fb.pump ?? 1) <= 1 ? 'last time felt easy with little pump' : 'last time felt easy' };
+  if (fb.workload === 0 && (fb.joint_pain ?? 0) === 0) return { speed: 'fast', why: (fb.pump ?? 1) <= 1 ? 'last time felt easy with little pump' : 'last time felt easy' };
   return { speed: 'normal', why: null };
 }
-export function suggestSet({ prev, ex, targetRir, prevTargetRir, deload, jointHold, unit, mode = null, speed = null }) {
+/**
+ * Doc §4.5 — injury guardrails, applied to every suggestion after the progression rules:
+ *  - Weekly load cap: at most +10% over last week's weight for that set (ACSM: 2–10% increases), or one load step
+ *    when a single step is already more than 10% (light lifts).
+ *  - Meso ceiling: at most +20% over the lift's week-1 weight in this meso; past that, reps go up instead.
+ *  - "Faster" is switched off at 0 RIR (failure weeks), on spinal-loading (axial) lifts, and with any joint pain.
+ *  - Reps never jump more than +2 in a week.
+ */
+export const GUARD = { weeklyPct: 0.10, mesoPct: 0.20, maxRepJump: 2 };
+export function suggestSet(args) {
+  const { prev, ex, unit, targetRir, deload } = args;
+  let speed = args.speed;
+  const axial = (ex?.tags || []).includes('axial');
+  if (speed?.speed === 'fast' && (targetRir <= 0 || axial)) speed = { speed: 'normal', why: null };
+  const r = suggestSetCore({ ...args, speed });
+  if (!r || deload || !prev || prev.weight == null || r.weight == null || ex?.load_type !== 'weighted') return r;
+  const inc = increment(ex, unit), w0 = Number(prev.weight), notes = [];
+  const weekCap = Math.max(w0 + inc, Math.floor(w0 * (1 + GUARD.weeklyPct) / inc) * inc);
+  if (r.weight > weekCap) { r.weight = weekCap; notes.push('capped at about +10% a week'); }
+  if (args.mesoStart > 0) {
+    const ceil = Math.floor(args.mesoStart * (1 + GUARD.mesoPct) / inc) * inc;
+    if (r.weight > Math.max(ceil, w0)) { r.weight = Math.max(ceil, w0); r.reps = Math.min((ex?.rep_max ?? 30), Number(prev.reps) + 1); notes.push('at this meso\'s +20% ceiling — adding reps instead'); }
+  }
+  if (prev.reps != null && r.weight >= w0 && r.reps > Number(prev.reps) + GUARD.maxRepJump) r.reps = Number(prev.reps) + GUARD.maxRepJump;
+  if (notes.length) r.note = `${r.note ? r.note + ' · ' : ''}${notes.join(' · ')}`;
+  return r;
+}
+function suggestSetCore({ prev, ex, targetRir, prevTargetRir, deload, jointHold, unit, mode = null, speed = null }) {
   const sp = speed?.speed || 'normal';
   if (sp === 'hold' && prev && prev.reps != null && !deload) jointHold = true;
   // Load progression: the week's RIR drop is taken as more weight at the same reps (RP style), not +1 rep.

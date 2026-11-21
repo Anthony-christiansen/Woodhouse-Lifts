@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import * as L from './logic.js?v=23';
-import * as LEARN from './learn.js?v=23';
+import * as L from './logic.js?v=24';
+import * as LEARN from './learn.js?v=24';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -17,7 +17,7 @@ let authReturn = (() => {
   return null;
 })();
 let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
-export const APP_VERSION = '1.6.0'; // keep in sync with CHANGELOG.md
+export const APP_VERSION = '1.7.0'; // keep in sync with CHANGELOG.md
 const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
 const DOC_URL = 'https://docs.google.com/document/d/19gRTfKkhRbIYunGn2_vazuykYSGTVkoWqvDpOHrpMDI';
 
@@ -932,7 +932,8 @@ async function renderWorkout(dayId) {
     const base = baseFor(we, i);
     return L.suggestSet({ prev: base, ex: we.exercises, targetRir: we.target_rir, prevTargetRir: p.rir, deload,
       jointHold: (prevFb[we.exercises.muscle_group]?.joint_pain ?? 0) >= 2, unit: unit(), mode: modeFor(we),
-      speed: L.progressionSpeed(prevFb[we.exercises.muscle_group]) });
+      speed: L.progressionSpeed(prevFb[we.exercises.muscle_group]),
+      mesoStart: day.week > 1 && trail[we.exercise_id]?.[0] ? W(trail[we.exercise_id][0].weight) : null });
   };
   const lastOfMuscle = {}; wes.filter(w => !isCardio(w)).forEach(w => lastOfMuscle[w.exercises.muscle_group] = w.id);
   const firstOfMuscle = {}; wes.filter(w => !isCardio(w)).forEach(w => { firstOfMuscle[w.exercises.muscle_group] ??= w.id; });
@@ -1138,7 +1139,10 @@ async function renderWorkout(dayId) {
       const last = baseFor(we, +row.dataset.idx - 1), lastW = last?.weight != null ? W(last.weight) : null;
       const odd = L.weightSanity(lastW, wIn.value);
       wIn.classList.toggle('odd', !!odd);
+      const jump = !odd && lastW > 0 && we.exercises.load_type === 'weighted' ? (+wIn.value - lastW) / lastW : 0;
       if (odd) toast(`${fmtNum(+wIn.value)} ${unit()} is ${odd.kind === 'high' ? 'way more' : 'way less'} than last time (${fmtNum(lastW)} ${unit()}) — typo? It still saves if it's right.`, true);
+      else if (jump > L.GUARD.weeklyPct + 1e-9 && +wIn.value - lastW > L.increment(we.exercises, unit()))
+        toast(`Big jump: +${Math.round(jump * 100)}% over last week (${fmtNum(lastW)} → ${fmtNum(+wIn.value)} ${unit()}). Jumps over ~10% a week raise injury risk — about ${fmtNum(Math.max(lastW + L.increment(we.exercises, unit()), Math.floor(lastW * 1.1 / L.increment(we.exercises, unit())) * L.increment(we.exercises, unit())))} is the safer max. It still saves if you go for it.`, true);
       else if (r?.outside) toast(r.outside === 'heavy' ? `Heavy for this lift — matching last time needs only ~${r.lo} reps (range ${we.exercises.rep_min}–${we.exercises.rep_max})`
         : `Light for this lift — you'd need ~${r.lo} reps to match last time (range ${we.exercises.rep_min}–${we.exercises.rep_max})`, true);
       // carry the new weight to later sets that are still on the suggested weight

@@ -12,6 +12,20 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.7.0 — 2026-11-20 (23:55 MT) · "Injury guardrails"
+
+**New — limits on how fast weight goes up, applied to every suggestion:**
+- **Weekly cap:** at most +10% over last week (ACSM recommends 2–10% increases); one step is still allowed on light loads.
+- **Meso ceiling:** at most +20% over a lift's week-1 weight in the meso; after that the app adds reps instead.
+- **"Faster" progression is switched off** in 0-RIR weeks, on spinal-loading (axial) lifts, and with any joint pain.
+- **Reps** never jump more than +2 in a week.
+- **Your own big jumps:** typing more than ~10% over last week shows "Big jump … about X is the safer max" (doesn't block).
+- When a guardrail trims a suggestion, the note on the exercise says which one.
+
+Docs: Training Logic §4.5, with 2 new sources (ACSM 2009 progression models; Gabbett 2016 on load spikes and injury).
+
+---
+
 ## 1.6.0 — 2026-11-20 (23:40 MT) · "Feedback sets the pace"
 
 **New — your ratings now change how fast a lift progresses (autoregulation).**

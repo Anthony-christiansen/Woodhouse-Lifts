@@ -381,15 +381,40 @@ console.log('GUARDRAIL TESTS PASSED');
   const n = L.suggestSet({ ...base, speed: S({ workload: 1 }) }), f = L.suggestSet({ ...base, speed: S({ workload: 0, pump: 0 }) });
   const sl = L.suggestSet({ ...base, speed: S({ workload: 2 }) }), h = L.suggestSet({ ...base, speed: S({ workload: 3 }) });
   assert.deepEqual([n.weight, n.reps], [325, 27], 'normal: +10 lb');
-  assert.deepEqual([f.weight, f.reps], [335, 27], 'easy: +20 lb (capped at 10% of load)');
+  assert.deepEqual([f.weight, f.reps], [325, 27], 'easy but a 0-RIR week: no faster jump (guardrail)');
+  const f1 = L.suggestSet({ ...base, prev: { weight: 315, reps: 27, rir: 2 }, targetRir: 1, speed: S({ workload: 0, pump: 0 }) });
+  assert.deepEqual([f1.weight, f1.reps], [335, 27], 'easy at 1 RIR: +20 lb');
   assert.deepEqual([sl.weight, sl.reps], [315, 28], 'pushed limit: same weight, +1 rep');
   assert.deepEqual([h.weight, h.reps], [315, 27], 'too much: hold');
   const row = { name: 'Row', load_type: 'weighted', equipment: 'Barbell', rep_min: 6, rep_max: 20 }, rb = { prev: { weight: 70, reps: 11, rir: 1 }, ex: row, targetRir: 0, unit: 'lb', mode: { mode: 'reps', step: 5 } };
   assert.equal(L.suggestSet({ ...rb, speed: S({ workload: 1 }) }).reps, 12);
-  assert.equal(L.suggestSet({ ...rb, speed: S({ workload: 0 }) }).reps, 13, 'easy: +2 reps');
+  assert.equal(L.suggestSet({ ...rb, speed: S({ workload: 0 }) }).reps, 12, 'easy but 0 RIR week: normal +1');
+  assert.equal(L.suggestSet({ ...rb, prev: { weight: 70, reps: 11, rir: 2 }, targetRir: 1, speed: S({ workload: 0 }) }).reps, 13, 'easy at 1 RIR: +2 reps');
   assert.equal(L.suggestSet({ ...rb, speed: S({ workload: 2 }) }).reps, 11, 'pushed limit: match last week');
-  const small = L.suggestSet({ prev: { weight: 50, reps: 10, rir: 1 }, ex: { load_type: 'weighted', equipment: 'Machine', rep_min: 8, rep_max: 15 }, targetRir: 0, unit: 'lb', mode: { mode: 'load', step: 5 }, speed: S({ workload: 0 }) });
+  const small = L.suggestSet({ prev: { weight: 50, reps: 10, rir: 2 }, ex: { load_type: 'weighted', equipment: 'Machine', rep_min: 8, rep_max: 15 }, targetRir: 1, unit: 'lb', mode: { mode: 'load', step: 5 }, speed: S({ workload: 0 }) });
   assert.equal(small.weight, 55, 'fast never jumps more than ~10% (50 → 55, not 60)');
   assert.equal(L.suggestSet({ ...base, deload: true, targetRir: 4, speed: S({ workload: 0 }) }).weight, 315, 'deload unaffected');
   console.log('PROGRESSION SPEED TESTS PASSED');
+}
+
+// --- Injury guardrails (doc §4.5) ---
+{
+  const m = { load_type: 'weighted', equipment: 'Machine', rep_min: 8, rep_max: 15 };
+  const S = fb => L.progressionSpeed(fb);
+  // weekly cap: +10% (or one step on light loads)
+  const big = L.suggestSet({ prev: { weight: 100, reps: 10, rir: 3 }, ex: m, targetRir: 1, unit: 'lb', mode: { mode: 'load', step: 10 } });
+  assert.equal(big.weight, 110, '+20 lb planned on 100 → capped at 110'); assert.match(big.note, /10% a week/);
+  const light = L.suggestSet({ prev: { weight: 20, reps: 10, rir: 1 }, ex: m, targetRir: 0, unit: 'lb', mode: { mode: 'load', step: 5 } });
+  assert.equal(light.weight, 25, 'one step allowed even when it is >10% of a light load');
+  // meso ceiling: +20% over week 1, then reps instead
+  const ce = L.suggestSet({ prev: { weight: 120, reps: 10, rir: 1 }, ex: m, targetRir: 0, unit: 'lb', mode: { mode: 'load', step: 5 }, mesoStart: 100 });
+  assert.deepEqual([ce.weight, ce.reps], [120, 11], 'at the +20% ceiling → reps instead'); assert.match(ce.note, /ceiling/);
+  // no faster jumps on spinal-loading lifts or with any joint pain
+  const ax = L.suggestSet({ prev: { weight: 200, reps: 8, rir: 2 }, ex: { ...m, tags: ['axial'] }, targetRir: 1, unit: 'lb', mode: { mode: 'load', step: 10 }, speed: S({ workload: 0 }) });
+  assert.equal(ax.weight, 210, 'axial lift: normal step only');
+  assert.equal(S({ workload: 0, joint_pain: 1 }).speed, 'normal', 'any joint pain → no faster jumps');
+  // rep jump never more than +2 at the same or heavier weight
+  const r = L.suggestSet({ prev: { weight: 50, reps: 8, rir: 3 }, ex: { ...m, equipment: 'Dumbbell' }, targetRir: 0, unit: 'lb' });
+  assert.equal(r.reps, 10, '+3 RIR drop would be +3 reps → capped at +2');
+  console.log('INJURY GUARDRAIL TESTS PASSED');
 }
