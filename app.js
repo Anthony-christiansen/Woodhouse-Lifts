@@ -1,5 +1,5 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import * as L from './logic.js?v=2';
+import * as L from './logic.js?v=3';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -308,12 +308,12 @@ async function renderMeso(id) {
   app.innerHTML = `
     <div class="card"><div class="row"><div class="grow muted small">${esc(L.TEMPLATES[meso.focus]?.name || '')} · ${meso.weeks} weeks · ${meso.days_per_week} days/week</div>
       <span class="pill ${meso.status === 'active' ? 'on' : ''}">${esc(meso.status)}</span></div></div>
-    <div class="weeks" style="--days:${meso.days_per_week}">
+    <div class="weeks-scroll"><div class="weeks" style="--days:${meso.days_per_week}">
       ${weeks.map(w => { const r = L.rirForWeek(w, meso.weeks); return `<div class="week">
         <div class="muted small">Wk ${w}<br><span class="${r.deload ? 'pill warn' : 'tiny'}">${r.deload ? 'deload' : r.rir + ' RIR'}</span></div>
         ${days.filter(d => d.week === w).map(d => `<button class="day ${d.completed_at ? 'done' : ''} ${d.skipped_at ? 'skipped' : ''} ${d.started_at && !d.completed_at && !d.skipped_at ? 'live' : ''} ${next && d.id === next.id ? 'next' : ''}" data-day="${d.id}">${esc(dayName(d))}</button>`).join('')}
       </div>`; }).join('')}
-    </div><div class="spacer"></div>
+    </div></div><div class="spacer"></div>
     ${next ? '<button class="primary block" id="go">Go to next workout</button>' : '<p class="muted center">All workouts done 🎉</p>'}
     <div class="spacer"></div>
     <div class="grid2"><button data-go="#/volume/${id}">📊 Volume</button><button data-go="#/history">🗂 History</button></div>
