@@ -89,7 +89,7 @@ export async function runChecks(db) {
     await db.query(`insert into public.exercises (owner_id, name, muscle_group, load_type, kind) values (null, $1, 'Quads', 'weighted', 'compound') on conflict do nothing`, [name]);
   }
   // re-run the tagging statement from the migration (new rows were inserted after it ran)
-  const mig = (await import('node:fs')).readFileSync(new URL('../supabase/migrations/20261121050100_exercise_preferences.sql', import.meta.url), 'utf8');
+  const mig = (await import('node:fs')).readFileSync(new URL('../supabase/migrations/20261121034755_exercise_preferences.sql', import.meta.url), 'utf8');
   await db.exec(mig.slice(mig.indexOf('update public.exercises set tags'), mig.indexOf(');', mig.indexOf('update public.exercises set tags')) + 2));
   const tagged = Object.fromEntries((await db.query(`select name, 'axial' = any(tags) a from public.exercises where owner_id is null`)).rows.map(r => [r.name, r.a]));
   for (const [n, v] of [['Back Squat', true], ['Romanian Deadlift', true], ['Overhead Press', true], ['Barbell Squat (High Bar)', true],
