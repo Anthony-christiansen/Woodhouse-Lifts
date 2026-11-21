@@ -295,14 +295,15 @@ The ratings you give after each muscle now set **how big next week's jump is** f
 
 | Last session's rating for the muscle | Speed | By-weight lift (e.g. sled 315×27, step +5 — v1.9) | By-reps lift (e.g. row 70×11) |
 |---|---|---|---|
-| Workload **Easy** | **Faster** — one extra step (not in 0-RIR weeks, §4.5) | **325 × 27** (+10 lb, inside the +5% weekly cap) | **70 × 13** (+2 reps) |
+| Workload **Easy** *and* recovery **Never got sore** *and* no joint pain (v1.9.1) | **Faster** — one extra step (not in 0-RIR weeks, §4.5) | **325 × 27** (+10 lb — the only case an automatic raise may pass +5 lb) | **70 × 13** (+2 reps) |
+| Workload **Easy** but you did get sore (or recovery not rated yet) | Normal | 320 × 27 | 70 × 12 |
 | Workload **Pretty good**, or no rating | Normal | 320 × 27 | 70 × 12 |
 | Workload **Pushed my limit** | **Slower** — smaller jump | **315 × 28** (same weight, +1 rep) | **70 × 11** (match last week) |
 | Workload **Too much**, or joint pain 2+ | **Hold** | 315 × 27 | 70 × 11 |
 
-- The reason shows on the exercise, e.g. "⤴︎ This week: +20 lb, same reps — faster: last time felt easy with little pump" or "⏸︎ This week: Holding — you rated last time "Too much"".
+- The reason shows on the exercise, e.g. "⤴︎ This week: +10 lb, same reps — faster: last time felt easy and you never got sore" or "⏸︎ This week: Holding — you rated last time "Too much"".
 - **Pump does not change the load.** Pump and cell swelling are not supported as drivers of muscle growth [14], so pump only feeds the set (volume) rules in §5, together with soreness and workload. It appears in the note as context only.
-- The "Fast" cap: a weight jump is at most about 10% of the load (50 lb → 55, not 60), so a good day on a light lift can't produce a big leap.
+- **Why soreness counts (v1.9.1):** "Easy" alone can mean the volume was light while the muscle was still recovering. Requiring *never got sore* means the workload was clearly insufficient on both counts before the app speeds up. Soreness is a weak growth signal on its own [14], so it is used only as a brake, never as a reason to add load.
 - Deload weeks are never affected.
 
 ### 4.5 Injury guardrails on increases and speed
@@ -311,15 +312,16 @@ Getting stronger needs progressive load, but most non-contact soft-tissue injuri
 
 | Guardrail | Rule | Example |
 |---|---|---|
-| **Weekly load cap** | At most **+5%** over last week's weight for that set (v1.9; was 10%). On light loads where one step is already more than 5%, one step is allowed. | Planned 100 → 120 → capped at **105**. 20 lb cable → 22.5 is allowed (one step). |
+| **Absolute weekly step (v1.9.1)** | Every automatic raise, for **every exercise**, is at most **+5 lb (2.5 kg)** a week — normally 2.5 or 5 lb from §4.6. This covers every path: load progression, a two-RIR drop in one week, far-above-range re-solves, and "reps over the top of the range". The only exception is a *Faster* week (Easy + never sore + no joint pain), which allows **+10 lb (5 kg)**. Anything bigger is a manual bump. | Leg press 400 × 10 at 3 RIR → 1 RIR: **405**, not 410. Sled 315 Easy + never sore → up to **325**. |
+| **Weekly load cap** | Also at most **+5%** over last week's weight for that set (v1.9; was 10%) — whichever limit is smaller wins. On light loads where one step is already more than 5%, one step is allowed. | Planned 100 → 120 → capped at **105**. 20 lb cable → 22.5 is allowed (one step). |
 | **Meso ceiling** | At most **+20%** over that lift's week-1 weight in this meso; past it, the weight holds and **+1 rep** is suggested instead. | Week 1 = 100 lb, now 120 → stays **120 × 11**, not 125. |
 | **No faster jumps at failure** | "Faster" (§4.3) is switched off in 0-RIR weeks. | Easy rating in week 4 → normal step only. |
 | **No faster jumps on spinal-loading lifts** | Lifts tagged *axial* (squats, deadlifts, good mornings…) only ever take the normal step. | Easy on hack squat → +10, not +20. |
 | **No faster jumps with any joint pain** | Even a joint-pain rating of 1 cancels "faster"; 2+ holds the lift. | Easy + joint pain 1 → normal. |
 | **Rep jumps** | Never more than **+2 reps** a week at the same or heavier weight. | 50×8 at 3 RIR → 0 RIR = 50×10, not 50×11. |
-| **Your own big jumps** | Typing a weight more than ~5% (and more than one step) over last week shows a warning with the safer max. Over 1.5× asks if it's a typo. Neither blocks you. | 70 → 88: "Big jump: +26% … about 75 is the safer max". |
+| **Your own big jumps (manual bumps)** | Allowed. Typing a weight above the automatic limit (the smaller of +5 lb/2.5 kg and +5%) shows a "Manual bump" note with where auto increases stop. Over 1.5× asks if it's a typo. Neither blocks you. | 315 → 335: "Manual bump: +20 lb … Auto increases stop at 320". |
 
-When a guardrail trims a suggestion, the exercise note says so (e.g. "capped at about +5% a week" or "at this meso's +20% ceiling — adding reps instead"). Deload weeks are never affected. The 5% and 20% limits are deliberately conservative: 5% sits at the low end of the ACSM 2–10% range and matches where Anthony's own reps held (§4.6); no trial has tested these exact caps.
+When a guardrail trims a suggestion, the exercise note says so (e.g. "auto increases stop at +5 lb a week — go heavier by hand if you want", "capped at about +5% a week" or "at this meso's +20% ceiling — adding reps instead"). Deload weeks are never affected. The 5% and 20% limits are deliberately conservative: 5% sits at the low end of the ACSM 2–10% range and matches where Anthony's own reps held (§4.6); no trial has tested these exact caps.
 
 ### 4.6 How big a weight step is — from your own history
 
@@ -338,7 +340,7 @@ Jumps of 4% or less almost always worked; bigger jumps usually cost reps. By equ
 So, "less is more":
 - **One step ≈ 2.5% of the load, rounded down** to what your gym can load, at least one increment and **never more than 5 lb (2.5 kg)** — and never more than your own usual jump for that lift. Examples: sled 315 → **320** (not 325); pec dec 185 → **187.5**; leg press 295 → **300**; 100 lb machine → 102.5.
 - **Default smallest jumps:** 2.5 lb (1.25 kg) for machines, cables, barbells and sleds; 5 lb (2 kg) for dumbbells. Change them in **Settings → Smallest weight jumps** to match your gym (kept on your phone).
-- **Weekly cap tightened to +5%** (was 10%), with one increment always allowed on light loads. "Faster" weeks (§4.3) add two steps, still inside the 5% cap.
+- **Weekly cap tightened to +5%** (was 10%), with one increment always allowed on light loads, and (v1.9.1) never more than +5 lb / 2.5 kg automatically. "Faster" weeks (§4.3) may add two steps (≤ +10 lb), still inside the 5% cap.
 - **Light loads progress by reps:** if one step is more than ~5% of the load (e.g. 2.5 lb on a 20 lb cable, 5 lb on a 40 lb dumbbell) the lift adds reps until it reaches the top of its rep range, then takes one step.
 - **Choosing weight vs reps (§4.0) now uses several signals:** the majority of this meso's week-to-week changes (latest breaks a tie), reps at the top of the range → add weight, and the light-load rule above.
 - Warm-up sets still round to 5 lb / 2.5 kg plates.

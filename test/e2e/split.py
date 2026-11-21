@@ -37,7 +37,7 @@ async def main():
         ok('typo guard flags 10x weight', 'odd' in (cls or '') and 'typo' in toast, (v,cls,toast))
         await w.fill(str(round(float(v or 100)*1.25))); await w.dispatch_event('change'); await pg.wait_for_timeout(200)
         t2=await pg.evaluate("[...document.querySelectorAll('.toast')].map(x=>x.innerText).join('|')")
-        ok('big-jump warning at +25%', 'Big jump' in t2 and 'injury' in t2, t2)
+        ok('big-jump warning at +25%', 'Manual bump' in t2 and 'injury' in t2, t2)
         ok('no JS errors', not errs, errs)
         await br.close()
     srv.terminate()

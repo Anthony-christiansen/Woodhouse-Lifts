@@ -12,6 +12,16 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.9.1 — 2026-11-21 · "Small steps, always"
+
+- **Every automatic weight increase is at most +5 lb (2.5 kg) a week, for every exercise** — usually 2.5 or 5 lb. This now covers every path that could add weight: a two-RIR drop in one week (was 2 × step), far-above-range re-solves, and passing the top of the rep range.
+- **Faster progression needs two signals:** workload **Easy** *and* recovery **Never got sore** (plus no joint pain). Only then may a raise be +10 lb (5 kg), still inside +5%. "Easy" alone now gives a normal step.
+- **Manual bumps are fine:** typing more than the automatic limit saves normally and shows a "Manual bump" note with where auto increases stop (replaces the "Big jump" toast).
+- Exercise notes say when a raise was trimmed ("auto increases stop at +5 lb a week — go heavier by hand if you want").
+- Logic: new `safeMax()` shared by suggestions and the warning; `progressionSpeed` checks `soreness === 0`. No database changes.
+
+---
+
 ## 1.9.0 — 2026-11-21 · "Training engine"
 
 **Weight steps — "less is more", from your history**

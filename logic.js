@@ -590,7 +590,7 @@ export function progressionMode(trail, ex, unit) {
  * change the load (pump isn't a reliable hypertrophy signal) — pump and soreness adjust SETS instead (§5).
  *   joint pain ≥ 2 or workload "Too much"   → hold   (same weight & reps)
  *   workload "Pushed my limit"              → slow   (smaller jump)
- *   workload "Easy"                         → fast   (one extra step)
+ *   workload "Easy" + never got sore + no joint pain → fast (one extra step)
  *   otherwise / no feedback                 → normal
  */
 export function progressionSpeed(fb) {
@@ -598,7 +598,9 @@ export function progressionSpeed(fb) {
   if ((fb.joint_pain ?? 0) >= 2) return { speed: 'hold', why: 'joint pain last time' };
   if (fb.workload === 3) return { speed: 'hold', why: 'you rated last time "Too much"' };
   if (fb.workload === 2) return { speed: 'slow', why: 'you pushed your limit last time' };
-  if (fb.workload === 0 && (fb.joint_pain ?? 0) === 0) return { speed: 'fast', why: (fb.pump ?? 1) <= 1 ? 'last time felt easy with little pump' : 'last time felt easy' };
+  // Faster (a bigger-than-normal weight jump) only when the workload was too easy AND the muscle never got sore
+  // and no joint pain at all — otherwise one normal step (v1.9.1, Anthony's rule).
+  if (fb.workload === 0 && (fb.joint_pain ?? 0) === 0 && fb.soreness === 0) return { speed: 'fast', why: 'last time felt easy and you never got sore' };
   return { speed: 'normal', why: null };
 }
 /**
@@ -610,6 +612,11 @@ export function progressionSpeed(fb) {
  *  - Reps never jump more than +2 in a week.
  */
 export const GUARD = { weeklyPct: 0.05, mesoPct: 0.20, maxRepJump: 2 };
+/** Biggest automatic weekly raise from w0: one step (≤ 5 lb / 2.5 kg, two on a "faster" week) and never past ~+5%. */
+export function safeMax(w0, ex, unit, fast = false) {
+  const inc = increment(ex, unit), stepMax = Math.max(inc, STEP_MAX[unit === 'kg' ? 'kg' : 'lb']);
+  return Math.min(w0 + (fast ? 2 : 1) * stepMax, Math.max(w0 + inc, Math.floor(w0 * (1 + GUARD.weeklyPct) / inc) * inc));
+}
 export function suggestSet(args) {
   const { prev, ex, unit, targetRir, deload } = args;
   let speed = args.speed;
@@ -618,8 +625,16 @@ export function suggestSet(args) {
   const r = suggestSetCore({ ...args, speed });
   if (!r || deload || !prev || prev.weight == null || r.weight == null || ex?.load_type !== 'weighted') return r;
   const inc = increment(ex, unit), w0 = Number(prev.weight), notes = [];
-  const weekCap = Math.max(w0 + inc, Math.floor(w0 * (1 + GUARD.weeklyPct) / inc) * inc);
-  if (r.weight > weekCap) { r.weight = weekCap; notes.push('capped at about +5% a week'); }
+  // Automatic increases are small for EVERY exercise: one step of at most 5 lb (2.5 kg) a week — or two steps
+  // (≤ 10 lb / 5 kg) only on a "faster" week (too easy + never sore). Bigger jumps are yours to make by hand.
+  const absCap = w0 + (speed?.speed === 'fast' ? 2 : 1) * Math.max(inc, STEP_MAX[unit === 'kg' ? 'kg' : 'lb']);
+  const weekCap = safeMax(w0, ex, unit, speed?.speed === 'fast');
+  if (r.weight > weekCap) {
+    const u = unit || 'lb', add = Math.round((weekCap - w0) * 100) / 100;
+    r.weight = weekCap;
+    if (r.note) r.note = r.note.replace(/^\+[\d.]+ (lb|kg)/, `+${add} ${u}`);
+    notes.push(weekCap === absCap ? `auto increases stop at +${add} ${u} a week — go heavier by hand if you want` : 'capped at about +5% a week');
+  }
   if (args.mesoStart > 0) {
     const ceil = Math.floor(args.mesoStart * (1 + GUARD.mesoPct) / inc) * inc;
     if (r.weight > Math.max(ceil, w0)) { r.weight = Math.max(ceil, w0); r.reps = Math.min((ex?.rep_max ?? 30), Number(prev.reps) + 1); notes.push('at this meso\'s +20% ceiling — adding reps instead'); }
@@ -639,7 +654,7 @@ function suggestSetCore({ prev, ex, targetRir, prevTargetRir, deload, jointHold,
       const step = mode.step > 0 ? mode.step : increment(ex, unit), w0 = Number(prev.weight), u = unit || 'lb';
       if (sp === 'slow') return { weight: w0, reps: Number(prev.reps) + drop, note: `Same weight, +${drop} rep — ${speed.why}` };
       let add = step * drop;
-      if (sp === 'fast') add = step * (drop + 1);   // the weekly cap below keeps this within ~5%
+      if (sp === 'fast') add = step * (drop + 1);   // suggestSet's cap keeps every auto raise ≤ 5 lb (10 lb on a faster week)
       return { weight: Math.max(barFloor(ex, unit), w0 + add), reps: Number(prev.reps), note: `+${add} ${u}, same reps${sp === 'fast' && add > step * drop ? ` — faster: ${speed.why}` : ''}` };
     }
   }
