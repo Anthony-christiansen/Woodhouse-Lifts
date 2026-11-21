@@ -20,6 +20,8 @@ export const SOURCES = {
   lundberg22: { t: 'Lundberg et al. Concurrent aerobic and strength training and muscle fiber hypertrophy. Sports Med 2022', doi: '10.1007/s40279-022-01688-x' },
   reed14: { t: 'Reed & Pipe. The talk test for prescribing and monitoring exercise intensity. Curr Opin Cardiol 2014', doi: '10.1097/HCO.0000000000000097' },
   coleman24: { t: 'Coleman et al. Effects of a one-week deload period during resistance training. PeerJ 2024', doi: '10.7717/peerj.16777' },
+  klob26: { t: 'Kłobuchowski et al. Exercise-based strategies from warm-up to training: systematic review of performance and injury prevention. Sports (Basel) 2026', doi: '10.3390/sports14050187' },
+  xu25: { t: 'Xu et al. Optimizing post-activation performance enhancement: systematic review and meta-analysis. Sports Med 2025', doi: '10.1007/s40279-024-02170-6' },
   hotfiel18: { t: 'Hotfiel et al. Advances in delayed-onset muscle soreness (DOMS). Sportverletz Sportschaden 2018', doi: '10.1055/a-0753-1884' },
 };
 
@@ -99,6 +101,14 @@ export const ARTICLES = [
     ],
     example: 'Last time: 200 lb × 15 at 2 RIR. Want 180 today (same 2 RIR)? Matching reps ≈ 20 — aim for 21 to beat it. At 220 you’d need only ~11.',
     src: ['schoen17l', 'acsm26'] },
+  { id: 'warmup', title: 'Warming up (and why warm-ups aren’t logged)',
+    body: [
+      'Warm up in two parts. First, a general warm-up: about 5 minutes of easy cardio plus a few dynamic moves (leg swings, arm circles, bodyweight squats). In the research, dynamic and progressive “ramp-up” warm-ups help movement quality and sprint and jump performance, and are a standard part of injury-prevention routines.',
+      'Then a specific warm-up on the first exercise for each muscle: 2–3 short, light sets building toward your working weight, for example about 50% × 8, 70% × 4, 85% × 2 for a big lift. Later exercises for the same muscle need at most one light set. Keep these easy; a thorough general warm-up already does most of the work, and tiring yourself out before working sets just costs reps.',
+      'Warm-up sets are not hard sets, so the app doesn’t log them and never counts them toward weekly sets, PRs or strength trends. Only log your working sets. Tap ⓘ on any exercise in a workout to see ramp-up weights worked out from that day’s working weight, rounded to real plate jumps.',
+    ],
+    example: 'Hack squat at 225 lb today → warm-up 115 × 8, 160 × 4, 190 × 2, rest a minute, then your first working set at 225.',
+    src: ['klob26', 'xu25'] },
   { id: 'frequency', title: 'How often to train each muscle',
     body: [
       'With weekly sets held equal, training a muscle 2× vs 3× a week grows about the same. Frequency matters mostly as a way to fit in volume without bloated sessions. Twice a week per muscle is the practical minimum when you’re trying to grow it.',

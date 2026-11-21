@@ -203,3 +203,20 @@ console.log('GOAL TESTS PASSED');
   assert.deepEqual(a1, a2, 'empty preferences change nothing');
 }
 console.log('PREFERENCE TESTS PASSED');
+
+// Warm-ups (doc §4.2): ramp below working weight, rounded to plate jumps, short for isolation, none counted
+{
+  const squat = { kind: 'compound', load_type: 'weighted', equipment: 'Barbell' };
+  const w = L.warmupPlan({ ex: squat, workWeight: 225, unit: 'lb' });
+  assert.deepEqual(w.map(x => [x.weight, x.reps]), [[115, 8], [160, 4], [190, 2]]);
+  assert.ok(w.every(x => x.weight < 225 && x.weight % 5 === 0));
+  assert.ok(L.warmupPlan({ ex: squat, workWeight: 60, unit: 'lb' }).every(x => x.weight >= 45), 'never below the empty bar');
+  const curl = { kind: 'isolation', load_type: 'weighted', equipment: 'Dumbbell' };
+  assert.equal(L.warmupPlan({ ex: curl, workWeight: 30 }).length, 2);
+  assert.equal(L.warmupPlan({ ex: curl, workWeight: 30, firstForMuscle: false })[0].weight, null);
+  const kg = L.warmupPlan({ ex: squat, workWeight: 100, unit: 'kg' });
+  assert.ok(kg.every(x => x.weight % 2.5 === 0 && x.weight >= 20 && x.weight < 100));
+  assert.equal(L.warmupPlan({ ex: { load_type: 'bodyweight' }, workWeight: 0 })[0].reps, 8);
+  assert.equal(L.warmupPlan({ ex: { load_type: 'cardio' } })[0].weight, null);
+}
+console.log('WARM-UP TESTS PASSED');

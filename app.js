@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import * as L from './logic.js?v=12';
-import * as LEARN from './learn.js?v=12';
+import * as L from './logic.js?v=13';
+import * as LEARN from './learn.js?v=13';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -17,6 +17,8 @@ let authReturn = (() => {
   return null;
 })();
 let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
+export const APP_VERSION = '1.0.0'; // keep in sync with CHANGELOG.md
+const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
 const DOC_URL = 'https://docs.google.com/document/d/1o5wZ9J00q6Gp06cORT2ZDCA7Q0-F7cKa-pKKO4VMSWY';
 
 const app = document.getElementById('app');
@@ -815,13 +817,15 @@ async function renderWorkout(dayId) {
       jointHold: (prevFb[we.exercises.muscle_group]?.joint_pain ?? 0) >= 2, unit: unit() });
   };
   const lastOfMuscle = {}; wes.filter(w => !isCardio(w)).forEach(w => lastOfMuscle[w.exercises.muscle_group] = w.id);
+  const firstOfMuscle = {}; wes.filter(w => !isCardio(w)).forEach(w => { firstOfMuscle[w.exercises.muscle_group] ??= w.id; });
+  const infoBtn = we => `<button class="ghost sm" data-info="${we.id}" aria-label="Warm-up and tips for ${esc(we.exercises.name)}" title="Warm-up & tips">ⓘ</button>`;
   const todayWarn = day.completed_at ? [] : (await slipFor(meso)).filter(w => !w.muscle || muscles.includes(w.muscle));
   const cardioCard = we => {
     const n = Math.max(we.sets.length, we.target_sets || 0, 1);
     return `<div class="card" data-we="${we.id}" data-muscle="Cardio">
       <div class="row"><div class="grow"><h3>♥︎ ${esc(we.exercises.name)} <span class="trend" data-trend="${we.id}"></span></h3>
         <div class="muted small">Cardio · minutes + intensity (RPE 0 easy → 10 max)</div></div>
-        <button class="ghost sm" data-edit="Cardio" aria-label="Edit ratings" title="Edit ratings">✎</button></div>
+        ${infoBtn(we)}<button class="ghost sm" data-edit="Cardio" aria-label="Edit ratings" title="Edit ratings">✎</button></div>
       <div class="sets"><div class="set-head"><div>#</div><div>min</div><div>RPE</div><div></div></div>
         ${Array.from({ length: n }, (_, i) => { const s = we.sets.find(x => x.set_index === i + 1) || {};
           return `<div class="set ${s.completed_at ? 'done' : ''} ${s._queued ? 'queued' : ''}" data-idx="${i + 1}" data-key="${we.id}:${i + 1}"><div class="n">${i + 1}</div>
@@ -834,6 +838,13 @@ async function renderWorkout(dayId) {
 
   app.innerHTML = `
     ${day.completed_at ? '<div class="card good small">Finished ✓ — you can still edit sets and ratings.</div>' : ''}
+    ${day.completed_at ? '' : (() => { let seen = false; try { seen = localStorage.getItem('wl_warmup_seen') === '1'; } catch {}
+      return seen ? '<div class="muted small warm-line">🔥 Warm up first — tap ⓘ on each muscle’s first exercise for ramp-up sets. Warm-ups aren’t logged.</div>'
+        : `<div class="card info small" id="warmNote"><b>🔥 Warm up before your first set</b>
+          <ol class="tight"><li>5 min easy cardio + a few dynamic moves (leg swings, arm circles, bodyweight squats).</li>
+          <li>On the <b>first exercise for each muscle</b>, tap <b>ⓘ</b> for 2–3 light ramp-up sets worked out from today’s weight.</li>
+          <li>Warm-up sets are <b>not logged</b> and never count toward your sets or progress — only log working sets.</li></ol>
+          <button class="ghost sm" id="warmOk">Got it</button></div>`; })()}
     ${deload ? '<div class="card info small"><b>Deload week.</b> Same weights as last week, half the sets, stop well short of failure (≈4 RIR).</div>' : ''}
     ${!deload && goal === 'athletic' ? '<div class="card info small"><b>Athleticism.</b> Move every rep of the main lifts as fast as you can with good form, and end the set when the speed drops — even if reps are left.</div>' : ''}
     ${!deload && goal === 'strength' ? '<div class="card info small"><b>Strength.</b> Heavy main lifts first while you’re fresh; rest 3–5 min between them. Never grind to failure.</div>' : ''}
@@ -846,7 +857,7 @@ async function renderWorkout(dayId) {
         <div class="row"><div class="grow"><h3>${esc(ex.name)} <span class="trend" data-trend="${we.id}"></span></h3>
           <div class="muted small">${esc(ex.muscle_group)} · ${we.target_sets} sets · ${deload ? 'deload' : `${we.target_rir} RIR`} · ${ex.rep_min}–${ex.rep_max} reps</div>
           ${(w => w ? `<div class="muted tiny range">Weight window ${fmt(w.light)}–${fmt(w.heavy)} ${unit()} · change the weight and the reps re-target to match last time</div>` : '')(windowFor(we))}</div>
-          <button class="ghost sm" data-edit="${esc(ex.muscle_group)}" aria-label="Edit ratings" title="Edit ratings">✎</button></div>
+          ${infoBtn(we)}<button class="ghost sm" data-edit="${esc(ex.muscle_group)}" aria-label="Edit ratings" title="Edit ratings">✎</button></div>
         ${we.flag ? `<div class="pill bad" style="margin-top:6px">${esc(we.flag)}</div>` : ''}
         <div class="sets"><div class="set-head"><div>#</div><div>${wLabel(ex)}</div><div>reps</div><div></div></div>
           ${Array.from({ length: n }, (_, i) => {
@@ -1050,6 +1061,29 @@ async function renderWorkout(dayId) {
     };
   });
 
+  $('#warmOk') && ($('#warmOk').onclick = () => { try { localStorage.setItem('wl_warmup_seen', '1'); } catch {} $('#warmNote').outerHTML = '<div class="muted small warm-line">🔥 Warm up first — tap ⓘ on each muscle’s first exercise for ramp-up sets. Warm-ups aren’t logged.</div>'; });
+  $$('[data-info]').forEach(b => b.onclick = () => {
+    const we = wes.find(w => w.id === b.dataset.info), ex = we.exercises;
+    const first = isCardio(we) || firstOfMuscle[ex.muscle_group] === we.id;
+    const card = app.querySelector(`[data-we="${we.id}"]`);
+    const ww = Number(card?.querySelector('.set [data-f="weight"]')?.value) || null; // today's working weight (shown unit)
+    const plan = L.warmupPlan({ ex, workWeight: ww, firstForMuscle: first, unit: unit() });
+    const rows = plan.map((x, i) => `<tr><td>${i + 1}</td><td>${x.weight != null ? `${fmt(x.weight)} ${unit()}` : '—'}</td><td>${x.reps ?? '—'}</td><td class="muted">${esc(x.note || '')}</td></tr>`).join('');
+    openSheet(`<h3>${esc(ex.name)}</h3>
+      <div class="muted small">${isCardio(we) ? 'Cardio' : `${esc(ex.muscle_group)} · ${we.target_rir} RIR · ${ex.rep_min}–${ex.rep_max} reps`}</div>
+      <h2>Warm-up${first ? '' : ' (optional)'}</h2>
+      ${plan[0].weight == null && plan.length === 1 ? `<p>${esc(plan[0].note)}</p>` : `<table class="warm"><thead><tr><th>#</th><th>Weight</th><th>Reps</th><th></th></tr></thead><tbody>${rows}</tbody></table>`}
+      <p class="muted small">${ww || isCardio(we) || ex.load_type !== 'weighted' ? '' : 'Enter today’s working weight in set 1 to get exact ramp-up weights. '}Rest about a minute between warm-up sets, then start your first working set. Don’t log warm-ups — they don’t count toward your sets or progress.</p>
+      <h2>Tips</h2><ul class="tight small">
+        ${isCardio(we) ? '<li>Breathing scale: talk in full sentences = easy; a few words = hard.</li>'
+          : `<li>Work sets end with about <b>${we.target_rir} rep${we.target_rir === 1 ? '' : 's'} left in the tank</b>${we.target_rir === 0 ? ' (to failure, with good form)' : ''}.</li>
+             <li>Full range of motion; control the lowering.</li>
+             ${goal === 'athletic' && ex.kind === 'compound' ? '<li>Move each rep as fast as you can; end the set when speed drops.</li>' : ''}
+             ${goal === 'strength' && ex.kind === 'compound' ? '<li>Rest 3–5 min between heavy sets.</li>' : '<li>Rest 1.5–3 min between work sets.</li>'}`}
+      </ul><a class="small" href="#/learn/warmup">Why warm up this way?</a>
+      <div class="spacer"></div><button class="primary block" id="closeInfo">Done</button>`,
+      panel => { panel.querySelector('#closeInfo').onclick = closeSheet; panel.querySelector('a').onclick = () => closeSheet(); });
+  });
   $$('[data-edit]').forEach(b => b.onclick = () => {
     const m = b.dataset.edit;
     if (!isRated(m) && !muscleComplete(m)) return toast(`Finish ${m}'s sets first — ratings open automatically`);
@@ -1403,7 +1437,8 @@ async function renderSettings() {
     <div class="card small"><a href="${DOC_URL}" target="_blank" rel="noopener">Training Logic & Evidence</a> <span class="muted">— why the app sets your weights, sets and RIR the way it does.</span></div>
     <button class="block" id="pw">Change password</button><div class="spacer"></div>
     <button class="block" id="out">Sign out</button>
-    <p class="muted small center">Install: Safari → Share → Add to Home Screen.</p>`;
+    <p class="muted small center">Install: Safari → Share → Add to Home Screen.</p>
+    <p class="muted tiny center">Woodhouse Lifts ${APP_VERSION} · <a href="${CHANGELOG_URL}" target="_blank" rel="noopener">What’s new</a></p>`;
   $('#save').onclick = async () => {
     const bw = $('#bw').value;
     // The bodyweight box is in the unit shown when the page opened; convert with that unit, then switch.

@@ -233,6 +233,31 @@ export function repRange(ex, goal) {
   return { rep_min, rep_max };
 }
 
+// Doc §4.2 — warm-up guidance (never logged, never counted as hard sets).
+// General warm-up first (5 min easy cardio + dynamic moves), then ramp-up sets on the FIRST exercise for a
+// muscle that day. Ramp sets are light and short so they prime the pattern without adding fatigue.
+// workWeight is in the display unit; returns [{ weight, reps, note }] rounded to real plate/dumbbell jumps.
+export function warmupPlan({ ex, workWeight, firstForMuscle = true, unit = 'lb' }) {
+  const lt = ex?.load_type;
+  if (lt === 'cardio') return [{ weight: null, reps: null, note: 'Start easy for 3–5 min, then build to working pace.' }];
+  if (!firstForMuscle) return [{ weight: null, reps: null, note: 'Muscle already warm — optional: 1 light set of 5–6 at about half your working weight.' }];
+  if (lt === 'bodyweight' || lt === 'assisted' || !workWeight) {
+    return [{ weight: null, reps: 8, note: lt === 'assisted' ? 'Extra assistance, easy' : 'Easy, smooth reps' },
+            { weight: null, reps: 4, note: lt === 'assisted' ? 'Close to working assistance' : 'A little harder' }];
+  }
+  const inc = increment(ex, unit);
+  const bar = ex?.equipment === 'Barbell' ? (unit === 'kg' ? 20 : 45) : 0;
+  const round = w => Math.max(bar, Math.round(w / inc) * inc);
+  const steps = ex?.kind === 'compound' ? [[0.5, 8], [0.7, 4], [0.85, 2]] : [[0.5, 10], [0.75, 4]];
+  const out = []; let last = -1;
+  for (const [pct, reps] of steps) {
+    const w = round(workWeight * pct);
+    if (w >= workWeight || w === last) continue;   // never warm up at or above the working weight; no repeats
+    out.push({ weight: w, reps, note: `${Math.round(pct * 100)}%` }); last = w;
+  }
+  return out.length ? out : [{ weight: null, reps: 8, note: 'One easy set of 8 with a light weight' }];
+}
+
 // Units: every weight is STORED in pounds (canonical). These convert at the screen boundary only,
 // so switching lb ↔ kg never changes the physical weight on record. 2-decimal rounding matches the
 // database (numeric(6,2)) and round-trips exactly: fromUnit(toUnit(x)) === x for any 0.01 kg value.

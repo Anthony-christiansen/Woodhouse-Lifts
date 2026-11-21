@@ -201,6 +201,20 @@ The app uses double progression anchored to RIR. It works from last week's same 
 
 The weight is prefilled in grey and the target reps show as the placeholder. Tapping ✓ accepts both.
 
+### 4.2 Warm-ups (never logged, never counted)
+
+Warm-up sets are not hard sets. The app doesn't log them, and they never count toward weekly sets, PRs or strength trends.
+
+1. **General warm-up:** about 5 minutes of easy cardio plus dynamic moves.
+2. **Specific warm-up:** done on the **first exercise for each muscle** that day. Tap ⓘ on the exercise to see ramp-up sets worked out from today's working weight:
+   - Compound lifts: 50% × 8, 70% × 4, 85% × 2.
+   - Isolation lifts: 50% × 10, 75% × 4.
+   - Weights are rounded to the load increment and never go below the empty bar (45 lb / 20 kg).
+   - Later exercises for an already-warm muscle get one optional light set.
+   - Example: 225 lb working weight → 115 × 8, 160 × 4, 190 × 2.
+
+Keep warm-ups light: a thorough general warm-up does most of the work, and adding fatigue before working sets costs reps (Xu 2025). Dynamic and ramp-up warm-ups support movement quality and sprint and jump performance (Kłobuchowski 2026).
+
 **Units.** All weights are stored in pounds. Choosing kg only changes how weights are shown and typed. 100 kg is stored as 220.46 lb and always shows back as 100 kg, so switching units never changes your history. Load increments follow the unit you see: 5 lb, or 2.5 kg (2 kg for dumbbells).
 
 ### 4.1 Choosing a different weight: equivalent-effort reps and the weight window
@@ -345,3 +359,5 @@ In week 1 of a new mesocycle, each exercise's weight is auto-matched from your l
 31. Zheng T et al. Effects of plyometric training on jump, sprint, and change of direction performance in adolescent soccer players. *PLoS One* 2025. https://doi.org/10.1371/journal.pone.0319548
 
 Sources 25–31 back the in-app **Learn** pages (goal guides for strength, athleticism, maintenance and cardio).
+32. Kłobuchowski W et al. Exercise-Based Strategies from Warm-Up to Training: A Systematic Review of Performance Enhancement and Injury Prevention. *Sports (Basel)* 2026. https://doi.org/10.3390/sports14050187
+33. Xu K et al. Optimizing Post-activation Performance Enhancement in Athletic Tasks: A Systematic Review with Meta-analysis. *Sports Med* 2025. https://doi.org/10.1007/s40279-024-02170-6
