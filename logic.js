@@ -413,6 +413,8 @@ export function suggestSet({ prev, ex, targetRir, prevTargetRir, deload, jointHo
   return r && r.weight != null ? { ...r, weight: Math.max(barFloor(ex, unit), r.weight) } : r;
 }
 // Guardrail: barbell suggestions never go below the empty bar.
+// Week-1 carry-over only looks back this far (doc §5.6).
+export const CARRY_DAYS = 182;
 export const barFloor = (ex, unit) => (ex?.equipment === 'Barbell' && ex?.load_type === 'weighted' ? (unit === 'kg' ? 20 : 45) : 0);
 /**
  * Guardrail: likely typo when a typed weight is 1.5× or more, or half or less, of the same set last time
@@ -435,6 +437,15 @@ function suggestSetRaw({ prev, ex, targetRir, prevTargetRir, deload, jointHold, 
   if (deload) return { weight, reps: Math.max(1, Math.min(reps, Number(prev.reps))), note: 'Deload' };
   const inc = increment(ex, unit);
   let w = weight;
+  // Far outside the rep range (e.g. a light rehab block at 70 × 30 on an 8–15 lift): one small weight step can't fix it.
+  // Re-solve the load so the reps land in range. High-rep sets overstate strength with this formula, so the reps+RIR
+  // used for the estimate are capped at 20 — this errs light, and the next session's feedback corrects it.
+  if (w != null && w > 0 && ex?.load_type === 'weighted' && (reps > max + 3 || reps < min - 3)) {
+    const bench = w * (1 + Math.min(20, Number(prev.reps) + loggedRir) / 30);
+    const goal = reps > max ? max : min;
+    const nw = Math.max(inc, Math.round(bench / (1 + (goal + targetRir) / 30) / inc) * inc);
+    return { weight: nw, reps: goal, note: 'Re-set into the rep range' };
+  }
   if (reps > max && w != null) {
     w = ex?.load_type === 'assisted' ? Math.max(0, w - inc) : w + inc;
     reps = Math.max(min, reps - 2);

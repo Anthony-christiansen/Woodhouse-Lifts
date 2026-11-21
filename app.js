@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import * as L from './logic.js?v=15';
-import * as LEARN from './learn.js?v=15';
+import * as L from './logic.js?v=16';
+import * as LEARN from './learn.js?v=16';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -17,7 +17,7 @@ let authReturn = (() => {
   return null;
 })();
 let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
-export const APP_VERSION = '1.1.0'; // keep in sync with CHANGELOG.md
+export const APP_VERSION = '1.1.1'; // keep in sync with CHANGELOG.md
 const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
 const DOC_URL = 'https://docs.google.com/document/d/1Z9SSEgob1TYVswc2fX36C0k2gR3U-MIQKstKskMznXg';
 
@@ -823,7 +823,7 @@ async function renderWorkout(dayId) {
   }
 
   // Last week's same session → auto-matched weights and rep targets.
-  const prev = {}; let prevFb = {};
+  const prev = {}, staleCarry = {}; let prevFb = {};
   if (day.week > 1) {
     const pd = check(await sb.from('workout_days').select('id').eq('mesocycle_id', meso.id).eq('week', day.week - 1).eq('day_index', day.day_index).maybeSingle());
     if (pd) {
@@ -837,11 +837,16 @@ async function renderWorkout(dayId) {
     const hist = ids.length ? await fetchAll(() => sb.from('workout_exercises')
       .select('exercise_id, target_rir, sets(set_index, weight, reps, rir, duration_min, rpe), workout_days!inner(week, completed_at, mesocycle_id, mesocycles(weeks))')
       .in('exercise_id', ids).neq('workout_days.mesocycle_id', meso.id).not('workout_days.completed_at', 'is', null).order('id')) : [];
+    // Only carry over from the last 6 months (doc §5.6). Older history (e.g. a post-surgery rehab block at
+    // light weight × 30) says little about today's strength, so it's shown for reference but not used.
+    const horizon = new Date(Date.now() - L.CARRY_DAYS * 864e5).toISOString();
     for (const h of hist) {
       const d = h.workout_days; if (!h.sets.length || L.rirForWeek(d.week, d.mesocycles?.weeks || 99).deload) continue;
-      const cur = prev[h.exercise_id];
-      if (!cur || d.completed_at > cur.at) prev[h.exercise_id] = { rir: h.target_rir, at: d.completed_at, carried: true, sets: h.sets.sort((a, b) => a.set_index - b.set_index).map(z => ({ ...z, weight: W(z.weight) })) };
+      const into = d.completed_at >= horizon ? prev : staleCarry;
+      const cur = into[h.exercise_id];
+      if (!cur || d.completed_at > cur.at) into[h.exercise_id] = { rir: h.target_rir, at: d.completed_at, carried: true, sets: h.sets.sort((a, b) => a.set_index - b.set_index).map(z => ({ ...z, weight: W(z.weight) })) };
     }
+    for (const id of Object.keys(staleCarry)) if (prev[id]) delete staleCarry[id];
   }
   // Per-lift status from earlier sessions (today excluded) → flag + recommendation on the lift (doc §6.1).
   const liftIdsToday = [...new Set(wes.filter(w => !isCardio(w)).map(w => w.exercise_id))];
@@ -927,7 +932,9 @@ async function renderWorkout(dayId) {
           }).join('')}
         </div>
         <div class="row" style="margin-top:8px"><button class="ghost sm" data-addset>+ set</button><button class="ghost sm" data-rmset>− set</button>
-          <span class="grow muted tiny right">${p?.sets.length ? (p.carried ? 'last meso: ' : 'last wk: ') + p.sets.map(s => `${fmt(s.weight)}×${s.reps ?? '–'}`).join(', ') : 'first week — pick weights for ' + (deload ? '' : `${we.target_rir} RIR`)}</span></div>
+          <span class="grow muted tiny right">${p?.sets.length ? (p.carried ? 'last meso: ' : 'last wk: ') + p.sets.map(s => `${fmt(s.weight)}×${s.reps ?? '–'}`).join(', ')
+            : staleCarry[we.exercise_id] ? `last done ${new Date(staleCarry[we.exercise_id].at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })} (${staleCarry[we.exercise_id].sets.map(s => `${fmt(s.weight)}×${s.reps ?? '–'}`).join(', ')}) — too long ago to use; pick a fresh weight for ${deload ? 'deload' : `${we.target_rir} RIR`}`
+            : 'first week — pick weights for ' + (deload ? '' : `${we.target_rir} RIR`)}</span></div>
         ${lastOfMuscle[ex.muscle_group] === we.id ? `<div data-rate="${esc(ex.muscle_group)}" style="margin-top:8px">${rateLine(ex.muscle_group, feedback[ex.muscle_group])}</div>` : ''}
       </div>`;
     }).join('')}

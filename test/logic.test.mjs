@@ -308,3 +308,18 @@ console.log('SPLIT TESTS PASSED');
   assert.ok(sg.weight >= 45, 'never below the empty bar');
 }
 console.log('GUARDRAIL TESTS PASSED');
+
+// --- Far-outside-range carry-over re-solves the load (doc §4) ---
+{
+  const ex = { load_type: 'weighted', equipment: 'Machine', rep_min: 8, rep_max: 15 };
+  const a = L.suggestSet({ prev: { weight: 70, reps: 30, rir: null }, ex, targetRir: 3, prevTargetRir: 1, unit: 'lb' });
+  assert.deepEqual([a.weight, a.reps], [75, 15], '70×30 rehab set → 75×15, not 75×26');
+  const b = L.suggestSet({ prev: { weight: 200, reps: 3, rir: 1 }, ex, targetRir: 2, unit: 'lb' });
+  assert.equal(b.reps, 8); assert.ok(b.weight < 200);
+  const c = L.suggestSet({ prev: { weight: 70, reps: 11, rir: 1 }, ex: { ...ex, rep_min: 6, rep_max: 20 }, targetRir: 0, unit: 'lb' });
+  assert.deepEqual([c.weight, c.reps], [70, 12], 'normal week unchanged');
+  const d = L.suggestSet({ prev: { weight: 100, reps: 17, rir: 2 }, ex, targetRir: 1, unit: 'lb' });
+  assert.ok(!d.note, 'small overshoot still uses the one-step rule');
+  assert.equal(L.CARRY_DAYS, 182);
+  console.log('RE-SOLVE TESTS PASSED');
+}
