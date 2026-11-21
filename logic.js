@@ -36,14 +36,15 @@ export function templatePriorities(focus) {
   return p;
 }
 
-export function weeklyTarget(muscle, priority, focus) {
+export function weeklyTarget(muscle, priority, focus, goal) {
   const table = priority === 'focus' && (focus === 'whole' || focus === 'custom') ? TARGETS.whole : TARGETS[priority] || TARGETS.skip;
-  return table[sizeOf(muscle)];
+  const base = table[sizeOf(muscle)], v = GOALS[goalOf(goal)].volume;
+  return v === 1 || !base ? base : Math.max(2, Math.round(base * v)); // hypertrophy: unchanged
 }
 
-export function weeklyTargets(priorities, focus) {
+export function weeklyTargets(priorities, focus, goal) {
   const t = {};
-  for (const m of MUSCLES) t[m] = weeklyTarget(m, priorities[m] || 'skip', focus);
+  for (const m of MUSCLES) t[m] = weeklyTarget(m, priorities[m] || 'skip', focus, goal);
   return t;
 }
 
@@ -78,12 +79,36 @@ const PREFERRED = {
   Forearms: ['Wrist Curl', 'Reverse Curl', 'Reverse Wrist Curl'],
 };
 
-export function candidatesFor(muscle, library) {
+export function candidatesFor(muscle, library, favorites = null) {
   const pool = library.filter(e => e.muscle_group === muscle);
-  const pref = (PREFERRED[muscle] || []).map(n => pool.find(e => e.name === n)).filter(Boolean);
-  const rest = pool.filter(e => !pref.includes(e))
+  const fav = favorites ? pool.filter(e => favorites.has(e.id)) : [];   // the user's favorites first
+  const pref = (PREFERRED[muscle] || []).map(n => pool.find(e => e.name === n)).filter(e => e && !fav.includes(e));
+  const rest = pool.filter(e => !pref.includes(e) && !fav.includes(e))
     .sort((a, b) => (a.kind === 'compound' ? 0 : 1) - (b.kind === 'compound' ? 0 : 1) || (a.owner_id ? 0 : 1) - (b.owner_id ? 0 : 1) || a.name.localeCompare(b.name));
-  return [...pref, ...rest];
+  return [...fav, ...pref, ...rest];
+}
+
+/**
+ * Doc §2.2 — personal exercise preferences, applied before autofill picks anything.
+ * prefs: [{ exercise_id, pref: 'favorite'|'exclude', substitute_id }], equipment: available list (null = all),
+ * avoidTags: e.g. ['axial']. Excluded, tag-matched and unavailable-equipment exercises drop out; favorites and
+ * chosen substitutes are always kept and ranked first. Cardio is never filtered by equipment.
+ * Returns { library, favorites:Set, removed:[exercise] } — removed lets the UI say what was skipped and why.
+ */
+export function applyPreferences(library, { prefs = [], equipment = null, avoidTags = [] } = {}) {
+  const favorites = new Set(prefs.filter(p => p.pref === 'favorite').map(p => p.exercise_id));
+  for (const p of prefs) if (p.pref === 'exclude' && p.substitute_id) favorites.add(p.substitute_id);
+  const excluded = new Set(prefs.filter(p => p.pref === 'exclude').map(p => p.exercise_id));
+  const eq = equipment?.length ? new Set([...equipment, 'Bodyweight']) : null;
+  const keep = [], removed = [];
+  for (const e of library) {
+    const why = favorites.has(e.id) ? null
+      : excluded.has(e.id) ? 'excluded'
+      : (e.tags || []).some(t => avoidTags.includes(t)) ? 'avoided'
+      : eq && e.load_type !== 'cardio' && e.equipment && !eq.has(e.equipment) ? 'equipment' : null;
+    (why ? removed : keep).push(why ? { ...e, why } : e);
+  }
+  return { library: keep, favorites, removed };
 }
 
 const slotOrder = (lib) => (a, b) => {
@@ -98,16 +123,16 @@ const slotOrder = (lib) => (a, b) => {
  * plan: [{ label, slots: [{ muscle, exerciseId|null, sets }] }]
  * mode: 'all' (rebuild from scratch) | 'fill' (keep what's there, place only what's missing)
  */
-export function autofill({ plan, priorities, focus, library, mode }) {
+export function autofill({ plan, priorities, focus, library, mode, goal, favorites = null }) {
   const nDays = plan.length;
   const lib = new Map(library.map(e => [e.id, e]));
   const days = mode === 'all'
     ? plan.map(d => ({ label: d.label, slots: [] }))
     : plan.map(d => ({ label: d.label, slots: d.slots.map(s => ({ ...s })) }));
-  const targets = weeklyTargets(priorities, focus);
+  const targets = weeklyTargets(priorities, focus, goal);
   const used = {}; // muscle -> Set of exercise ids already in the week
   const take = (m, avoid) => {
-    const cands = candidatesFor(m, library);
+    const cands = candidatesFor(m, library, favorites);
     if (!cands.length) return null;
     used[m] = used[m] || new Set();
     const pick = cands.find(e => !used[m].has(e.id) && !avoid.has(e.id)) || cands.find(e => !avoid.has(e.id)) || cands[0];
@@ -175,6 +200,47 @@ export function rirForWeek(week, weeks) {
   if (n <= 1) return { rir: 2, deload: false };
   return { rir: Math.max(0, 3 - Math.round((week - 1) * 3 / (n - 1))), deload: false };
 }
+
+// Doc §1.10 — training goal per mesocycle. Hypertrophy IS the original engine and is returned unchanged;
+// strength and athleticism only change rep ranges, the RIR schedule and starting volume. Progression
+// (double progression, set adjustment from feedback, deloads) is the same machinery for all three.
+//   Strength: heavy main lifts (≥80% 1RM ≈ 3–6 reps), never to failure (RIR floor 1), ~25% fewer sets.
+//   Athleticism: explosive main lifts 3–5 reps held far from failure (3 RIR, stop when speed drops),
+//                accessories 8–12 at ≥2 RIR, ~40% fewer sets (low-volume power work, ACSM 2026).
+export const GOALS = {
+  hypertrophy: { name: 'Hypertrophy', blurb: 'Build muscle size. Moderate reps, effort rises to near failure, most sets.', volume: 1 },
+  strength: { name: 'Strength', blurb: 'Lift heavier. Main lifts 3–6 reps, accessories 6–12, never to failure, fewer sets.', volume: 0.75,
+    reps: { compound: [3, 6], isolation: [6, 12] }, rirFloor: { compound: 1, isolation: 1 } },
+  athletic: { name: 'Athleticism', blurb: 'Power & speed. Explosive main lifts 3–5 reps far from failure, accessories 8–12, least volume.', volume: 0.6,
+    reps: { compound: [3, 5], isolation: [8, 12] }, rirFixed: { compound: 3 }, rirFloor: { isolation: 2 } },
+};
+export const goalOf = g => (GOALS[g] ? g : 'hypertrophy');
+
+/** Target RIR for one exercise in one week. kind = 'compound' | 'isolation'. Hypertrophy → rirForWeek(). */
+export function targetRir(week, weeks, goal, kind) {
+  const base = rirForWeek(week, weeks), G = GOALS[goalOf(goal)];
+  if (base.deload) return base;
+  const k = kind === 'compound' ? 'compound' : 'isolation';
+  if (G.rirFixed?.[k] != null) return { rir: G.rirFixed[k], deload: false };
+  return { rir: Math.max(base.rir, G.rirFloor?.[k] ?? 0), deload: false };
+}
+
+/** Rep range for an exercise under a goal. Hypertrophy (and cardio) keep the exercise's own range. */
+export function repRange(ex, goal) {
+  const G = GOALS[goalOf(goal)];
+  if (!G.reps || ex?.load_type === 'cardio') return { rep_min: ex?.rep_min ?? 5, rep_max: ex?.rep_max ?? 30 };
+  const [rep_min, rep_max] = G.reps[ex?.kind === 'compound' ? 'compound' : 'isolation'];
+  return { rep_min, rep_max };
+}
+
+// Units: every weight is STORED in pounds (canonical). These convert at the screen boundary only,
+// so switching lb ↔ kg never changes the physical weight on record. 2-decimal rounding matches the
+// database (numeric(6,2)) and round-trips exactly: fromUnit(toUnit(x)) === x for any 0.01 kg value.
+export const LB_PER_KG = 2.2046226218;
+export const toUnit = (lb, unit) => (lb == null || lb === '') ? null
+  : unit === 'kg' ? Math.round(Number(lb) / LB_PER_KG * 100) / 100 : Number(lb);
+export const fromUnit = (v, unit) => (v == null || v === '') ? null
+  : unit === 'kg' ? Math.round(Number(v) * LB_PER_KG * 100) / 100 : Number(v);
 
 // Doc §1.7 — estimated strength from a set.
 export function effectiveLoad(weight, loadType, bodyweight) {

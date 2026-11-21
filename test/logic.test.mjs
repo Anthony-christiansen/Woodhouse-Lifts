@@ -122,3 +122,84 @@ console.log('SLIP TESTS PASSED');
   assert.equal(L.weightRange({ prev, ex: { load_type: 'bodyweight' }, targetRir: 2 }), null);
 }
 console.log('RANGE TESTS PASSED');
+
+// Units: canonical pounds, lossless round trips, repeated switching never drifts
+{
+  for (let kg = 0; kg <= 300; kg += 0.25) assert.equal(L.toUnit(L.fromUnit(kg, 'kg'), 'kg'), Math.round(kg * 100) / 100);
+  for (let lb = 0; lb <= 700; lb += 2.5) assert.equal(L.fromUnit(L.toUnit(lb, 'lb'), 'lb'), lb);
+  assert.equal(L.fromUnit(100, 'kg'), 220.46);
+  assert.equal(L.toUnit(220.46, 'kg'), 100);
+  // switch lb → kg → lb → kg 10× : stored value untouched, displays stable
+  let stored = 225; for (let i = 0; i < 10; i++) { const kg = L.toUnit(stored, 'kg'); stored = L.fromUnit(kg, 'kg'); }
+  assert.ok(Math.abs(stored - 225) < 0.01);
+  assert.equal(L.toUnit(null, 'kg'), null); assert.equal(L.fromUnit('', 'kg'), null);
+}
+console.log('UNIT TESTS PASSED');
+
+// Goals (doc §1.10): hypertrophy unchanged; strength/athletic change reps, RIR and volume only
+{
+  for (let weeks = 3; weeks <= 8; weeks++) for (let w = 1; w <= weeks; w++) for (const kind of ['compound', 'isolation']) {
+    assert.deepEqual(L.targetRir(w, weeks, 'hypertrophy', kind), L.rirForWeek(w, weeks), 'hypertrophy RIR identical');
+    assert.deepEqual(L.targetRir(w, weeks, undefined, kind), L.rirForWeek(w, weeks), 'missing goal = hypertrophy');
+    const s = L.targetRir(w, weeks, 'strength', kind), a = L.targetRir(w, weeks, 'athletic', kind);
+    if (w === weeks) { assert.ok(s.deload && a.deload); continue; }
+    assert.ok(s.rir >= 1, 'strength never to failure');
+    assert.equal(L.targetRir(w, weeks, 'athletic', 'compound').rir, 3, 'power lifts held at 3 RIR');
+    assert.ok(L.targetRir(w, weeks, 'athletic', 'isolation').rir >= 2);
+  }
+  const press = { kind: 'compound', load_type: 'weighted', rep_min: 8, rep_max: 15 }, curl = { kind: 'isolation', load_type: 'weighted', rep_min: 10, rep_max: 20 };
+  assert.deepEqual(L.repRange(press, 'hypertrophy'), { rep_min: 8, rep_max: 15 });
+  assert.deepEqual(L.repRange(press, 'strength'), { rep_min: 3, rep_max: 6 });
+  assert.deepEqual(L.repRange(curl, 'strength'), { rep_min: 6, rep_max: 12 });
+  assert.deepEqual(L.repRange(press, 'athletic'), { rep_min: 3, rep_max: 5 });
+  assert.deepEqual(L.repRange({ load_type: 'cardio', rep_min: 1, rep_max: 60 }, 'strength'), { rep_min: 1, rep_max: 60 });
+  for (const m of L.MUSCLES) for (const pr of ['focus', 'maintain', 'skip']) for (const f of ['upper', 'lower', 'whole']) {
+    const h = L.weeklyTarget(m, pr, f, 'hypertrophy');
+    assert.equal(h, L.weeklyTarget(m, pr, f), 'hypertrophy volume identical');
+    if (h) { assert.ok(L.weeklyTarget(m, pr, f, 'strength') <= h && L.weeklyTarget(m, pr, f, 'athletic') <= L.weeklyTarget(m, pr, f, 'strength')); }
+  }
+  assert.equal(L.weeklyTarget('Chest', 'focus', 'upper', 'strength'), 8); // 10 × 0.75
+  // strength progression: 3–6 range → weight goes up once reps pass 6
+  const sg = L.suggestSet({ prev: { weight: 300, reps: 6, rir: 2 }, ex: { ...press, ...L.repRange(press, 'strength'), equipment: 'Barbell' }, targetRir: 1, prevTargetRir: 2, unit: 'lb' });
+  assert.ok(sg.weight > 300 && sg.reps <= 6, 'strength adds load instead of chasing reps');
+}
+console.log('GOAL TESTS PASSED');
+
+// Preferences (doc §2.2): exclusions, axial avoidance, equipment, favorites/substitutes ranked first
+{
+  const lib = [
+    { id: 'sq', name: 'Back Squat', muscle_group: 'Quads', kind: 'compound', equipment: 'Barbell', load_type: 'weighted', tags: ['axial'] },
+    { id: 'hk', name: 'Hack Squat', muscle_group: 'Quads', kind: 'compound', equipment: 'Machine', load_type: 'weighted', tags: ['axial'] },
+    { id: 'lp', name: 'Leg Press', muscle_group: 'Quads', kind: 'compound', equipment: 'Machine', load_type: 'weighted', tags: [] },
+    { id: 'le', name: 'Leg Extension', muscle_group: 'Quads', kind: 'isolation', equipment: 'Machine', load_type: 'weighted', tags: [] },
+    { id: 'bs', name: 'Bulgarian Split Squat', muscle_group: 'Quads', kind: 'compound', equipment: 'Dumbbell', load_type: 'weighted', tags: [] },
+    { id: 'rdl', name: 'Romanian Deadlift', muscle_group: 'Hamstrings', kind: 'compound', equipment: 'Barbell', load_type: 'weighted', tags: ['axial'] },
+    { id: 'lc', name: 'Lying Leg Curl', muscle_group: 'Hamstrings', kind: 'isolation', equipment: 'Machine', load_type: 'weighted', tags: [] },
+    { id: 'bk', name: 'Bike', muscle_group: 'Cardio', kind: 'isolation', equipment: 'Bike', load_type: 'cardio', tags: [] },
+  ];
+  const none = L.applyPreferences(lib);
+  assert.equal(none.library.length, lib.length, 'no prefs → nothing removed');
+  const ax = L.applyPreferences(lib, { avoidTags: ['axial'] });
+  assert.deepEqual(ax.library.map(e => e.id).sort(), ['bk', 'bs', 'lc', 'le', 'lp']);
+  assert.ok(ax.removed.every(e => e.why === 'avoided'));
+  const keepHack = L.applyPreferences(lib, { avoidTags: ['axial'], prefs: [{ exercise_id: 'hk', pref: 'favorite' }] });
+  assert.ok(keepHack.library.some(e => e.id === 'hk'), 'a favorite overrides a tag filter');
+  assert.equal(L.candidatesFor('Quads', keepHack.library, keepHack.favorites)[0].id, 'hk', 'favorites rank first');
+  const sub = L.applyPreferences(lib, { prefs: [{ exercise_id: 'lp', pref: 'exclude', substitute_id: 'bs' }] });
+  assert.ok(!sub.library.some(e => e.id === 'lp') && L.candidatesFor('Quads', sub.library, sub.favorites)[0].id === 'bs', 'substitute replaces excluded lift');
+  const eq = L.applyPreferences(lib, { equipment: ['Machine'] });
+  assert.ok(eq.library.some(e => e.id === 'bk'), 'cardio never equipment-filtered');
+  assert.ok(!eq.library.some(e => e.equipment === 'Barbell' || e.equipment === 'Dumbbell'));
+  // autofill with axial avoidance never schedules a tagged lift, and still covers the muscles
+  const plan = [{ label: 'A', slots: [] }, { label: 'B', slots: [] }];
+  const pr = Object.fromEntries(L.MUSCLES.map(m => [m, ['Quads', 'Hamstrings'].includes(m) ? 'focus' : 'skip']));
+  const out = L.autofill({ plan, priorities: pr, focus: 'lower', library: ax.library, favorites: ax.favorites, mode: 'all' });
+  const ids = out.flatMap(d => d.slots.map(s => s.exerciseId));
+  assert.ok(ids.length && !ids.some(id => ['sq', 'hk', 'rdl'].includes(id)), 'no axial lifts generated');
+  assert.ok(out.some(d => d.slots.some(s => s.muscle === 'Quads')) && out.some(d => d.slots.some(s => s.muscle === 'Hamstrings')), 'coverage kept');
+  // hypertrophy autofill unchanged when no prefs are given
+  const a1 = L.autofill({ plan, priorities: pr, focus: 'lower', library: lib, mode: 'all' });
+  const a2 = L.autofill({ plan, priorities: pr, focus: 'lower', library: none.library, favorites: none.favorites, mode: 'all' });
+  assert.deepEqual(a1, a2, 'empty preferences change nothing');
+}
+console.log('PREFERENCE TESTS PASSED');
