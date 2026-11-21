@@ -12,12 +12,14 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
-## 1.2.0 — 2026-11-20 (22:00 MT) · "Run it again from any week"
+## 1.2.0 — 2026-11-20 (21:55 MT) · "Run it again from an earlier week"
 
 **New**
-- **"↻ Run it again" lets you pick which week to restart from.** It copies the meso's plan, then asks which week's logged weights and reps the new week 1 should start from. Only working weeks with logged workouts can be picked; the latest is marked. Example: 7-week meso, deload in week 7, weeks 5–6 stalled → pick week 4 and progress again from there. "Don't carry weights" is also an option.
+- **"↻ Run it again" lets you pick which week to restart from.** It copies the meso's plan, then asks which week's logged weights and reps the new week 1 should start from: the last working week before the deload, or up to two weeks back. Example: 7-week meso, deload in week 7 → choose week 6, 5 or 4; pick week 4 and progress again from there. "Don't carry weights" is also an option.
 - The builder shows "Week 1 weights & reps start from <meso> · week N", with a button to turn it off.
 - In the workout, carried weights are labelled with their source week, e.g. "last meso wk 4: 70×12, 70×12".
+
+- Older history under an exercise is labelled by meso name and week, not a calendar date.
 
 **Under the hood**
 - Two new optional columns on mesocycles (`carry_meso_id`, `carry_week`) and an updated `create_mesocycle` that only accepts a source meso you own. Existing data unchanged. Docs: Training Logic §5.6.

@@ -701,7 +701,10 @@ async function renderMeso(id) {
     const plan = await planFromMeso();
     const working = weeks.filter(w => !L.targetRir(w, meso.weeks, meso.goal, 'compound').deload);
     const doneIn = w => days.filter(d => d.week === w && d.completed_at).length, total = w => days.filter(d => d.week === w).length;
-    const logged = working.filter(w => doneIn(w) > 0);
+    // Choices: the last working week before the deload, or go back up to two weeks from it (e.g. deload 7 → weeks 6, 5, 4).
+    const lastWorking = working.at(-1) ?? 0;
+    const choices = working.filter(w => w >= lastWorking - 2);
+    const logged = choices.filter(w => doneIn(w) > 0);
     const def = logged.at(-1) ?? null;
     const start = w => {
       builder = builderFromTemplate({ name: meso.name + ' (again)', weeks: meso.weeks, days_per_week: meso.days_per_week, focus: meso.focus, goal: meso.goal, priorities: meso.priorities, plan });
@@ -710,9 +713,9 @@ async function renderMeso(id) {
     };
     if (!logged.length) return start(null);
     openSheet(`<h3>Start the new meso from which week?</h3>
-      <p class="muted small">Week 1 of the new meso starts from the weights and reps you logged that week, then progresses week over week. Pick an earlier week to back off and build up again.</p>
-      ${working.map(w => { const r = L.targetRir(w, meso.weeks, meso.goal, 'compound'), n = doneIn(w);
-        return `<button class="list-btn" data-week="${w}" ${n ? '' : 'disabled'}><div class="grow"><b>Week ${w}</b>${w === def ? ' <span class="pill on tiny-pill">latest</span>' : ''}<div class="muted small">${r.rir} RIR · ${n}/${total(w)} workouts logged</div></div>›</button>`; }).join('')}
+      <p class="muted small">Week 1 of the new meso starts from the weights and reps you logged that week, then progresses week over week. Go back up to two weeks before the last one to back off and build up again.</p>
+      ${choices.slice().reverse().map(w => { const r = L.targetRir(w, meso.weeks, meso.goal, 'compound'), n = doneIn(w);
+        return `<button class="list-btn" data-week="${w}" ${n ? '' : 'disabled'}><div class="grow"><b>Week ${w}</b>${w === lastWorking ? ' <span class="pill on tiny-pill">last before deload</span>' : ` <span class="tiny muted">${lastWorking - w} week${lastWorking - w > 1 ? 's' : ''} back</span>`}<div class="muted small">${r.rir} RIR · ${n}/${total(w)} workouts logged</div></div>›</button>`; }).join('')}
       <button class="ghost block" data-week="0">Don't carry weights — I'll pick them</button>`,
       panel => panel.querySelectorAll('[data-week]').forEach(b => b.onclick = () => start(+b.dataset.week || null)));
   };
@@ -854,7 +857,7 @@ async function renderWorkout(dayId) {
     // Week 1 carries over from your last finished mesocycle: its final working week for the same exercise.
     const ids = [...new Set(wes.map(w => w.exercise_id))];
     const hist = ids.length ? await fetchAll(() => sb.from('workout_exercises')
-      .select('exercise_id, target_rir, sets(set_index, weight, reps, rir, duration_min, rpe), workout_days!inner(week, completed_at, mesocycle_id, mesocycles(weeks))')
+      .select('exercise_id, target_rir, sets(set_index, weight, reps, rir, duration_min, rpe), workout_days!inner(week, completed_at, mesocycle_id, mesocycles(weeks, name))')
       .in('exercise_id', ids).neq('workout_days.mesocycle_id', meso.id).not('workout_days.completed_at', 'is', null).order('id')) : [];
     // Week 1 progresses from your PREVIOUS meso only (the one you trained most recently, finished or not) — doc §5.6.
     // An exercise that wasn't in it gets no auto weight: older history (e.g. a 2025 rehab block) can't be translated,
@@ -868,7 +871,7 @@ async function renderWorkout(dayId) {
       if (meso.carry_week && d.mesocycle_id === meso.carry_meso_id && d.week !== meso.carry_week) continue;
       const into = d.mesocycle_id === prevMesoId ? prev : staleCarry;
       const cur = into[h.exercise_id];
-      if (!cur || d.completed_at > cur.at) into[h.exercise_id] = { rir: h.target_rir, at: d.completed_at, carried: true, wk: d.week, sets: h.sets.sort((a, b) => a.set_index - b.set_index).map(z => ({ ...z, weight: W(z.weight) })) };
+      if (!cur || d.completed_at > cur.at) into[h.exercise_id] = { rir: h.target_rir, at: d.completed_at, carried: true, wk: d.week, mname: d.mesocycles?.name || 'earlier meso', sets: h.sets.sort((a, b) => a.set_index - b.set_index).map(z => ({ ...z, weight: W(z.weight) })) };
     }
     for (const id of Object.keys(staleCarry)) if (prev[id]) delete staleCarry[id];
   }
@@ -962,7 +965,7 @@ async function renderWorkout(dayId) {
         </div>
         <div class="row" style="margin-top:8px"><button class="ghost sm" data-addset>+ set</button><button class="ghost sm" data-rmset>− set</button>
           <span class="grow muted tiny right">${p?.sets.length ? (p.carried ? `last meso wk ${p.wk}: ` : 'last wk: ') + p.sets.map(s => `${fmt(s.weight)}×${s.reps ?? '–'}`).join(', ')
-            : staleCarry[we.exercise_id] ? `last done ${new Date(staleCarry[we.exercise_id].at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })} (${staleCarry[we.exercise_id].sets.map(s => `${fmt(s.weight)}×${s.reps ?? '–'}`).join(', ')}) — not in your last meso, so not used. Pick a fresh weight for ${deload ? 'deload' : `${we.target_rir} RIR`}`
+            : staleCarry[we.exercise_id] ? `${esc(staleCarry[we.exercise_id].mname)} wk ${staleCarry[we.exercise_id].wk} (${staleCarry[we.exercise_id].sets.map(s => `${fmt(s.weight)}×${s.reps ?? '–'}`).join(', ')}) — not in your last meso, so not used. Pick a fresh weight for ${deload ? 'deload' : `${we.target_rir} RIR`}`
             : 'first week — pick weights for ' + (deload ? '' : `${we.target_rir} RIR`)}</span></div>
         ${lastOfMuscle[ex.muscle_group] === we.id ? `<div data-rate="${esc(ex.muscle_group)}" style="margin-top:8px">${rateLine(ex.muscle_group, feedback[ex.muscle_group])}</div>` : ''}
       </div>`;
