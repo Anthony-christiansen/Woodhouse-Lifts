@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Lifts">
+<meta name="theme-color" content="#0f1115">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon-192.png">
+<title>Woodhouse Lifts</title>
+<style>
+  :root {
+    --bg: #0f1115; --card: #181b22; --card2: #20242d; --line: #2a2f3a;
+    --text: #e8eaef; --muted: #8b93a3; --accent: #4ade80; --accent-ink: #062b14;
+    --warn: #f59e0b; --bad: #f87171; --radius: 14px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; }
+  body { padding: env(safe-area-inset-top) 0 calc(env(safe-area-inset-bottom) + 24px); }
+  header { position: sticky; top: 0; z-index: 5; background: rgba(15,17,21,.92); backdrop-filter: blur(10px);
+    display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 18px; margin: 0; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  main { padding: 16px; max-width: 640px; margin: 0 auto; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; margin-bottom: 12px; }
+  .row { display: flex; align-items: center; gap: 10px; }
+  .grow { flex: 1; min-width: 0; }
+  .muted { color: var(--muted); font-size: 14px; }
+  .small { font-size: 13px; }
+  h2 { font-size: 16px; margin: 18px 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  h3 { margin: 0 0 4px; font-size: 17px; }
+  button, .btn { font: inherit; border: 0; border-radius: 10px; padding: 11px 14px; background: var(--card2); color: var(--text);
+    cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+  button.primary { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  button.ghost { background: transparent; color: var(--muted); padding: 8px 10px; }
+  button.danger { color: var(--bad); }
+  button.block { width: 100%; }
+  button:disabled { opacity: .5; }
+  input, select, textarea { font: inherit; color: var(--text); background: var(--card2); border: 1px solid var(--line);
+    border-radius: 10px; padding: 10px 12px; width: 100%; }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+  .pill { font-size: 12px; padding: 3px 8px; border-radius: 99px; background: var(--card2); color: var(--muted); white-space: nowrap; }
+  .pill.on { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .pill.warn { background: #3a2a07; color: var(--warn); }
+  .list-btn { width: 100%; text-align: left; justify-content: flex-start; background: var(--card); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 14px; margin-bottom: 10px; }
+  .weeks { display: grid; gap: 8px; }
+  .week { display: grid; grid-template-columns: 54px repeat(var(--days), 1fr); gap: 6px; align-items: center; }
+  .day { padding: 10px 4px; font-size: 13px; border-radius: 10px; background: var(--card2); border: 1px solid var(--line); }
+  .day.done { background: #12301d; border-color: #1f5c36; color: var(--accent); }
+  .day.next { outline: 2px solid var(--accent); }
+  .sets { display: grid; gap: 6px; margin-top: 10px; }
+  .set { display: grid; grid-template-columns: 26px 1fr 1fr 1fr 46px; gap: 6px; align-items: center; }
+  .set input { padding: 9px 6px; text-align: center; }
+  .set .n { color: var(--muted); font-size: 13px; text-align: center; }
+  .set button.check { padding: 9px 0; }
+  .set.done button.check { background: var(--accent); color: var(--accent-ink); }
+  .set-head { display: grid; grid-template-columns: 26px 1fr 1fr 1fr 46px; gap: 6px; font-size: 12px; color: var(--muted); text-align: center; }
+  .seg { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+  .seg button { padding: 8px 0; font-size: 13px; }
+  .seg button.on { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .fb-row { margin: 8px 0; }
+  .toast { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 20px); transform: translateX(-50%);
+    background: var(--card2); border: 1px solid var(--line); padding: 10px 16px; border-radius: 99px; z-index: 50; font-size: 14px; }
+  .toast.err { border-color: var(--bad); color: var(--bad); }
+  .ex-line { display: grid; grid-template-columns: 1fr 64px 36px; gap: 6px; margin-top: 6px; }
+  .center { text-align: center; }
+  .spacer { height: 8px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <button class="ghost" id="backBtn" hidden>‹ Back</button>
+  <h1 id="title">Woodhouse Lifts</h1>
+  <button class="ghost" id="menuBtn" hidden>⚙︎</button>
+</header>
+<main id="app"><p class="muted center">Loading…</p></main>
+
+<script type="module">
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+
+// Public by design: access is enforced by row-level security in the database.
+const SUPABASE_URL = 'https://dnknmtzcmmdepwheagmq.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g';
+const sb = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
+
+const MUSCLES = ['Chest','Back','Shoulders','Biceps','Triceps','Quads','Hamstrings','Glutes','Calves','Traps','Abs','Forearms'];
+const app = document.getElementById('app');
+const titleEl = document.getElementById('title');
+const backBtn = document.getElementById('backBtn');
+const menuBtn = document.getElementById('menuBtn');
+let session = null, profile = null;
+
+// ---------- helpers ----------
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const $ = sel => app.querySelector(sel);
+function toast(msg, err = false) {
+  const t = document.createElement('div'); t.className = 'toast' + (err ? ' err' : ''); t.textContent = msg;
+  document.body.appendChild(t); setTimeout(() => t.remove(), err ? 4000 : 1800);
+}
+function check(res) { if (res.error) { console.error(res.error); toast(res.error.message, true); throw res.error; } return res.data; }
+function setHeader(title, back) {
+  titleEl.textContent = title;
+  backBtn.hidden = !back; backBtn.onclick = () => { location.hash = back; };
+  menuBtn.hidden = !session; menuBtn.onclick = () => { location.hash = '#/settings'; };
+}
+const go = h => { location.hash = h; };
+const unit = () => profile?.unit || 'lb';
+function rirForWeek(week, weeks) {
+  const deload = weeks >= 3 && week === weeks;
+  if (deload) return { rir: 4, deload: true };
+  const n = weeks >= 3 ? weeks - 1 : weeks;
+  if (n <= 1) return { rir: 2, deload: false };
+  return { rir: Math.max(0, 3 - Math.floor((week - 1) * 3 / (n - 1))), deload: false };
+}
+
+// ---------- router ----------
+async function route() {
+  const { data } = await sb.auth.getSession(); session = data.session;
+  if (!session) return renderAuth();
+  if (!profile) profile = (await sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle()).data;
+  const parts = location.hash.replace(/^#\/?/, '').split('/');
+  try {
+    switch (parts[0]) {
+      case 'new': return await renderNewMeso();
+      case 'meso': return await renderMeso(parts[1]);
+      case 'workout': return await renderWorkout(parts[1]);
+      case 'feedback': return await renderFeedback(parts[1]);
+      case 'exercises': return await renderExercises();
+      case 'settings': return renderSettings();
+      default: return await renderHome();
+    }
+  } catch (e) { console.error(e); app.innerHTML = `<div class="card">Something went wrong: ${esc(e.message)}</div>`; }
+}
+window.addEventListener('hashchange', route);
+sb.auth.onAuthStateChange((evt) => { if (evt === 'SIGNED_IN' || evt === 'SIGNED_OUT') { profile = null; route(); } });
+
+// ---------- auth ----------
+function renderAuth(mode = 'signin') {
+  setHeader('Woodhouse Lifts');
+  app.innerHTML = `
+    <div class="card">
+      <h3>${mode === 'signin' ? 'Sign in' : 'Create account'}</h3>
+      <form id="f">
+        ${mode === 'signup' ? '<label>Name</label><input name="name" autocomplete="given-name" required>' : ''}
+        <label>Email</label><input name="email" type="email" autocomplete="email" required>
+        <label>Password</label><input name="password" type="password" minlength="8"
+          autocomplete="${mode === 'signin' ? 'current-password' : 'new-password'}" required>
+        <div class="spacer"></div>
+        <button class="primary block" type="submit">${mode === 'signin' ? 'Sign in' : 'Create account'}</button>
+      </form>
+      <div class="spacer"></div>
+      <button class="ghost block" id="swap">${mode === 'signin' ? 'New here? Create an account' : 'Have an account? Sign in'}</button>
+    </div>`;
+  $('#swap').onclick = () => renderAuth(mode === 'signin' ? 'signup' : 'signin');
+  $('#f').onsubmit = async e => {
+    e.preventDefault();
+    const fd = new FormData(e.target); const btn = e.target.querySelector('button'); btn.disabled = true;
+    const email = fd.get('email').trim(), password = fd.get('password');
+    if (mode === 'signin') {
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+      if (error) toast(error.message, true);
+    } else {
+      const { data, error } = await sb.auth.signUp({ email, password,
+        options: { data: { display_name: fd.get('name').trim() }, emailRedirectTo: location.origin + location.pathname } });
+      if (error) toast(error.message, true);
+      else if (!data.session) app.innerHTML = `<div class="card"><h3>Check your email</h3><p class="muted">Tap the confirmation link sent to ${esc(email)}, then come back and sign in.</p></div>`;
+    }
+    btn.disabled = false;
+  };
+}
+
+// ---------- home ----------
+async function renderHome() {
+  setHeader('Woodhouse Lifts');
+  const mesos = check(await sb.from('mesocycles').select('*').order('created_at', { ascending: false }));
+  const active = mesos.filter(m => m.status !== 'completed' && m.status !== 'abandoned');
+  let nextHtml = '';
+  if (active.length) {
+    const days = check(await sb.from('workout_days').select('id, week, day_index, label, completed_at, mesocycle_id')
+      .eq('mesocycle_id', active[0].id).is('completed_at', null).order('week').order('day_index').limit(1));
+    if (days[0]) {
+      const d = days[0];
+      nextHtml = `<div class="card"><div class="muted small">Next workout · ${esc(active[0].name)}</div>
+        <h3>Week ${d.week} · ${esc(d.label || 'Day ' + d.day_index)}</h3><div class="spacer"></div>
+        <button class="primary block" id="startNext">Start workout</button></div>`;
+    }
+  }
+  app.innerHTML = `
+    <div class="muted small">Hi ${esc(profile?.display_name || '')}</div>
+    ${nextHtml}
+    <h2>Mesocycles</h2>
+    ${mesos.length ? mesos.map(m => `
+      <button class="list-btn" data-meso="${m.id}">
+        <div class="grow"><div><b>${esc(m.name)}</b></div>
+        <div class="muted small">${m.weeks} weeks · ${m.days_per_week} days/week</div></div>
+        <span class="pill ${m.status === 'active' ? 'on' : ''}">${esc(m.status)}</span>
+      </button>`).join('') : '<p class="muted">No mesocycles yet.</p>'}
+    <button class="primary block" id="newMeso">+ New mesocycle</button>
+    <div class="spacer"></div>
+    <button class="block" id="exLib">Exercise library</button>`;
+  app.querySelectorAll('[data-meso]').forEach(b => b.onclick = () => go('#/meso/' + b.dataset.meso));
+  $('#newMeso').onclick = () => go('#/new');
+  $('#exLib').onclick = () => go('#/exercises');
+  const sn = $('#startNext'); if (sn) sn.onclick = async () => {
+    const d = check(await sb.from('workout_days').select('id').eq('mesocycle_id', active[0].id).is('completed_at', null)
+      .order('week').order('day_index').limit(1))[0];
+    go('#/workout/' + d.id);
+  };
+}
+
+// ---------- exercises ----------
+let exCache = null;
+async function loadExercises(force = false) {
+  if (!exCache || force) exCache = check(await sb.from('exercises').select('*').order('muscle_group').order('name'));
+  return exCache;
+}
+function exerciseOptions(list, selected) {
+  return MUSCLES.map(mg => {
+    const items = list.filter(e => e.muscle_group === mg);
+    if (!items.length) return '';
+    return `<optgroup label="${mg}">${items.map(e => `<option value="${e.id}" ${e.id === selected ? 'selected' : ''}>${esc(e.name)}</option>`).join('')}</optgroup>`;
+  }).join('');
+}
+async function renderExercises() {
+  setHeader('Exercises', '#/');
+  const list = await loadExercises(true);
+  app.innerHTML = `
+    <div class="card"><h3>Add your own</h3>
+      <form id="f"><label>Name</label><input name="name" required>
+      <label>Muscle group</label><select name="mg">${MUSCLES.map(m => `<option>${m}</option>`).join('')}</select>
+      <label>Equipment</label><input name="eq" placeholder="Barbell, Cable, Machine…">
+      <div class="spacer"></div><button class="primary block">Add exercise</button></form></div>
+    ${MUSCLES.map(mg => {
+      const items = list.filter(e => e.muscle_group === mg); if (!items.length) return '';
+      return `<h2>${mg}</h2><div class="card">${items.map(e => `
+        <div class="row" style="padding:6px 0"><div class="grow">${esc(e.name)} <span class="muted small">${esc(e.equipment || '')}</span></div>
+        ${e.owner_id ? `<span class="pill">mine</span><button class="ghost danger" data-del="${e.id}">✕</button>` : ''}</div>`).join('')}</div>`;
+    }).join('')}`;
+  $('#f').onsubmit = async e => {
+    e.preventDefault(); const fd = new FormData(e.target);
+    check(await sb.from('exercises').insert({ name: fd.get('name').trim(), muscle_group: fd.get('mg'), equipment: fd.get('eq').trim() || null }));
+    toast('Added'); renderExercises();
+  };
+  app.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
+    if (!confirm('Delete this exercise?')) return;
+    const r = await sb.from('exercises').delete().eq('id', b.dataset.del);
+    if (r.error) toast('In use by a workout — can’t delete', true); else renderExercises();
+  });
+}
+
+// ---------- new mesocycle ----------
+async function renderNewMeso() {
+  setHeader('New mesocycle', '#/');
+  const list = await loadExercises();
+  const state = { name: '', weeks: 5, days: 4, plan: [] };
+  const ensurePlan = () => {
+    while (state.plan.length < state.days) state.plan.push({ label: 'Day ' + (state.plan.length + 1), exercises: [{ id: list[0]?.id, sets: 3 }] });
+    state.plan.length = state.days;
+  };
+  const draw = () => {
+    ensurePlan();
+    app.innerHTML = `
+      <div class="card">
+        <label>Name</label><input id="name" value="${esc(state.name)}" placeholder="e.g. Whole body AC VI">
+        <div class="row"><div class="grow"><label>Weeks (incl. deload)</label>
+          <select id="weeks">${[3,4,5,6,7,8].map(n => `<option ${n === state.weeks ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
+        <div class="grow"><label>Days / week</label>
+          <select id="days">${[1,2,3,4,5,6,7].map(n => `<option ${n === state.days ? 'selected' : ''}>${n}</option>`).join('')}</select></div></div>
+        <p class="muted small">Target RIR steps from 3 down to 0 across the weeks; the last week is a deload at half the sets.</p>
+      </div>
+      ${state.plan.map((d, di) => `
+        <div class="card"><input data-label="${di}" value="${esc(d.label)}">
+          <div class="ex-line muted small" style="margin-top:10px"><div>Exercise</div><div class="center">Sets</div><div></div></div>
+          ${d.exercises.map((x, xi) => `
+            <div class="ex-line"><select data-ex="${di}.${xi}">${exerciseOptions(list, x.id)}</select>
+              <input type="number" inputmode="numeric" min="1" max="10" value="${x.sets}" data-sets="${di}.${xi}">
+              <button class="ghost danger" data-rm="${di}.${xi}">✕</button></div>`).join('')}
+          <div class="spacer"></div><button class="block" data-add="${di}">+ Add exercise</button>
+        </div>`).join('')}
+      <button class="primary block" id="create">Create mesocycle</button>`;
+    $('#name').oninput = e => state.name = e.target.value;
+    $('#weeks').onchange = e => { state.weeks = +e.target.value; };
+    $('#days').onchange = e => { state.days = +e.target.value; draw(); };
+    app.querySelectorAll('[data-label]').forEach(i => i.oninput = e => state.plan[+i.dataset.label].label = e.target.value);
+    app.querySelectorAll('[data-ex]').forEach(s => s.onchange = e => { const [d, x] = s.dataset.ex.split('.').map(Number); state.plan[d].exercises[x].id = e.target.value; });
+    app.querySelectorAll('[data-sets]').forEach(s => s.oninput = e => { const [d, x] = s.dataset.sets.split('.').map(Number); state.plan[d].exercises[x].sets = Math.max(1, +e.target.value || 1); });
+    app.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { const [d, x] = b.dataset.rm.split('.').map(Number); state.plan[d].exercises.splice(x, 1); draw(); });
+    app.querySelectorAll('[data-add]').forEach(b => b.onclick = () => { state.plan[+b.dataset.add].exercises.push({ id: list[0]?.id, sets: 3 }); draw(); });
+    $('#create').onclick = create;
+  };
+  async function create() {
+    if (!state.name.trim()) return toast('Give it a name', true);
+    if (state.plan.some(d => !d.exercises.length)) return toast('Every day needs at least one exercise', true);
+    $('#create').disabled = true;
+    try {
+      const meso = check(await sb.from('mesocycles').insert({ name: state.name.trim(), weeks: state.weeks, days_per_week: state.days }).select().single());
+      const dayRows = [];
+      for (let w = 1; w <= state.weeks; w++) state.plan.forEach((d, i) => dayRows.push({ mesocycle_id: meso.id, week: w, day_index: i + 1, label: d.label }));
+      const days = check(await sb.from('workout_days').insert(dayRows).select('id, week, day_index'));
+      const exRows = [];
+      for (const d of days) {
+        const { rir, deload } = rirForWeek(d.week, state.weeks);
+        state.plan[d.day_index - 1].exercises.forEach((x, pos) => exRows.push({
+          workout_day_id: d.id, exercise_id: x.id, position: pos + 1,
+          target_sets: deload ? Math.max(1, Math.ceil(x.sets / 2)) : x.sets, target_rir: rir }));
+      }
+      check(await sb.from('workout_exercises').insert(exRows));
+      toast('Mesocycle created'); go('#/meso/' + meso.id);
+    } catch { $('#create').disabled = false; }
+  }
+  draw();
+}
+
+// ---------- mesocycle detail ----------
+async function renderMeso(id) {
+  const meso = check(await sb.from('mesocycles').select('*').eq('id', id).single());
+  setHeader(meso.name, '#/');
+  const days = check(await sb.from('workout_days').select('id, week, day_index, label, completed_at').eq('mesocycle_id', id).order('week').order('day_index'));
+  const next = days.find(d => !d.completed_at);
+  const weeks = [...new Set(days.map(d => d.week))];
+  app.innerHTML = `
+    <div class="card"><div class="row"><div class="grow muted small">${meso.weeks} weeks · ${meso.days_per_week} days/week</div>
+      <span class="pill ${meso.status === 'active' ? 'on' : ''}">${esc(meso.status)}</span></div></div>
+    <div class="weeks" style="--days:${meso.days_per_week}">
+      ${weeks.map(w => { const r = rirForWeek(w, meso.weeks); return `<div class="week">
+        <div class="muted small">Wk ${w}<br><span class="${r.deload ? 'pill warn' : ''}">${r.deload ? 'deload' : r.rir + ' RIR'}</span></div>
+        ${days.filter(d => d.week === w).map(d => `<button class="day ${d.completed_at ? 'done' : ''} ${next && d.id === next.id ? 'next' : ''}" data-day="${d.id}">${esc(d.label || 'D' + d.day_index)}</button>`).join('')}
+      </div>`; }).join('')}
+    </div>
+    <div class="spacer"></div>
+    ${next ? '<button class="primary block" id="go">Start next workout</button>' : '<p class="muted center">All workouts done 🎉</p>'}
+    <div class="spacer"></div>
+    <div class="row">
+      ${meso.status !== 'completed' ? '<button class="grow" id="complete">Mark complete</button>' : ''}
+      <button class="grow danger" id="del">Delete</button>
+    </div>`;
+  app.querySelectorAll('[data-day]').forEach(b => b.onclick = () => go('#/workout/' + b.dataset.day));
+  if (next) $('#go').onclick = () => go('#/workout/' + next.id);
+  const c = $('#complete'); if (c) c.onclick = async () => { check(await sb.from('mesocycles').update({ status: 'completed' }).eq('id', id)); renderMeso(id); };
+  $('#del').onclick = async () => {
+    if (!confirm('Delete this mesocycle and every workout and set in it? This can’t be undone.')) return;
+    check(await sb.from('mesocycles').delete().eq('id', id)); go('#/');
+  };
+}
+
+// ---------- workout logger ----------
+async function renderWorkout(dayId) {
+  const day = check(await sb.from('workout_days').select('*, mesocycles(id, name, weeks, status)').eq('id', dayId).single());
+  const meso = day.mesocycles;
+  setHeader(`Wk ${day.week} · ${day.label || 'Day ' + day.day_index}`, '#/meso/' + meso.id);
+  const wes = check(await sb.from('workout_exercises').select('*, exercises(name, muscle_group), sets(*)')
+    .eq('workout_day_id', dayId).order('position'));
+  // Last week's numbers for the same day, matched by exercise.
+  let prev = {};
+  if (day.week > 1) {
+    const pd = check(await sb.from('workout_days').select('id').eq('mesocycle_id', meso.id).eq('week', day.week - 1).eq('day_index', day.day_index).maybeSingle());
+    if (pd) {
+      const pw = check(await sb.from('workout_exercises').select('exercise_id, sets(set_index, weight, reps, rir)').eq('workout_day_id', pd.id));
+      pw.forEach(x => prev[x.exercise_id] = x.sets.sort((a, b) => a.set_index - b.set_index));
+    }
+  }
+  if (!day.started_at) await sb.from('workout_days').update({ started_at: new Date().toISOString() }).eq('id', dayId);
+  if (meso.status === 'planned') await sb.from('mesocycles').update({ status: 'active' }).eq('id', meso.id);
+  const { deload } = rirForWeek(day.week, meso.weeks);
+
+  app.innerHTML = `
+    ${day.completed_at ? '<div class="card muted small">Finished — you can still edit sets.</div>' : ''}
+    ${wes.map(we => {
+      const sets = we.sets.sort((a, b) => a.set_index - b.set_index);
+      const n = Math.max(sets.length, we.target_sets || 0, 1);
+      const p = prev[we.exercise_id] || [];
+      return `<div class="card" data-we="${we.id}">
+        <div class="row"><div class="grow"><h3>${esc(we.exercises.name)}</h3>
+          <div class="muted small">${esc(we.exercises.muscle_group)} · ${we.target_sets} sets · ${deload ? 'deload' : we.target_rir + ' RIR'}</div></div></div>
+        <div class="sets">
+          <div class="set-head"><div>#</div><div>${unit()}</div><div>reps</div><div>RIR</div><div></div></div>
+          ${Array.from({ length: n }, (_, i) => {
+            const s = sets.find(x => x.set_index === i + 1) || {}; const ps = p[i] || p[p.length - 1] || {};
+            return `<div class="set ${s.completed_at ? 'done' : ''}" data-idx="${i + 1}">
+              <div class="n">${i + 1}</div>
+              <input type="number" inputmode="decimal" step="any" data-f="weight" value="${s.weight ?? ''}" placeholder="${ps.weight ?? ''}">
+              <input type="number" inputmode="numeric" data-f="reps" value="${s.reps ?? ''}" placeholder="${ps.reps ?? ''}">
+              <input type="number" inputmode="numeric" data-f="rir" value="${s.rir ?? ''}" placeholder="${we.target_rir ?? ''}">
+              <button class="check">✓</button></div>`;
+          }).join('')}
+        </div>
+        <div class="row" style="margin-top:8px"><button class="ghost" data-addset>+ set</button><button class="ghost" data-rmset>− set</button>
+          ${p.length ? `<span class="grow muted small" style="text-align:right">last wk: ${p.map(s => `${s.weight ?? '–'}×${s.reps ?? '–'}`).join(', ')}</span>` : ''}</div>
+      </div>`;
+    }).join('')}
+    <button class="primary block" id="finish">${day.completed_at ? 'Edit muscle feedback' : 'Finish workout'}</button>`;
+
+  app.querySelectorAll('[data-we]').forEach(card => {
+    const weId = card.dataset.we;
+    card.querySelectorAll('.set').forEach(row => wireSet(weId, row));
+    card.querySelector('[data-addset]').onclick = () => {
+      const setsEl = card.querySelector('.sets'); const last = setsEl.querySelector('.set:last-child');
+      const row = last.cloneNode(true); const idx = +last.dataset.idx + 1;
+      row.dataset.idx = idx; row.classList.remove('done'); row.querySelector('.n').textContent = idx;
+      row.querySelectorAll('input').forEach(i => { if (i.value) i.placeholder = i.value; i.value = ''; });
+      setsEl.appendChild(row); wireSet(weId, row);
+    };
+    card.querySelector('[data-rmset]').onclick = async () => {
+      const rows = card.querySelectorAll('.set'); if (rows.length <= 1) return;
+      const last = rows[rows.length - 1];
+      await sb.from('sets').delete().eq('workout_exercise_id', weId).eq('set_index', +last.dataset.idx);
+      last.remove();
+    };
+  });
+  $('#finish').onclick = () => go('#/feedback/' + dayId);
+}
+function wireSet(weId, row) {
+  const save = async (markDone) => {
+    const v = f => { const x = row.querySelector(`[data-f="${f}"]`); return x.value === '' ? null : Number(x.value); };
+    if (markDone) row.querySelectorAll('input').forEach(i => { if (i.value === '' && i.placeholder !== '') i.value = i.placeholder; });
+    const payload = { workout_exercise_id: weId, set_index: +row.dataset.idx, weight: v('weight'), reps: v('reps'), rir: v('rir') };
+    if (markDone) payload.completed_at = row.classList.contains('done') ? null : new Date().toISOString();
+    if (!markDone && payload.weight == null && payload.reps == null && payload.rir == null) return;
+    const { error } = await sb.from('sets').upsert(payload, { onConflict: 'workout_exercise_id,set_index' });
+    if (error) return toast(error.message, true);
+    if (markDone) row.classList.toggle('done', !!payload.completed_at);
+  };
+  row.querySelector('.check').onclick = () => save(true);
+  row.querySelectorAll('input').forEach(i => i.onchange = () => save(false));
+}
+
+// ---------- muscle feedback ----------
+async function renderFeedback(dayId) {
+  const day = check(await sb.from('workout_days').select('*, workout_exercises(exercises(muscle_group))').eq('id', dayId).single());
+  setHeader('How did it feel?', '#/workout/' + dayId);
+  const muscles = [...new Set(day.workout_exercises.map(x => x.exercises.muscle_group))];
+  const existing = check(await sb.from('muscle_feedback').select('*').eq('workout_day_id', dayId));
+  const fb = {}; muscles.forEach(m => fb[m] = existing.find(e => e.muscle_group === m) || { muscle_group: m });
+  const Q = [
+    ['pump', 'Pump', ['None', 'Mild', 'Good', 'Huge']],
+    ['soreness', 'Soreness coming in', ['None', 'Healed early', 'Healed on time', 'Still sore']],
+    ['workload', 'Workload', ['Easy', 'Pretty good', 'Pushed limits', 'Too much']],
+    ['joint_pain', 'Joint pain', ['None', 'Low', 'Moderate', 'A lot']],
+  ];
+  app.innerHTML = muscles.map(m => `<div class="card"><h3>${esc(m)}</h3>
+    ${Q.map(([k, label, opts]) => `<div class="fb-row"><label>${label}</label><div class="seg">
+      ${opts.map((o, i) => `<button data-m="${esc(m)}" data-k="${k}" data-v="${i}" class="${fb[m][k] === i ? 'on' : ''}">${o}</button>`).join('')}</div></div>`).join('')}
+  </div>`).join('') + `<button class="primary block" id="save">Save & finish</button>
+    <div class="spacer"></div><button class="ghost block" id="skip">Skip feedback</button>`;
+  app.querySelectorAll('[data-k]').forEach(b => b.onclick = () => {
+    const m = b.dataset.m, k = b.dataset.k; fb[m][k] = +b.dataset.v;
+    app.querySelectorAll(`[data-m="${CSS.escape(m)}"][data-k="${k}"]`).forEach(x => x.classList.toggle('on', x === b));
+  });
+  const finish = async () => {
+    if (!day.completed_at) check(await sb.from('workout_days').update({ completed_at: new Date().toISOString() }).eq('id', dayId));
+    toast('Workout saved 💪'); go('#/meso/' + day.mesocycle_id);
+  };
+  $('#save').onclick = async () => {
+    const rows = muscles.map(m => ({ workout_day_id: dayId, muscle_group: m,
+      pump: fb[m].pump ?? null, soreness: fb[m].soreness ?? null, workload: fb[m].workload ?? null, joint_pain: fb[m].joint_pain ?? null }));
+    check(await sb.from('muscle_feedback').upsert(rows, { onConflict: 'workout_day_id,muscle_group' }));
+    finish();
+  };
+  $('#skip').onclick = finish;
+}
+
+// ---------- settings ----------
+function renderSettings() {
+  setHeader('Settings', '#/');
+  app.innerHTML = `<div class="card">
+      <div class="muted small">Signed in as</div><div>${esc(session.user.email)}</div>
+      <label>Name</label><input id="name" value="${esc(profile?.display_name || '')}">
+      <label>Units</label><select id="unit"><option ${unit() === 'lb' ? 'selected' : ''}>lb</option><option ${unit() === 'kg' ? 'selected' : ''}>kg</option></select>
+      <div class="spacer"></div><button class="primary block" id="save">Save</button></div>
+    <button class="block" id="out">Sign out</button>
+    <p class="muted small center">To install: Safari → Share → Add to Home Screen.</p>`;
+  $('#save').onclick = async () => {
+    profile = check(await sb.from('profiles').update({ display_name: $('#name').value.trim(), unit: $('#unit').value })
+      .eq('id', session.user.id).select().single());
+    toast('Saved');
+  };
+  $('#out').onclick = async () => { await sb.auth.signOut(); go('#/'); };
+}
+
+route();
+</script>
+</body>
+</html>
