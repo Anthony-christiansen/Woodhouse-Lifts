@@ -706,8 +706,8 @@ async function renderWorkout(dayId) {
             const wVal = s.weight ?? sg?.weight ?? (ex.load_type !== 'weighted' && s.reps == null ? '' : '');
             return `<div class="set ${s.completed_at ? 'done' : ''}" data-idx="${i + 1}">
               <div class="n">${i + 1}</div>
-              <input type="number" inputmode="decimal" step="any" data-f="weight" value="${wVal ?? ''}" class="${s.weight == null && sg?.weight != null ? 'sug' : ''}" placeholder="${ex.load_type === 'weighted' ? unit() : '0'}">
-              <input type="number" inputmode="numeric" data-f="reps" value="${s.reps ?? ''}" placeholder="${sg?.reps ?? ex.rep_min + '–' + ex.rep_max}" data-sug="${sg?.reps ?? ''}">
+              <div class="fld"><input type="number" inputmode="decimal" step="any" data-f="weight" value="${wVal ?? ''}" class="${s.weight == null && sg?.weight != null ? 'sug' : ''}" placeholder="${ex.load_type === 'weighted' ? unit() : '0'}"><span class="dir" data-dir="weight"></span></div>
+              <div class="fld"><input type="number" inputmode="numeric" data-f="reps" value="${s.reps ?? ''}" placeholder="${sg?.reps ?? ex.rep_min + '–' + ex.rep_max}" data-sug="${sg?.reps ?? ''}"><span class="dir" data-dir="reps"></span></div>
               <button class="check">✓</button></div>`;
           }).join('')}
         </div>
@@ -784,8 +784,30 @@ async function renderWorkout(dayId) {
     if (m) openRating(m, true);
   }
 
+  // Small ▲ / = / ▼ next to weight and reps: this set vs the same set last time (last week, or last meso in week 1).
+  // Uses what's typed, or the suggestion if nothing is typed yet. Green = progress, amber = backed off
+  // (assisted lifts: less assistance is progress).
+  function updateDirs(we, row) {
+    const p = prev[we.exercise_id], ex = we.exercises;
+    const old = p?.sets.length ? (p.sets[+row.dataset.idx - 1] || p.sets[p.sets.length - 1]) : null;
+    const vs = p?.carried ? 'last meso' : 'last week';
+    [['weight', ex.load_type === 'assisted'], ['reps', false]].forEach(([f, invert]) => {
+      const el = row.querySelector(`[data-dir="${f}"]`), inp = row.querySelector(`[data-f="${f}"]`); if (!el) return;
+      const raw = inp.value !== '' ? inp.value : f === 'reps' ? inp.dataset.sug : '';
+      const was = old ? (f === 'weight' ? (old.weight ?? (ex.load_type === 'weighted' ? null : 0)) : old.reps) : null;
+      if (raw === '' || raw == null || was == null) { el.className = 'dir'; el.textContent = ''; el.removeAttribute('title'); return; }
+      const d = Number(raw) - Number(was);
+      const dir = Math.abs(d) < 1e-9 ? 'level' : d > 0 ? 'up' : 'down';
+      const good = dir === 'level' ? 'level' : (dir === 'up') !== invert ? 'good' : 'back';
+      el.className = `dir ${good}`; el.textContent = dir === 'up' ? '▲' : dir === 'down' ? '▼' : '=';
+      el.title = `${f === 'weight' ? 'Weight' : 'Reps'} ${dir === 'level' ? 'same as' : dir + ' vs'} ${vs} (${fmt(was)} → ${fmt(raw)})`;
+      el.setAttribute('aria-label', el.title);
+    });
+  }
+
   function wireSet(we, row) {
     if (isCardio(we)) return wireCardio(we, row);
+    updateDirs(we, row);
     const save = async markDone => {
       const wIn = row.querySelector('[data-f="weight"]'), rIn = row.querySelector('[data-f="reps"]');
       if (markDone && rIn.value === '' && rIn.dataset.sug) rIn.value = rIn.dataset.sug;
@@ -800,13 +822,14 @@ async function renderWorkout(dayId) {
       if (error) return toast(error.message, true);
       row.dataset.at = payload.completed_at || ''; wIn.classList.remove('sug');
       row.classList.toggle('done', done);
+      updateDirs(we, row);
       const m = we.exercises.muscle_group;
       refreshTrend(we);
       if (markDone && done && exComplete(we)) { const tr = exerciseTrend(we); if (tr && !muscleComplete(m)) toast(`${we.exercises.name}: ${tr.t > 0 ? '▲ up' : tr.t < 0 ? '▼ down' : '● same'} ${tr.pct > 0 ? '+' : ''}${tr.pct.toFixed(1)}% vs ${tr.vs}`); }
       if (markDone && done) enforceRatings();
     };
     row.querySelector('.check').onclick = () => save(true);
-    row.querySelectorAll('input').forEach(i => { i.oninput = () => i.classList.remove('sug'); i.onchange = () => save(false); });
+    row.querySelectorAll('input').forEach(i => { i.oninput = () => { i.classList.remove('sug'); updateDirs(we, row); }; i.onchange = () => save(false); });
   }
   function wireCardio(we, row) {
     const save = async markDone => {

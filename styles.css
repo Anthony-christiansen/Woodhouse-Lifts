@@ -157,3 +157,10 @@ svg.chart { width: 100%; height: 160px; display: block; }
 .card.notice.ok { border-left-color: var(--accent); }
 .card.notice h3 { margin-top: 0; }
 .card.notice p { overflow-wrap: anywhere; }
+/* per-set progression icon (▲ / = / ▼ vs last time) inside the weight and reps boxes */
+.set .fld { position: relative; min-width: 0; }
+.set .fld input { width: 100%; padding-right: 18px; padding-left: 18px; }
+.set .dir { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); font-size: 10px; line-height: 1; pointer-events: none; }
+.set .dir.good { color: var(--accent); }
+.set .dir.back { color: var(--warn); }
+.set .dir.level { color: var(--muted); }
