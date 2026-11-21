@@ -44,7 +44,12 @@ export async function runChecks(db) {
   const [{ create_mesocycle: mS }] = await as(db, A, 'select public.create_mesocycle($1)', [{ ...plan(uuid()), goal: 'strength' }]);
   assert.equal((await as(db, A, 'select goal from public.mesocycles where id = $1', [mS]))[0].goal, 'strength');
   await assert.rejects(as(db, A, 'select public.create_mesocycle($1)', [{ ...plan(uuid()), goal: 'powerlifting' }]), /check/i);
-  await as(db, A, 'delete from public.mesocycles where id = $1', [mS]);
+  // carry-from-week: stored for your own meso, ignored for someone else's
+  const [{ create_mesocycle: mC }] = await as(db, A, 'select public.create_mesocycle($1)', [{ ...plan(uuid()), carry_meso_id: m1, carry_week: 2 }]);
+  assert.deepEqual(Object.values((await as(db, A, 'select carry_meso_id, carry_week from public.mesocycles where id = $1', [mC]))[0]), [m1, 2]);
+  const [{ create_mesocycle: mX }] = await as(db, B, 'select public.create_mesocycle($1)', [{ ...plan(uuid()), carry_meso_id: m1, carry_week: 2 }]);
+  assert.deepEqual(Object.values((await as(db, B, 'select carry_meso_id, carry_week from public.mesocycles where id = $1', [mX]))[0]), [null, null], 'cannot point at another user\'s meso');
+  await as(db, A, 'delete from public.mesocycles where id = any($1)', [[mS, mC]]); await as(db, B, 'delete from public.mesocycles where id = $1', [mX]);
   console.log('CREATE_MESOCYCLE: atomic + idempotent + goal OK');
 
   // ---- log sets for A: week 1 day (press 100×10, 100×10, warm-up 45×10; pull-up +0×8)

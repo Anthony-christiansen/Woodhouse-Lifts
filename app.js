@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import * as L from './logic.js?v=17';
-import * as LEARN from './learn.js?v=17';
+import * as L from './logic.js?v=18';
+import * as LEARN from './learn.js?v=18';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -17,7 +17,7 @@ let authReturn = (() => {
   return null;
 })();
 let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
-export const APP_VERSION = '1.1.2'; // keep in sync with CHANGELOG.md
+export const APP_VERSION = '1.2.0'; // keep in sync with CHANGELOG.md
 const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
 const DOC_URL = 'https://docs.google.com/document/d/1DYyVHo_EY9MJKbh_4N3D69HX1qb0G6aqSK0jlZQXoQY';
 
@@ -586,6 +586,7 @@ async function renderBuilder() {
     const dayTotals = S.plan.map(d => d.slots.reduce((a, s) => a + (Number(s.sets) || 0), 0));
     app.innerHTML = `
       ${P.removed.length ? `<div class="card small muted">Autofill is skipping ${P.removed.length} exercise${P.removed.length > 1 ? 's' : ''} because of your preferences${P.favorites.size ? ` and putting your ${P.favorites.size} favorite${P.favorites.size > 1 ? 's' : ''} first` : ''}. <a href="#/settings">Change</a></div>` : ''}
+      ${S.carry ? `<div class="card small">Week 1 weights &amp; reps start from <b>${esc(S.carry.from)} · week ${S.carry.week}</b>. <button class="ghost sm" id="noCarry">Don't carry</button></div>` : ''}
       <div class="card"><div class="muted small">Step 2 of 2 · ${L.GOALS[L.goalOf(S.goal)].name} · ${esc(L.SPLITS[S.split]?.name || '')} · ${esc(L.TEMPLATES[S.focus].name)} emphasis · ${S.days} days</div>
         <div class="spacer"></div>
         <div class="grid3">
@@ -612,6 +613,7 @@ async function renderBuilder() {
       <div class="row"><button id="back1" class="grow">‹ Template</button><button class="primary grow" id="create">Create mesocycle</button></div>
       <div class="spacer"></div><button class="ghost block" id="saveTpl">☆ Save this plan as a template</button>`;
     const at = s => s.split('.').map(Number);
+    { const nc = $('#noCarry'); if (nc) nc.onclick = () => { S.carry = null; step2(); }; }
     $('#fillAll').onclick = () => { S.plan = L.autofill({ plan: S.plan, priorities: S.priorities, focus: S.focus, goal: S.goal, split: S.split, library: P.library, favorites: P.favorites, mode: 'all' }); step2(); };
     $('#fillLeft').onclick = () => { S.plan = L.autofill({ plan: S.plan, priorities: S.priorities, focus: S.focus, goal: S.goal, split: S.split, library: P.library, favorites: P.favorites, mode: 'fill' }); step2(); };
     $('#clear').onclick = () => { S.plan = S.plan.map(d => ({ label: d.label, slots: [] })); step2(); };
@@ -650,7 +652,8 @@ async function renderBuilder() {
           return { exercise_id: s.exerciseId, target_sets: deload ? L.deloadSets(s.sets) : Number(s.sets), target_rir: rir }; }) }));
     }
     const { data: mesoId, error } = await sb.rpc('create_mesocycle', { p: { client_key: S.clientKey, name: S.name.trim(), weeks: S.weeks,
-      days_per_week: S.days, focus: S.focus, goal: L.goalOf(S.goal), priorities: S.priorities, started_on: today(), days } });
+      days_per_week: S.days, focus: S.focus, goal: L.goalOf(S.goal), priorities: S.priorities, started_on: today(), days,
+      carry_meso_id: S.carry?.meso || null, carry_week: S.carry?.week || null } });
     if (error) {
       btn.disabled = false; btn.textContent = 'Create mesocycle';
       return toast(/fetch|network|failed to fetch/i.test(error.message) ? 'No connection — nothing was saved. Tap Create again when you’re back online.' : `Couldn’t create the mesocycle: ${error.message}`, true);
@@ -693,9 +696,25 @@ async function renderMeso(id) {
     return d1.map(d => ({ label: d.label, slots: wes.filter(w => w.workout_day_id === d.id)
       .map(w => ({ muscle: w.exercises.muscle_group, exerciseId: w.exercise_id, sets: Math.max(1, w.target_sets) })) }));
   };
+  // Run it again: same plan, and pick which week's logged weights & reps the new week 1 starts from (doc §5.6).
   $('#again').onclick = async () => {
-    builder = builderFromTemplate({ name: meso.name + ' (again)', weeks: meso.weeks, days_per_week: meso.days_per_week, focus: meso.focus, goal: meso.goal, priorities: meso.priorities, plan: await planFromMeso() });
-    go('#/new');
+    const plan = await planFromMeso();
+    const working = weeks.filter(w => !L.targetRir(w, meso.weeks, meso.goal, 'compound').deload);
+    const doneIn = w => days.filter(d => d.week === w && d.completed_at).length, total = w => days.filter(d => d.week === w).length;
+    const logged = working.filter(w => doneIn(w) > 0);
+    const def = logged.at(-1) ?? null;
+    const start = w => {
+      builder = builderFromTemplate({ name: meso.name + ' (again)', weeks: meso.weeks, days_per_week: meso.days_per_week, focus: meso.focus, goal: meso.goal, priorities: meso.priorities, plan });
+      builder.carry = w ? { meso: meso.id, week: w, from: meso.name } : null;
+      closeSheet(); go('#/new');
+    };
+    if (!logged.length) return start(null);
+    openSheet(`<h3>Start the new meso from which week?</h3>
+      <p class="muted small">Week 1 of the new meso starts from the weights and reps you logged that week, then progresses week over week. Pick an earlier week to back off and build up again.</p>
+      ${working.map(w => { const r = L.targetRir(w, meso.weeks, meso.goal, 'compound'), n = doneIn(w);
+        return `<button class="list-btn" data-week="${w}" ${n ? '' : 'disabled'}><div class="grow"><b>Week ${w}</b>${w === def ? ' <span class="pill on tiny-pill">latest</span>' : ''}<div class="muted small">${r.rir} RIR · ${n}/${total(w)} workouts logged</div></div>›</button>`; }).join('')}
+      <button class="ghost block" data-week="0">Don't carry weights — I'll pick them</button>`,
+      panel => panel.querySelectorAll('[data-week]').forEach(b => b.onclick = () => start(+b.dataset.week || null)));
   };
   $('#tpl').onclick = async () => {
     const name = prompt('Template name', meso.name); if (!name) return;
@@ -840,14 +859,16 @@ async function renderWorkout(dayId) {
     // Week 1 progresses from your PREVIOUS meso only (the one you trained most recently, finished or not) — doc §5.6.
     // An exercise that wasn't in it gets no auto weight: older history (e.g. a 2025 rehab block) can't be translated,
     // so it's shown for reference only.
-    const last = check(await sb.from('workout_days').select('mesocycle_id, completed_at').neq('mesocycle_id', meso.id)
+    // "Run it again from week N" pins the source meso and week instead.
+    const last = meso.carry_meso_id ? null : check(await sb.from('workout_days').select('mesocycle_id, completed_at').neq('mesocycle_id', meso.id)
       .not('completed_at', 'is', null).order('completed_at', { ascending: false }).limit(1).maybeSingle());
-    const prevMesoId = last?.mesocycle_id || null;
+    const prevMesoId = meso.carry_meso_id || last?.mesocycle_id || null;
     for (const h of hist) {
       const d = h.workout_days; if (!h.sets.length || L.rirForWeek(d.week, d.mesocycles?.weeks || 99).deload) continue;
+      if (meso.carry_week && d.mesocycle_id === meso.carry_meso_id && d.week !== meso.carry_week) continue;
       const into = d.mesocycle_id === prevMesoId ? prev : staleCarry;
       const cur = into[h.exercise_id];
-      if (!cur || d.completed_at > cur.at) into[h.exercise_id] = { rir: h.target_rir, at: d.completed_at, carried: true, sets: h.sets.sort((a, b) => a.set_index - b.set_index).map(z => ({ ...z, weight: W(z.weight) })) };
+      if (!cur || d.completed_at > cur.at) into[h.exercise_id] = { rir: h.target_rir, at: d.completed_at, carried: true, wk: d.week, sets: h.sets.sort((a, b) => a.set_index - b.set_index).map(z => ({ ...z, weight: W(z.weight) })) };
     }
     for (const id of Object.keys(staleCarry)) if (prev[id]) delete staleCarry[id];
   }
@@ -940,7 +961,7 @@ async function renderWorkout(dayId) {
           }).join('')}
         </div>
         <div class="row" style="margin-top:8px"><button class="ghost sm" data-addset>+ set</button><button class="ghost sm" data-rmset>− set</button>
-          <span class="grow muted tiny right">${p?.sets.length ? (p.carried ? 'last meso: ' : 'last wk: ') + p.sets.map(s => `${fmt(s.weight)}×${s.reps ?? '–'}`).join(', ')
+          <span class="grow muted tiny right">${p?.sets.length ? (p.carried ? `last meso wk ${p.wk}: ` : 'last wk: ') + p.sets.map(s => `${fmt(s.weight)}×${s.reps ?? '–'}`).join(', ')
             : staleCarry[we.exercise_id] ? `last done ${new Date(staleCarry[we.exercise_id].at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })} (${staleCarry[we.exercise_id].sets.map(s => `${fmt(s.weight)}×${s.reps ?? '–'}`).join(', ')}) — not in your last meso, so not used. Pick a fresh weight for ${deload ? 'deload' : `${we.target_rir} RIR`}`
             : 'first week — pick weights for ' + (deload ? '' : `${we.target_rir} RIR`)}</span></div>
         ${lastOfMuscle[ex.muscle_group] === we.id ? `<div data-rate="${esc(ex.muscle_group)}" style="margin-top:8px">${rateLine(ex.muscle_group, feedback[ex.muscle_group])}</div>` : ''}
