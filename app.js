@@ -16,6 +16,7 @@ let authReturn = (() => {
   if (get('error') || get('error_code')) return { ok: false, code: get('error_code') || get('error'), desc: get('error_description') };
   return null;
 })();
+let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
 const DOC_URL = 'https://docs.google.com/document/d/1o5wZ9J00q6Gp06cORT2ZDCA7Q0-F7cKa-pKKO4VMSWY';
 
 const app = document.getElementById('app');
@@ -99,6 +100,7 @@ async function route() {
     else if (!session) { tabs.hidden = true; return renderAuth('signin', linkProblem(r)); }
   }
   if (!session) { tabs.hidden = true; return renderAuth(); }
+  if (awaitingNewPassword) return renderNewPassword(true);
   if (!profile) profile = (await sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle()).data;
   const [name, ...args] = location.hash.replace(/^#\/?/, '').split('/');
   window.scrollTo(0, 0);
@@ -106,7 +108,10 @@ async function route() {
   catch (e) { console.error(e); app.innerHTML = `<div class="card">Something went wrong: ${esc(e.message)}</div>`; }
 }
 window.addEventListener('hashchange', route);
-sb.auth.onAuthStateChange(evt => { if (evt === 'SIGNED_IN' || evt === 'SIGNED_OUT') { profile = null; route(); } });
+sb.auth.onAuthStateChange(evt => {
+  if (evt === 'PASSWORD_RECOVERY') awaitingNewPassword = true;
+  if (evt === 'SIGNED_IN' || evt === 'SIGNED_OUT' || evt === 'PASSWORD_RECOVERY') { profile = null; route(); }
+});
 
 // ---------- auth ----------
 // notice: { tone: 'warn'|'ok', title, text, resendEmail? } shown above the form.
@@ -165,12 +170,13 @@ function renderAuth(mode = 'signin', notice = null, prefill = '') {
         <label>Email</label><input name="email" type="email" autocomplete="email" value="${esc(prefill)}" required>
         <label>Password</label><input name="password" type="password" minlength="8" autocomplete="${mode === 'signin' ? 'current-password' : 'new-password'}" required>
         <div class="spacer"></div><button class="primary block" type="submit">${mode === 'signin' ? 'Sign in' : 'Create account'}</button>
-      </form><div class="spacer"></div>
+      </form>${mode === 'signin' ? '<button class="ghost block sm" id="forgot" type="button">Forgot password?</button>' : '<div class="spacer"></div>'}
       <button class="ghost block" id="swap">${mode === 'signin' ? 'New here? Create an account' : 'Have an account? Sign in'}</button>
     </div>`;
   const emailVal = () => app.querySelector('input[name=email]')?.value.trim() || prefill;
   wireResend(emailVal);
   $('#swap').onclick = () => renderAuth(mode === 'signin' ? 'signup' : 'signin', null, emailVal());
+  if ($('#forgot')) $('#forgot').onclick = () => renderForgot(emailVal());
   $('#f').onsubmit = async e => {
     e.preventDefault();
     const fd = new FormData(e.target); const btn = e.target.querySelector('button[type=submit]'); btn.disabled = true;
@@ -192,6 +198,47 @@ function renderAuth(mode = 'signin', notice = null, prefill = '') {
         else if (!data.session) return renderCheckEmail(email); // never treat an unconfirmed sign-up as logged in
       }
     } finally { if (btn.isConnected) btn.disabled = false; }
+  };
+}
+
+// Password reset: email a link (no codes); the link signs them in and lands on "set a new password".
+function renderForgot(prefill = '') {
+  setHeader('Woodhouse Lifts'); tabs.hidden = true;
+  app.innerHTML = `<div class="card"><h3>Reset your password</h3>
+      <p class="muted small">Enter the email you signed up with. We’ll email you a link — tap it to choose a new password. No code to type.</p>
+      <form id="f"><label>Email</label><input name="email" type="email" autocomplete="email" value="${esc(prefill)}" required>
+        <div class="spacer"></div><button class="primary block" type="submit">Email me a reset link</button></form>
+      <div class="spacer"></div><button class="ghost block" id="back" type="button">Back to sign in</button></div>`;
+  $('#back').onclick = () => renderAuth('signin', null, app.querySelector('input[name=email]').value.trim());
+  $('#f').onsubmit = async e => {
+    e.preventDefault(); const btn = e.target.querySelector('button[type=submit]'); btn.disabled = true;
+    const email = new FormData(e.target).get('email').trim();
+    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: SITE_URL });
+    if (error) { toast(friendlyAuthError(error), true); btn.disabled = false; return; }
+    // Same message whether or not the account exists, so the form can't be used to look up who has an account.
+    app.innerHTML = `<div class="card notice ok" role="status"><h3>Check your email</h3>
+        <p>If <b>${esc(email)}</b> has an account, a password reset link from <b>Woodhouse Lifts</b> is on its way.</p>
+        <p class="muted">Open it and tap the link to choose a new password. Can’t find it? Check spam; it can take a minute. Links expire after a while — just request another.</p>
+        <button class="primary block" id="back" type="button">Back to sign in</button></div>`;
+    $('#back').onclick = () => renderAuth('signin', null, email);
+  };
+}
+function renderNewPassword(fromEmail = false) {
+  setHeader(fromEmail ? 'Choose a new password' : 'Change password', fromEmail ? null : '#/settings', fromEmail ? null : 'explore');
+  if (fromEmail) tabs.hidden = true;
+  app.innerHTML = `<div class="card"><h3>${fromEmail ? 'Choose a new password' : 'Change password'}</h3>
+      ${fromEmail ? `<p class="muted small">You’re signed in from your reset link as <b>${esc(session?.user?.email || '')}</b>.</p>` : ''}
+      <form id="f">
+        <label>New password</label><input name="p1" type="password" minlength="8" autocomplete="new-password" required>
+        <label>Confirm new password</label><input name="p2" type="password" minlength="8" autocomplete="new-password" required>
+        <div class="spacer"></div><button class="primary block" type="submit">Save new password</button></form></div>`;
+  $('#f').onsubmit = async e => {
+    e.preventDefault(); const fd = new FormData(e.target), btn = e.target.querySelector('button'); 
+    if (fd.get('p1') !== fd.get('p2')) return toast('Passwords don’t match', true);
+    btn.disabled = true;
+    const { error } = await sb.auth.updateUser({ password: fd.get('p1') });
+    if (error) { toast(/different from the old/i.test(error.message) ? 'Pick a password you haven’t used here before.' : friendlyAuthError(error), true); btn.disabled = false; return; }
+    awaitingNewPassword = false; toast('Password updated'); go('#/'); route();
   };
 }
 
@@ -251,10 +298,11 @@ async function renderHome() {
   const wk = days.filter(d => d.week === curWeek);
   const r = meso && curWeek ? L.rirForWeek(curWeek, meso.weeks) : null;
   const ws = weekStart(); const eightAgo = new Date(ws); eightAgo.setDate(eightAgo.getDate() - 7 * 7);
-  const [cSess, cSets, allSets, warnings, mesoCount] = await Promise.all([
+  // Lifting totals, weekly sets, PRs and strength trend are computed in the database (dashboard_stats) — a few KB, not the whole history.
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  const [cSess, cSets, stats, warnings, mesoCount] = await Promise.all([
     cardioSince(isoDay(eightAgo)), workoutCardioSince(eightAgo.toISOString()),
-    fetchAll(() => sb.from('sets').select('weight, reps, rir, set_type, completed_at, workout_exercises!inner(id, exercise_id, target_rir, exercises(id, name, muscle_group, load_type))')
-      .not('completed_at', 'is', null).is('duration_min', null).order('completed_at').order('id')),
+    sb.rpc('dashboard_stats', { p_tz: tz }).then(check),
     meso ? slipFor(meso) : Promise.resolve([]),
     sb.from('mesocycles').select('id', { count: 'exact', head: true }).then(x => x.count || 0),
   ]);
@@ -265,32 +313,10 @@ async function renderHome() {
   const cMin = thisCardio.reduce((a, c) => a + c.minutes, 0), cLoad = thisCardio.reduce((a, c) => a + L.cardioLoad(c), 0);
   // Weekly hard sets (8 weeks) + this week's sets.
   const weeks = Array.from({ length: 8 }, (_, i) => { const s = new Date(ws); s.setDate(s.getDate() - (7 - i) * 7); return s; });
-  const lift = allSets.filter(s => s.workout_exercises.exercises.load_type !== 'cardio');
-  const setsPerWeek = weeks.map(s => lift.filter(x => inWeek(x.completed_at.slice(0, 10), s)).length);
+  const setsPerWeek = weeks.map(s => Number(stats.weeks?.[isoDay(s)] || 0));
   const cardioPerWeek = weeks.map(s => cardio.filter(c => inWeek(c.date, s)).reduce((a, c) => a + c.minutes, 0));
-  // Strength movers & PRs by exercise (best e1RM per session). Like-for-like only: deload sessions (≈4 RIR, lighter
-  // on purpose) and myo-rep mini-sets (short rest) would otherwise read as strength loss.
-  const byEx = {};
-  for (const x of lift) {
-    if (x.reps == null || x.set_type === 'myorep' || (x.workout_exercises.target_rir ?? 0) >= 4) continue;
-    const ex = x.workout_exercises.exercises, sid = x.workout_exercises.id;
-    const e = byEx[ex.id] = byEx[ex.id] || { ex, sessions: new Map() };
-    const s = e.sessions.get(sid) || { date: x.completed_at, sets: [] };
-    s.sets.push({ ...x, rir: x.rir ?? x.workout_exercises.target_rir }); e.sessions.set(sid, s);
-  }
-  const twoWeeksAgo = Date.now() - 14 * 864e5, eightWeeksAgo = Date.now() - 56 * 864e5;
-  const prs = [], movers = [];
-  for (const { ex, sessions } of Object.values(byEx)) {
-    const ss = [...sessions.values()].map(s => ({ date: s.date, e: L.bestE1rm(s.sets, ex, bw) })).filter(s => s.e).sort((a, b) => a.date.localeCompare(b.date));
-    if (ss.length < 2) continue;
-    const last = ss[ss.length - 1], prevBest = Math.max(...ss.slice(0, -1).map(s => s.e));
-    if (new Date(last.date) > twoWeeksAgo && last.e > prevBest) prs.push({ name: ex.name, pct: (last.e - prevBest) / prevBest * 100, date: last.date });
-    // Only exercises trained at least twice in the last 8 weeks, compared within that window.
-    const base = ss.find(s => new Date(s.date) > eightWeeksAgo);
-    if (base && base !== last) movers.push({ name: ex.name, pct: (last.e - base.e) / base.e * 100 });
-  }
-  movers.sort((a, b) => b.pct - a.pct);
-  const totalWorkouts = new Set(allSets.map(x => x.completed_at.slice(0, 10))).size;
+  const prs = stats.prs || [], movers = stats.movers || [];
+  const totalWorkouts = stats.workouts || 0, totalSets = stats.sets || 0;
   const doneDays = days.filter(d => d.completed_at || d.skipped_at).length;
   const maxSets = Math.max(1, ...setsPerWeek), maxC = Math.max(1, ...cardioPerWeek);
   const bars = (vals, max, color) => `<svg class="chart" viewBox="0 0 320 110" style="height:110px">${vals.map((v, i) => { const h = Math.round(v / max * 88);
@@ -324,14 +350,14 @@ async function renderHome() {
     </div>
     <div class="card"><b>Hard sets per week</b>${bars(setsPerWeek, maxSets, 'var(--accent)')}</div>
     <div class="card"><b>Cardio minutes per week</b> <span class="muted tiny">sessions + in-workout</span>${bars(cardioPerWeek, maxC, 'var(--info)')}</div>
-    ${prs.length ? `<div class="card"><b>Recent PRs 🏆</b>${prs.sort((a, b) => b.pct - a.pct).slice(0, 5).map(p => `<div class="mover"><span>${esc(p.name)}</span><span class="pill on">+${p.pct.toFixed(1)}%</span></div>`).join('')}</div>` : ''}
+    ${prs.length ? `<div class="card"><b>Recent PRs 🏆</b>${prs.slice(0, 5).map(p => `<div class="mover"><span>${esc(p.name)}</span><span class="pill on">+${Number(p.pct).toFixed(1)}%</span></div>`).join('')}</div>` : ''}
     ${movers.length ? `<div class="card"><b>Strength trend · last 8 weeks</b>
         ${[...movers.slice(0, 3), ...movers.slice(-2).filter(m => m.pct < 0 && !movers.slice(0, 3).includes(m))].map(m => `<div class="mover"><span>${esc(m.name)}</span>
-          <span class="pill ${m.pct > 0 ? 'on' : m.pct < 0 ? 'bad' : ''}">${m.pct > 0 ? '+' : ''}${m.pct.toFixed(1)}%</span></div>`).join('')}
+          <span class="pill ${m.pct > 0 ? 'on' : m.pct < 0 ? 'bad' : ''}">${m.pct > 0 ? '+' : ''}${Number(m.pct).toFixed(1)}%</span></div>`).join('')}
         <button class="ghost sm" data-go="#/progress">All exercises ›</button></div>` : ''}
     <div class="grid3 keep">
       <div class="card stat center"><span class="big">${totalWorkouts}</span><span class="muted tiny">workouts</span></div>
-      <div class="card stat center"><span class="big">${lift.length}</span><span class="muted tiny">sets logged</span></div>
+      <div class="card stat center"><span class="big">${totalSets}</span><span class="muted tiny">sets logged</span></div>
       <div class="card stat center"><span class="big">${mesoCount}</span><span class="muted tiny">mesocycles</span></div>
     </div>
     <h2>Quick actions</h2>
@@ -1094,40 +1120,30 @@ async function renderHistory() {
 
 async function renderProgress(exId) {
   setHeader('Exercise progress', exId ? '#/progress' : '#/explore', 'explore');
-  const rows = (await fetchAll(() => sb.from('sets').select('weight, reps, rir, set_type, completed_at, workout_exercises!inner(id, exercise_id, target_rir, exercises(*))')
-    .not('completed_at', 'is', null).order('completed_at').order('id')))
-    .filter(r => r.set_type !== 'myorep' && (r.workout_exercises.target_rir ?? 0) < 4)
-    .map(r => ({ ...r, rir: r.rir ?? r.workout_exercises.target_rir }));
-  const bw = profile?.bodyweight;
-  const byEx = {};
-  for (const r of rows) {
-    const ex = r.workout_exercises.exercises; if (ex.load_type === 'cardio' || r.reps == null) continue; (byEx[ex.id] = byEx[ex.id] || { ex, sessions: {} });
-    const sid = r.workout_exercises.id; const s = (byEx[ex.id].sessions[sid] = byEx[ex.id].sessions[sid] || { date: r.completed_at, sets: [] });
-    s.sets.push(r);
-  }
+  // Per-session strength is computed in the database (lift_sessions / strength_summary): deload weeks,
+  // myo-rep mini-sets and cardio are excluded so sessions compare like for like.
   if (!exId) {
-    const list = Object.values(byEx).sort((a, b) => a.ex.muscle_group.localeCompare(b.ex.muscle_group) || a.ex.name.localeCompare(b.ex.name));
-    app.innerHTML = list.length ? list.map(({ ex, sessions }) => {
-      const ss = Object.values(sessions); const first = L.bestE1rm(ss[0].sets, ex, bw), last = L.bestE1rm(ss[ss.length - 1].sets, ex, bw);
-      const ch = first ? Math.round((last - first) / first * 100) : 0;
-      return `<button class="list-btn" data-go="#/progress/${ex.id}"><div class="grow"><b>${esc(ex.name)}</b>
-        <div class="muted small">${esc(ex.muscle_group)} · ${ss.length} session${ss.length > 1 ? 's' : ''}</div></div>
+    const list = (await fetchAll(() => sb.rpc('strength_summary').order('muscle_group').order('name')));
+    app.innerHTML = list.length ? list.map(x => {
+      const ch = x.first_e1rm ? Math.round((x.last_e1rm - x.first_e1rm) / x.first_e1rm * 100) : 0;
+      return `<button class="list-btn" data-go="#/progress/${x.exercise_id}"><div class="grow"><b>${esc(x.name)}</b>
+        <div class="muted small">${esc(x.muscle_group)} · ${x.sessions} session${x.sessions > 1 ? 's' : ''}</div></div>
         <span class="pill ${ch > 0 ? 'on' : ch < 0 ? 'bad' : ''}">${ch > 0 ? '+' : ''}${ch}%</span></button>`; }).join('')
       : '<p class="muted">Log some sets and your progress shows up here.</p>';
     return $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
   }
-  const data = byEx[exId]; if (!data) { app.innerHTML = '<p class="muted">No sets for this exercise yet.</p>'; return; }
-  const ss = Object.values(data.sessions).map(s => ({ ...s, e: L.bestE1rm(s.sets, data.ex, bw),
-    top: s.sets.reduce((b, x) => (L.e1rm(x, data.ex, bw) ?? 0) > (L.e1rm(b, data.ex, bw) ?? 0) ? x : b, s.sets[0]) }));
+  const ss = (await fetchAll(() => sb.rpc('lift_sessions', { p_exercise_id: exId }).order('done_at').order('session_id')))
+    .map(s => ({ date: s.done_at, e: Number(s.best_e1rm), top: { weight: s.top_weight, reps: s.top_reps }, n: s.n_sets, name: s.name }));
+  if (!ss.length) { app.innerHTML = '<p class="muted">No sets for this exercise yet.</p>'; return; }
   const vals = ss.map(s => s.e), min = Math.min(...vals), max = Math.max(...vals), span = max - min || 1;
   const pts = ss.map((s, i) => `${ss.length === 1 ? 160 : 10 + i * 300 / (ss.length - 1)},${110 - (s.e - min) / span * 95}`).join(' ');
-  setHeader(data.ex.name, '#/progress', 'explore');
+  setHeader(ss[0].name, '#/progress', 'explore');
   app.innerHTML = `<div class="card"><div class="muted small">Best estimated strength per session · weight × (1 + (reps + RIR)/30)</div>
       <svg class="chart" viewBox="0 0 320 120"><polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
       ${pts.split(' ').map(p => `<circle cx="${p.split(',')[0]}" cy="${p.split(',')[1]}" r="3" fill="var(--accent)"/>`).join('')}</svg>
       <div class="row muted tiny"><span class="grow">${fmt(Math.round(min))}</span><span>${fmt(Math.round(max))}</span></div></div>
     <div class="card"><table><tr><th>Date</th><th>Top set</th><th>Sets</th><th class="right">Est.</th></tr>
-      ${ss.slice().reverse().map(s => `<tr><td>${new Date(s.date).toLocaleDateString()}</td><td>${fmt(s.top.weight)} × ${s.top.reps}</td><td>${s.sets.length}</td><td class="right">${fmt(Math.round(s.e))}</td></tr>`).join('')}</table></div>`;
+      ${ss.slice().reverse().map(s => `<tr><td>${new Date(s.date).toLocaleDateString()}</td><td>${fmt(s.top.weight)} × ${s.top.reps}</td><td>${s.n}</td><td class="right">${fmt(Math.round(s.e))}</td></tr>`).join('')}</table></div>`;
 }
 
 async function renderVolume(mesoId) {
@@ -1237,6 +1253,7 @@ function renderSettings() {
       <div class="muted tiny" style="margin-top:6px">Bodyweight lets pull-ups, dips and push-ups count toward strength trends.</div>
       <div class="spacer"></div><button class="primary block" id="save">Save</button></div>
     <div class="card small"><a href="${DOC_URL}" target="_blank" rel="noopener">Training Logic & Evidence</a> <span class="muted">— why the app sets your weights, sets and RIR the way it does.</span></div>
+    <button class="block" id="pw">Change password</button><div class="spacer"></div>
     <button class="block" id="out">Sign out</button>
     <p class="muted small center">Install: Safari → Share → Add to Home Screen.</p>`;
   $('#save').onclick = async () => {
@@ -1246,6 +1263,7 @@ function renderSettings() {
     toast('Saved');
   };
   $('#out').onclick = async () => { await sb.auth.signOut(); go('#/'); };
+  $('#pw').onclick = () => renderNewPassword(false);
 }
 
 route();
