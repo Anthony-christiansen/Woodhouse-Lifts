@@ -86,6 +86,22 @@ The result is scored as **Up** (more than +1%), **Same** (within ±1%) or **Down
 
 **App rule:** Cardio is logged by **type, minutes and intensity (session RPE 0–10)**, plus optional distance and heart rate. The app calculates **training load = RPE × minutes** and shows weekly totals. Cardio doesn't change the lifting adjustments. The home screen does note when cardio load spikes, and the app suggests doing cardio after lifting, or cycling over running on leg days.
 
+### 1.10 Training goal: hypertrophy, strength or athleticism
+
+Each mesocycle has a goal. **Hypertrophy is the original engine and is unchanged.** Strength and athleticism use the same machinery: double progression, set changes from your feedback, and deloads. They change only three inputs:
+
+| | Hypertrophy | Strength | Athleticism |
+|---|---|---|---|
+| Rep range (main / compound lifts) | the exercise's own (e.g. 8–15) | **3–6** (≈ ≥80% 1RM) | **3–5**, moved as fast as possible |
+| Rep range (accessories) | the exercise's own | 6–12 | 8–12 |
+| RIR schedule | 3 → 0, deload | 3 → **1 floor**, deload (never to failure) | main lifts **held at 3** (stop when speed drops); accessories floor 2 |
+| Starting weekly sets | as §2.1 | **×0.75** | **×0.6** (low-volume power work) |
+
+Why:
+- Strength improves most with heavy loads (≥80% 1RM) across 2–3+ sets, done early in the session, 2+ times a week (ACSM 2026). Going closer to failure doesn't add strength (Robinson 2024).
+- Power improves with moderate loads lifted explosively and with low-to-moderate volume (≤24 reps × sets) (ACSM 2026). Plyometrics help jump, sprint and change of direction (Oliver 2024; Zheng 2025).
+- Narrower rep ranges make double progression add load sooner. That is what strength and power training need.
+
 ---
 
 ## 2. Mesocycle templates
@@ -135,6 +151,23 @@ Autofill works backward from the whole week, so Day 1 is built knowing what Days
 - **Fill what's left.** The app keeps anything you've already picked and only fills empty days and empty exercise slots.
 - **Start blank.** You build it all yourself.
 
+### 2.2 Personal exercise preferences
+
+Before autofill picks anything, it applies the person's own preferences (Settings → Training preferences, and the ★ / ⦸ buttons in the Exercise library):
+
+- **Exclude** a lift and autofill never picks it. You can name a substitute, and it's used in its place.
+- **Favorites** are always allowed and are picked first for their muscle.
+- **Equipment I have:** lifts that need equipment you don't have are skipped. Bodyweight and cardio are always allowed.
+- **Avoid heavy spinal loading** is opt-in. It skips exercises tagged `axial`:
+  - the bar on your back or shoulders, and shoulder-pad squat machines
+  - heavy barbell hinges and rows
+  - the standing barbell overhead press
+  - heavy barbell shrugs and lunges
+
+  The tagged list is shown in Settings. Starring a tagged lift keeps it.
+
+These are personal choices, not medical rules. Nothing is removed from the library, and anything can still be added by hand. With no preferences set, autofill output is identical to before.
+
 ---
 
 ## 3. What you rate, and when
@@ -167,6 +200,22 @@ The app uses double progression anchored to RIR. It works from last week's same 
 5. **Deload week** → the same weight as the last accumulation week, half the sets, 4 RIR.
 
 The weight is prefilled in grey and the target reps show as the placeholder. Tapping ✓ accepts both.
+
+### 4.2 Warm-ups (never logged, never counted)
+
+Warm-up sets are not hard sets. The app doesn't log them, and they never count toward weekly sets, PRs or strength trends.
+
+1. **General warm-up:** about 5 minutes of easy cardio plus dynamic moves.
+2. **Specific warm-up:** done on the **first exercise for each muscle** that day. Tap ⓘ on the exercise to see ramp-up sets worked out from today's working weight:
+   - Compound lifts: 50% × 8, 70% × 4, 85% × 2.
+   - Isolation lifts: 50% × 10, 75% × 4.
+   - Weights are rounded to the load increment and never go below the empty bar (45 lb / 20 kg).
+   - Later exercises for an already-warm muscle get one optional light set.
+   - Example: 225 lb working weight → 115 × 8, 160 × 4, 190 × 2.
+
+Keep warm-ups light: a thorough general warm-up does most of the work, and adding fatigue before working sets costs reps (Xu 2025). Dynamic and ramp-up warm-ups support movement quality and sprint and jump performance (Kłobuchowski 2026).
+
+**Units.** All weights are stored in pounds. Choosing kg only changes how weights are shown and typed. 100 kg is stored as 220.46 lb and always shows back as 100 kg, so switching units never changes your history. Load increments follow the unit you see: 5 lb, or 2.5 kg (2 kg for dumbbells).
 
 ### 4.1 Choosing a different weight: equivalent-effort reps and the weight window
 
@@ -310,3 +359,5 @@ In week 1 of a new mesocycle, each exercise's weight is auto-matched from your l
 31. Zheng T et al. Effects of plyometric training on jump, sprint, and change of direction performance in adolescent soccer players. *PLoS One* 2025. https://doi.org/10.1371/journal.pone.0319548
 
 Sources 25–31 back the in-app **Learn** pages (goal guides for strength, athleticism, maintenance and cardio).
+32. Kłobuchowski W et al. Exercise-Based Strategies from Warm-Up to Training: A Systematic Review of Performance Enhancement and Injury Prevention. *Sports (Basel)* 2026. https://doi.org/10.3390/sports14050187
+33. Xu K et al. Optimizing Post-activation Performance Enhancement in Athletic Tasks: A Systematic Review with Meta-analysis. *Sports Med* 2025. https://doi.org/10.1007/s40279-024-02170-6

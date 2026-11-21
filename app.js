@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import * as L from './logic.js?v=9';
-import * as LEARN from './learn.js?v=9';
+import * as L from './logic.js?v=13';
+import * as LEARN from './learn.js?v=13';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -17,7 +17,9 @@ let authReturn = (() => {
   return null;
 })();
 let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
-const DOC_URL = 'https://docs.google.com/document/d/1o5wZ9J00q6Gp06cORT2ZDCA7Q0-F7cKa-pKKO4VMSWY';
+export const APP_VERSION = '1.0.0'; // keep in sync with CHANGELOG.md
+const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
+const DOC_URL = 'https://docs.google.com/document/d/15VaqDYH6QBzqn1T-7rAyGJPmPbj07q4MZhZ9rYWffrg';
 
 const app = document.getElementById('app');
 const titleEl = document.getElementById('title');
@@ -33,8 +35,12 @@ const $ = sel => app.querySelector(sel);
 const $$ = sel => [...app.querySelectorAll(sel)];
 const go = h => { location.hash = h; };
 const unit = () => profile?.unit || 'lb';
+// Weights are stored in lb; W() shows them in the user's unit, toLb() converts what they type back.
+const W = v => L.toUnit(v, unit()), toLb = v => L.fromUnit(v, unit());
+const bwD = () => W(profile?.bodyweight); // bodyweight in display units
 const fmt = n => (n == null ? '–' : Number(n) % 1 ? Number(n).toFixed(1) : String(Number(n)));
-const today = () => new Date().toISOString().slice(0, 10);
+// Local calendar date (not UTC — an evening workout in Utah must not land on tomorrow).
+const today = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
 const dayName = d => d.label || 'Day ' + d.day_index;
 const order = d => d.week * 100 + d.day_index;
 function toast(msg, err = false) {
@@ -78,6 +84,60 @@ const rateKeys = m => m === 'Cardio' ? ['breathing', 'workload', 'joint_pain'] :
 const segHtml = (key, val, attrs = '') => `<div class="seg">${RATINGS[key].opts.map((o, i) =>
   `<button type="button" ${attrs} data-k="${key}" data-v="${i}" class="${val === i ? 'on' : ''}">${o}</button>`).join('')}</div>`;
 
+// ---------- reliable set saving ----------
+// Every set save is an idempotent upsert keyed by (workout_exercise_id, set_index), so the database can never
+// hold a duplicate set. If the network drops (gym basements), the save is kept on the phone and retried
+// automatically — when the connection returns, when the app comes back to the foreground, and every 20 s.
+const QKEY = 'wl_pending_sets_v1';
+const qLoad = () => { try { return JSON.parse(localStorage.getItem(QKEY) || '{}'); } catch { return {}; } };
+const qStore = q => { try { localStorage.setItem(QKEY, JSON.stringify(q)); } catch { /* private mode: retry still works this session */ } };
+const isNetErr = e => !navigator.onLine || /failed to fetch|network|load failed|timeout|fetch/i.test(e?.message || '');
+const setKey = p => p.workout_exercise_id + ':' + p.set_index;
+async function saveSet(payload) {
+  const { error } = await sb.from('sets').upsert(payload, { onConflict: 'workout_exercise_id,set_index' });
+  const q = qLoad();
+  if (!error) { delete q[setKey(payload)]; qStore(q); syncBadge(); return 'saved'; }    // newest value is on the server
+  if (isNetErr(error)) { q[setKey(payload)] = payload; qStore(q); syncBadge(); return 'queued'; }
+  toast(`Couldn’t save that set: ${error.message}`, true); return 'failed';
+}
+let flushing = false;
+async function flushQueue() {
+  if (flushing || !session) return; flushing = true;
+  try {
+    const q = qLoad();
+    for (const [k, p] of Object.entries(q)) {
+      const { error } = await sb.from('sets').upsert(p, { onConflict: 'workout_exercise_id,set_index' });
+      if (!error) { const cur = qLoad(); if (JSON.stringify(cur[k]) === JSON.stringify(p)) delete cur[k]; qStore(cur); }
+      else if (isNetErr(error)) break;
+      else { const cur = qLoad(); delete cur[k]; qStore(cur); toast(`A saved-offline set couldn’t be stored: ${error.message}`, true); }
+    }
+  } finally { flushing = false; syncBadge(); }
+  const left = Object.keys(qLoad()).length;
+  document.querySelectorAll('.set.queued').forEach(r => { if (!qLoad()[r.dataset.key]) { r.classList.remove('queued'); r.classList.add('saved-flash'); } });
+  return left;
+}
+function syncBadge() {
+  const n = Object.keys(qLoad()).length;
+  let b = document.getElementById('syncBadge');
+  if (!n) { b?.remove(); return; }
+  if (!b) { b = document.createElement('button'); b.id = 'syncBadge'; b.className = 'sync-badge'; b.onclick = () => flushQueue(); document.body.appendChild(b); }
+  b.textContent = `⟳ ${n} set${n > 1 ? 's' : ''} waiting to sync — tap to retry`;
+  b.setAttribute('aria-live', 'polite');
+}
+window.addEventListener('online', () => flushQueue());
+document.addEventListener('visibilitychange', () => { if (!document.hidden) flushQueue(); });
+setInterval(() => { if (Object.keys(qLoad()).length) flushQueue(); }, 20000);
+
+let prefsCache = null;
+async function loadPrefs(force = false) {
+  if (!prefsCache || force) prefsCache = check(await sb.from('exercise_prefs').select('exercise_id, pref, substitute_id'));
+  return prefsCache;
+}
+async function setPref(exerciseId, pref, substituteId = null) {
+  const r = pref ? await sb.from('exercise_prefs').upsert({ exercise_id: exerciseId, pref, substitute_id: pref === 'exclude' ? substituteId : null, updated_at: new Date().toISOString() })
+    : await sb.from('exercise_prefs').delete().eq('exercise_id', exerciseId);
+  check(r); prefsCache = null;
+}
 async function loadExercises(force = false) {
   if (!exCache || force) exCache = check(await sb.from('exercises').select('*').order('muscle_group').order('name'));
   return exCache;
@@ -101,11 +161,20 @@ async function route() {
   }
   if (!session) { tabs.hidden = true; return renderAuth(); }
   if (awaitingNewPassword) return renderNewPassword(true);
+  if (Object.keys(qLoad()).length) { syncBadge(); flushQueue(); }
   if (!profile) profile = (await sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle()).data;
   const [name, ...args] = location.hash.replace(/^#\/?/, '').split('/');
   window.scrollTo(0, 0);
+  // Show a loading state only if the screen takes a moment (no flash on fast loads); errors offer a retry.
+  const slow = setTimeout(() => { app.setAttribute('aria-busy', 'true'); app.innerHTML = '<div class="loading" role="status">Loading…</div>'; }, 250);
   try { await (routes[name] || renderHome)(...args); }
-  catch (e) { console.error(e); app.innerHTML = `<div class="card">Something went wrong: ${esc(e.message)}</div>`; }
+  catch (e) {
+    console.error(e);
+    app.innerHTML = `<div class="card warn" role="alert"><b>${isNetErr(e) ? 'No connection' : 'Something went wrong'}</b>
+      <p class="muted small">${isNetErr(e) ? 'Check your signal and try again. Sets you logged are kept on this phone and sync when you’re back online.' : esc(e.message)}</p>
+      <button class="primary block" id="retry">Try again</button></div>`;
+    $('#retry').onclick = () => route();
+  } finally { clearTimeout(slow); app.removeAttribute('aria-busy'); }
 }
 window.addEventListener('hashchange', route);
 sb.auth.onAuthStateChange(evt => {
@@ -163,12 +232,16 @@ function renderCheckEmail(email) {
 
 function renderAuth(mode = 'signin', notice = null, prefill = '') {
   setHeader('Woodhouse Lifts');
-  app.innerHTML = `${authNotice(notice)}
-    <div class="card"><h3>${mode === 'signin' ? 'Sign in' : 'Create account'}</h3>
-      <form id="f">
-        ${mode === 'signup' ? '<label>Name</label><input name="name" autocomplete="given-name" required>' : ''}
-        <label>Email</label><input name="email" type="email" autocomplete="email" value="${esc(prefill)}" required>
-        <label>Password</label><input name="password" type="password" minlength="8" autocomplete="${mode === 'signin' ? 'current-password' : 'new-password'}" required>
+  app.innerHTML = `<div class="hero"><div class="tagline">Track your workouts. Measure your progress. Get stronger.</div>
+      <p class="muted small">Plans your training week by week from proven hypertrophy, strength and athletic research — then adjusts weights, reps and sets from how you actually performed and recovered.</p></div>
+    ${authNotice(notice)}
+    <div class="card"><h2 class="h3">${mode === 'signin' ? 'Sign in' : 'Create account'}</h2>
+      <form id="f" novalidate>
+        ${mode === 'signup' ? '<label for="a-name">Name</label><input id="a-name" name="name" autocomplete="given-name" required>' : ''}
+        <label for="a-email">Email</label><input id="a-email" name="email" type="email" autocomplete="email" inputmode="email" value="${esc(prefill)}" required>
+        <label for="a-pw">Password</label><input id="a-pw" name="password" type="password" minlength="8" autocomplete="${mode === 'signin' ? 'current-password' : 'new-password'}" required ${mode === 'signup' ? 'aria-describedby="pw-rules"' : ''}>
+        ${mode === 'signup' ? '<div id="pw-rules" class="muted tiny">At least 8 characters. We’ll email you a link to confirm your account.</div>' : ''}
+        <label class="switch tiny"><input type="checkbox" id="showpw"> <span>Show password</span></label>
         <div class="spacer"></div><button class="primary block" type="submit">${mode === 'signin' ? 'Sign in' : 'Create account'}</button>
       </form>${mode === 'signin' ? '<button class="ghost block sm" id="forgot" type="button">Forgot password?</button>' : '<div class="spacer"></div>'}
       <button class="ghost block" id="swap">${mode === 'signin' ? 'New here? Create an account' : 'Have an account? Sign in'}</button>
@@ -176,11 +249,17 @@ function renderAuth(mode = 'signin', notice = null, prefill = '') {
   const emailVal = () => app.querySelector('input[name=email]')?.value.trim() || prefill;
   wireResend(emailVal);
   $('#swap').onclick = () => renderAuth(mode === 'signin' ? 'signup' : 'signin', null, emailVal());
+  $('#showpw').onchange = e => { $('#a-pw').type = e.target.checked ? 'text' : 'password'; };
   if ($('#forgot')) $('#forgot').onclick = () => renderForgot(emailVal());
   $('#f').onsubmit = async e => {
     e.preventDefault();
-    const fd = new FormData(e.target); const btn = e.target.querySelector('button[type=submit]'); btn.disabled = true;
+    const fd = new FormData(e.target); const btn = e.target.querySelector('button[type=submit]');
     const email = fd.get('email').trim(), password = fd.get('password');
+    const bad = (sel, msg) => { const el = $(sel); el.setAttribute('aria-invalid', 'true'); el.focus(); toast(msg, true); };
+    if (mode === 'signup' && !fd.get('name')?.trim()) return bad('#a-name', 'Enter your name');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return bad('#a-email', 'Enter a valid email address');
+    if (!password || (mode === 'signup' && password.length < 8)) return bad('#a-pw', mode === 'signup' ? 'Password must be at least 8 characters' : 'Enter your password');
+    btn.disabled = true; btn.textContent = mode === 'signin' ? 'Signing in…' : 'Creating account…';
     try {
       if (mode === 'signin') {
         const { error } = await sb.auth.signInWithPassword({ email, password });
@@ -197,7 +276,7 @@ function renderAuth(mode = 'signin', notice = null, prefill = '') {
         if (error) toast(friendlyAuthError(error) === 'unconfirmed' ? 'Check your email to confirm your account.' : friendlyAuthError(error), true);
         else if (!data.session) return renderCheckEmail(email); // never treat an unconfirmed sign-up as logged in
       }
-    } finally { if (btn.isConnected) btn.disabled = false; }
+    } finally { if (btn.isConnected) { btn.disabled = false; btn.textContent = mode === 'signin' ? 'Sign in' : 'Create account'; } }
   };
 }
 
@@ -206,7 +285,7 @@ function renderForgot(prefill = '') {
   setHeader('Woodhouse Lifts'); tabs.hidden = true;
   app.innerHTML = `<div class="card"><h3>Reset your password</h3>
       <p class="muted small">Enter the email you signed up with. We’ll email you a link — tap it to choose a new password. No code to type.</p>
-      <form id="f"><label>Email</label><input name="email" type="email" autocomplete="email" value="${esc(prefill)}" required>
+      <form id="f"><label for="f-email">Email</label><input id="f-email" name="email" type="email" autocomplete="email" inputmode="email" value="${esc(prefill)}" required>
         <div class="spacer"></div><button class="primary block" type="submit">Email me a reset link</button></form>
       <div class="spacer"></div><button class="ghost block" id="back" type="button">Back to sign in</button></div>`;
   $('#back').onclick = () => renderAuth('signin', null, app.querySelector('input[name=email]').value.trim());
@@ -229,8 +308,9 @@ function renderNewPassword(fromEmail = false) {
   app.innerHTML = `<div class="card"><h3>${fromEmail ? 'Choose a new password' : 'Change password'}</h3>
       ${fromEmail ? `<p class="muted small">You’re signed in from your reset link as <b>${esc(session?.user?.email || '')}</b>.</p>` : ''}
       <form id="f">
-        <label>New password</label><input name="p1" type="password" minlength="8" autocomplete="new-password" required>
-        <label>Confirm new password</label><input name="p2" type="password" minlength="8" autocomplete="new-password" required>
+        <label for="np1">New password</label><input id="np1" name="p1" type="password" minlength="8" autocomplete="new-password" required aria-describedby="np-rules">
+        <div id="np-rules" class="muted tiny">At least 8 characters.</div>
+        <label for="np2">Confirm new password</label><input id="np2" name="p2" type="password" minlength="8" autocomplete="new-password" required>
         <div class="spacer"></div><button class="primary block" type="submit">Save new password</button></form></div>`;
   $('#f').onsubmit = async e => {
     e.preventDefault(); const fd = new FormData(e.target), btn = e.target.querySelector('button'); 
@@ -243,9 +323,11 @@ function renderNewPassword(fromEmail = false) {
 }
 
 // ---------- shared queries ----------
+// The current program: an active meso always wins; a planned one is shown only when nothing is active,
+// so building a future program never replaces the one you're running.
 async function activeMeso() {
-  const m = check(await sb.from('mesocycles').select('*').in('status', ['active', 'planned']).order('created_at', { ascending: false }).limit(1));
-  return m[0] || null;
+  const m = check(await sb.from('mesocycles').select('*').in('status', ['active', 'planned']).order('created_at', { ascending: false }));
+  return m.find(x => x.status === 'active') || m.find(x => x.status === 'planned') || null;
 }
 async function mesoDays(mesoId) {
   return check(await sb.from('workout_days').select('id, week, day_index, label, started_at, completed_at, skipped_at, mesocycle_id')
@@ -296,7 +378,7 @@ async function renderHome() {
   const next = openDays(days)[0];
   const curWeek = next?.week || (days.length ? days[days.length - 1].week : null);
   const wk = days.filter(d => d.week === curWeek);
-  const r = meso && curWeek ? L.rirForWeek(curWeek, meso.weeks) : null;
+  const r = meso && curWeek ? L.targetRir(curWeek, meso.weeks, meso.goal, 'compound') : null;
   const ws = weekStart(); const eightAgo = new Date(ws); eightAgo.setDate(eightAgo.getDate() - 7 * 7);
   // Lifting totals, weekly sets, PRs and strength trend are computed in the database (dashboard_stats) — a few KB, not the whole history.
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
@@ -356,7 +438,7 @@ async function renderHome() {
           <span class="pill ${m.pct > 0 ? 'on' : m.pct < 0 ? 'bad' : ''}">${m.pct > 0 ? '+' : ''}${Number(m.pct).toFixed(1)}%</span></div>`).join('')}
         <button class="ghost sm" data-go="#/progress">All exercises ›</button></div>` : ''}
     <div class="grid3 keep">
-      <div class="card stat center"><span class="big">${totalWorkouts}</span><span class="muted tiny">workouts</span></div>
+      <div class="card stat center"><span class="big">${totalWorkouts}</span><span class="muted tiny">workouts finished</span></div>
       <div class="card stat center"><span class="big">${totalSets}</span><span class="muted tiny">sets logged</span></div>
       <div class="card stat center"><span class="big">${mesoCount}</span><span class="muted tiny">mesocycles</span></div>
     </div>
@@ -388,16 +470,18 @@ async function renderMesos() {
 // ---------- mesocycle builder ----------
 let builder = null;
 function freshBuilder() {
-  return { step: 1, name: '', weeks: 5, days: 4, focus: 'whole', priorities: L.templatePriorities('whole'), plan: [] };
+  return { step: 1, name: '', weeks: 5, days: 4, focus: 'whole', goal: 'hypertrophy', priorities: L.templatePriorities('whole'), plan: [] };
 }
 function builderFromTemplate(t) {
-  return { step: 2, name: t.name.replace(/ \(from .*\)$/, ''), weeks: t.weeks, days: t.days_per_week, focus: t.focus,
+  return { step: 2, name: t.name.replace(/ \(from .*\)$/, ''), weeks: t.weeks, days: t.days_per_week, focus: t.focus, goal: L.goalOf(t.goal),
     priorities: Object.keys(t.priorities || {}).length ? t.priorities : L.templatePriorities(t.focus),
     plan: t.plan.map(d => ({ label: d.label, slots: d.slots.map(x => ({ ...x })) })) };
 }
 async function renderBuilder() {
   setHeader('New mesocycle', '#/mesos', 'mesos');
   const lib = await loadExercises();
+  // Personal preferences (favorites, exclusions + substitutes, equipment, avoided tags) shape what autofill picks.
+  const P = L.applyPreferences(lib, { prefs: await loadPrefs(), equipment: profile?.equipment, avoidTags: profile?.avoid_tags || [] });
   if (!builder) builder = freshBuilder();
   const S = builder;
   const syncPlan = () => {
@@ -406,11 +490,16 @@ async function renderBuilder() {
   };
   const exById = new Map(lib.map(e => [e.id, e]));
   const exOptions = (muscle, sel) => `<option value="">— pick —</option>` +
-    L.candidatesFor(muscle, lib).map(e => `<option value="${e.id}" ${e.id === sel ? 'selected' : ''}>${esc(e.name)}</option>`).join('');
+    [...L.candidatesFor(muscle, P.library, P.favorites), ...(sel && !P.library.some(e => e.id === sel) && exById.get(sel) ? [exById.get(sel)] : [])]
+      .map(e => `<option value="${e.id}" ${e.id === sel ? 'selected' : ''}>${P.favorites.has(e.id) ? '★ ' : ''}${esc(e.name)}</option>`).join('');
 
   const step1 = () => {
     app.innerHTML = `
-      <div class="card"><div class="muted small">Step 1 of 2 · Base template</div>
+      <div class="card"><div class="muted small">Step 1 of 2 · Goal</div>
+        <div class="seg c3" role="radiogroup" aria-label="Training goal">${Object.entries(L.GOALS).map(([k, g]) => `<button type="button" role="radio" aria-checked="${S.goal === k}" data-goal="${k}" class="${S.goal === k ? 'on' : ''}">${g.name}</button>`).join('')}</div>
+        <div class="muted small" style="margin-top:6px">${L.GOALS[L.goalOf(S.goal)].blurb} <a href="#/learn/${S.goal === 'athletic' ? 'athletic' : S.goal}">Why?</a></div>
+      </div>
+      <div class="card"><div class="muted small">Base template</div>
         <div class="spacer"></div>
         ${Object.entries(L.TEMPLATES).map(([k, t]) => `<button class="list-btn" data-focus="${k}" style="${S.focus === k ? 'border-color:var(--accent)' : ''}">
           <div class="grow"><b>${t.name}</b><div class="muted small">${t.blurb}</div></div>${S.focus === k ? '<span class="pill on">✓</span>' : ''}</button>`).join('')}
@@ -421,14 +510,15 @@ async function renderBuilder() {
           <select id="weeks">${[3, 4, 5, 6, 7, 8].map(n => `<option ${n === S.weeks ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
           <div class="grow"><label>Training days / week</label>
           <select id="days">${[2, 3, 4, 5, 6].map(n => `<option ${n === S.days ? 'selected' : ''}>${n}</option>`).join('')}</select></div></div>
-        <p class="muted small">RIR is set for you: ${Array.from({ length: S.weeks }, (_, i) => { const r = L.rirForWeek(i + 1, S.weeks); return r.deload ? 'deload' : r.rir; }).join(' → ')}. It holds steady for any muscle whose feedback says recovery is behind.</p>
+        <p class="muted small">RIR is set for you${S.goal === 'hypertrophy' ? '' : ' (main lifts)'}: ${Array.from({ length: S.weeks }, (_, i) => { const r = L.targetRir(i + 1, S.weeks, S.goal, 'compound'); return r.deload ? 'deload' : r.rir; }).join(' → ')}. It holds steady for any muscle whose feedback says recovery is behind.</p>
       </div>
       <div class="card"><b>Muscle priorities</b><div class="muted small">Focus = grow (≥2×/week). Maintain = hold size with low volume. Weekly start sets shown.</div>
-        ${L.MUSCLES.map(m => `<div class="prio"><div>${m} <span class="muted small">${L.weeklyTarget(m, S.priorities[m], S.focus)} sets</span></div>
+        ${L.MUSCLES.map(m => `<div class="prio"><div>${m} <span class="muted small">${L.weeklyTarget(m, S.priorities[m], S.focus, S.goal)} sets</span></div>
           <div class="seg c3">${L.PRIORITIES.map(p => `<button type="button" data-m="${m}" data-p="${p}" class="${S.priorities[m] === p ? 'on' : ''}">${p[0].toUpperCase() + p.slice(1)}</button>`).join('')}</div></div>`).join('')}
       </div>
       <button class="primary block" id="next">Next: build the days ›</button>`;
     $$('[data-focus]').forEach(b => b.onclick = () => { S.focus = b.dataset.focus; S.priorities = L.templatePriorities(S.focus); step1(); });
+    $$('[data-goal]').forEach(b => b.onclick = () => { S.goal = b.dataset.goal; step1(); });
     $('#name').oninput = e => S.name = e.target.value;
     $('#weeks').onchange = e => { S.weeks = +e.target.value; step1(); };
     $('#days').onchange = e => { S.days = +e.target.value; };
@@ -439,16 +529,17 @@ async function renderBuilder() {
     $('#next').onclick = () => {
       if (!S.name.trim()) return toast('Give it a name', true);
       S.days = +$('#days').value; syncPlan(); S.step = 2;
-      if (!S.plan.some(d => d.slots.length)) S.plan = L.autofill({ plan: S.plan, priorities: S.priorities, focus: S.focus, library: lib, mode: 'all' });
+      if (!S.plan.some(d => d.slots.length)) S.plan = L.autofill({ plan: S.plan, priorities: S.priorities, focus: S.focus, goal: S.goal, library: P.library, favorites: P.favorites, mode: 'all' });
       step2();
     };
   };
 
   const step2 = () => {
-    const targets = L.weeklyTargets(S.priorities, S.focus), placed = L.placedSets(S.plan);
+    const targets = L.weeklyTargets(S.priorities, S.focus, S.goal), placed = L.placedSets(S.plan);
     const dayTotals = S.plan.map(d => d.slots.reduce((a, s) => a + (Number(s.sets) || 0), 0));
     app.innerHTML = `
-      <div class="card"><div class="muted small">Step 2 of 2 · ${esc(L.TEMPLATES[S.focus].name)} · ${S.days} days</div>
+      ${P.removed.length ? `<div class="card small muted">Autofill is skipping ${P.removed.length} exercise${P.removed.length > 1 ? 's' : ''} because of your preferences${P.favorites.size ? ` and putting your ${P.favorites.size} favorite${P.favorites.size > 1 ? 's' : ''} first` : ''}. <a href="#/settings">Change</a></div>` : ''}
+      <div class="card"><div class="muted small">Step 2 of 2 · ${L.GOALS[L.goalOf(S.goal)].name} · ${esc(L.TEMPLATES[S.focus].name)} · ${S.days} days</div>
         <div class="spacer"></div>
         <div class="grid3">
           <button class="sm primary" id="fillAll">Autofill all</button>
@@ -474,8 +565,8 @@ async function renderBuilder() {
       <div class="row"><button id="back1" class="grow">‹ Template</button><button class="primary grow" id="create">Create mesocycle</button></div>
       <div class="spacer"></div><button class="ghost block" id="saveTpl">☆ Save this plan as a template</button>`;
     const at = s => s.split('.').map(Number);
-    $('#fillAll').onclick = () => { S.plan = L.autofill({ plan: S.plan, priorities: S.priorities, focus: S.focus, library: lib, mode: 'all' }); step2(); };
-    $('#fillLeft').onclick = () => { S.plan = L.autofill({ plan: S.plan, priorities: S.priorities, focus: S.focus, library: lib, mode: 'fill' }); step2(); };
+    $('#fillAll').onclick = () => { S.plan = L.autofill({ plan: S.plan, priorities: S.priorities, focus: S.focus, goal: S.goal, library: P.library, favorites: P.favorites, mode: 'all' }); step2(); };
+    $('#fillLeft').onclick = () => { S.plan = L.autofill({ plan: S.plan, priorities: S.priorities, focus: S.focus, goal: S.goal, library: P.library, favorites: P.favorites, mode: 'fill' }); step2(); };
     $('#clear').onclick = () => { S.plan = S.plan.map(d => ({ label: d.label, slots: [] })); step2(); };
     $('#back1').onclick = () => { S.step = 1; step1(); };
     $$('[data-label]').forEach(i => i.oninput = e => S.plan[+i.dataset.label].label = e.target.value);
@@ -484,7 +575,7 @@ async function renderBuilder() {
     $$('[data-ss]').forEach(s => s.onchange = e => { const [d, x] = at(s.dataset.ss); S.plan[d].slots[x].sets = Math.max(1, Math.min(10, +e.target.value || 1)); step2(); });
     $$('[data-rm]').forEach(b => b.onclick = () => { const [d, x] = at(b.dataset.rm); S.plan[d].slots.splice(x, 1); step2(); });
     $$('[data-add]').forEach(b => b.onclick = () => {
-      const t = L.weeklyTargets(S.priorities, S.focus), p = L.placedSets(S.plan);
+      const t = L.weeklyTargets(S.priorities, S.focus, S.goal), p = L.placedSets(S.plan);
       const m = L.MUSCLES.find(x => p[x] < t[x]) || 'Chest';
       S.plan[+b.dataset.add].slots.push({ muscle: m, exerciseId: null, sets: 3 }); step2();
     });
@@ -492,7 +583,7 @@ async function renderBuilder() {
     $('#saveTpl').onclick = async () => {
       if (S.plan.some(d => d.slots.some(s => !s.exerciseId))) return toast('Pick an exercise for every slot first', true);
       const name = prompt('Template name', S.name || 'My template'); if (!name) return;
-      check(await sb.from('templates').insert({ name, focus: S.focus, priorities: S.priorities, weeks: S.weeks, days_per_week: S.days, plan: S.plan }));
+      check(await sb.from('templates').insert({ name, focus: S.focus, goal: S.goal, priorities: S.priorities, weeks: S.weeks, days_per_week: S.days, plan: S.plan }));
       toast('Template saved');
     };
   };
@@ -500,22 +591,24 @@ async function renderBuilder() {
   async function create() {
     if (S.plan.some(d => !d.slots.length)) return toast('Every day needs at least one exercise', true);
     if (S.plan.some(d => d.slots.some(s => !s.exerciseId))) return toast('Pick an exercise for every slot (or tap Fill what\'s left)', true);
-    $('#create').disabled = true;
-    try {
-      const meso = check(await sb.from('mesocycles').insert({ name: S.name.trim(), weeks: S.weeks, days_per_week: S.days,
-        focus: S.focus, priorities: S.priorities, started_on: today() }).select().single());
-      const rows = [];
-      for (let w = 1; w <= S.weeks; w++) S.plan.forEach((d, i) => rows.push({ mesocycle_id: meso.id, week: w, day_index: i + 1, label: d.label }));
-      const days = check(await sb.from('workout_days').insert(rows).select('id, week, day_index'));
-      const exRows = [];
-      for (const d of days) {
-        const { rir, deload } = L.rirForWeek(d.week, S.weeks);
-        S.plan[d.day_index - 1].slots.forEach((s, pos) => exRows.push({ workout_day_id: d.id, exercise_id: s.exerciseId, position: pos + 1,
-          target_sets: deload ? L.deloadSets(s.sets) : Number(s.sets), target_rir: rir }));
-      }
-      check(await sb.from('workout_exercises').insert(exRows));
-      builder = null; toast('Mesocycle created'); go('#/meso/' + meso.id);
-    } catch { $('#create').disabled = false; }
+    const btn = $('#create'); btn.disabled = true; btn.textContent = 'Creating…';
+    // One all-or-nothing call (create_mesocycle). The key stays the same across retries, so a retry after a
+    // dropped connection returns the meso that was already created instead of making a duplicate.
+    S.clientKey = S.clientKey || crypto.randomUUID();
+    const days = [];
+    const libById = new Map(lib.map(e => [e.id, e]));
+    for (let w = 1; w <= S.weeks; w++) {
+      S.plan.forEach((d, i) => days.push({ week: w, day_index: i + 1, label: d.label,
+        exercises: d.slots.map(s => { const { rir, deload } = L.targetRir(w, S.weeks, S.goal, libById.get(s.exerciseId)?.kind);
+          return { exercise_id: s.exerciseId, target_sets: deload ? L.deloadSets(s.sets) : Number(s.sets), target_rir: rir }; }) }));
+    }
+    const { data: mesoId, error } = await sb.rpc('create_mesocycle', { p: { client_key: S.clientKey, name: S.name.trim(), weeks: S.weeks,
+      days_per_week: S.days, focus: S.focus, goal: L.goalOf(S.goal), priorities: S.priorities, started_on: today(), days } });
+    if (error) {
+      btn.disabled = false; btn.textContent = 'Create mesocycle';
+      return toast(/fetch|network|failed to fetch/i.test(error.message) ? 'No connection — nothing was saved. Tap Create again when you’re back online.' : `Couldn’t create the mesocycle: ${error.message}`, true);
+    }
+    builder = null; toast('Mesocycle created'); go('#/meso/' + mesoId);
   }
   S.step === 2 ? (syncPlan(), step2()) : step1();
 }
@@ -528,11 +621,11 @@ async function renderMeso(id) {
   const next = openDays(days)[0];
   const weeks = [...new Set(days.map(d => d.week))];
   app.innerHTML = `
-    <div class="card"><div class="row"><div class="grow muted small">${meso.source === 'rp_import' ? 'Imported from RP · ' : ''}${esc(L.TEMPLATES[meso.focus]?.name || '')} · ${meso.weeks} weeks · ${meso.days_per_week} days/week</div>
+    <div class="card"><div class="row"><div class="grow muted small">${meso.source === 'rp_import' ? 'Imported from RP · ' : ''}${L.GOALS[L.goalOf(meso.goal)].name} · ${esc(L.TEMPLATES[meso.focus]?.name || '')} · ${meso.weeks} weeks · ${meso.days_per_week} days/week</div>
       <span class="pill ${meso.status === 'active' ? 'on' : ''}">${esc(meso.status)}</span></div></div>
     ${warnings.length ? `<div class="card warn"><b>Watch list</b>${warnList(warnings)}</div>` : ''}
     <div class="weeks-scroll"><div class="weeks" style="--days:${meso.days_per_week}">
-      ${weeks.map(w => { const r = L.rirForWeek(w, meso.weeks); return `<div class="week">
+      ${weeks.map(w => { const r = L.targetRir(w, meso.weeks, meso.goal, 'compound'); return `<div class="week">
         <div class="muted small">Wk ${w}<br><span class="${r.deload ? 'pill warn' : 'tiny'}">${r.deload ? 'deload' : r.rir + ' RIR'}</span></div>
         ${days.filter(d => d.week === w).map(d => `<button class="day ${d.completed_at ? 'done' : ''} ${d.skipped_at ? 'skipped' : ''} ${d.started_at && !d.completed_at && !d.skipped_at ? 'live' : ''} ${next && d.id === next.id ? 'next' : ''}" data-day="${d.id}">${esc(dayName(d))}</button>`).join('')}
       </div>`; }).join('')}
@@ -554,12 +647,12 @@ async function renderMeso(id) {
       .map(w => ({ muscle: w.exercises.muscle_group, exerciseId: w.exercise_id, sets: Math.max(1, w.target_sets) })) }));
   };
   $('#again').onclick = async () => {
-    builder = builderFromTemplate({ name: meso.name + ' (again)', weeks: meso.weeks, days_per_week: meso.days_per_week, focus: meso.focus, priorities: meso.priorities, plan: await planFromMeso() });
+    builder = builderFromTemplate({ name: meso.name + ' (again)', weeks: meso.weeks, days_per_week: meso.days_per_week, focus: meso.focus, goal: meso.goal, priorities: meso.priorities, plan: await planFromMeso() });
     go('#/new');
   };
   $('#tpl').onclick = async () => {
     const name = prompt('Template name', meso.name); if (!name) return;
-    check(await sb.from('templates').insert({ name, focus: meso.focus, priorities: meso.priorities, weeks: meso.weeks, days_per_week: meso.days_per_week, plan: await planFromMeso() }));
+    check(await sb.from('templates').insert({ name, focus: meso.focus, goal: L.goalOf(meso.goal), priorities: meso.priorities, weeks: meso.weeks, days_per_week: meso.days_per_week, plan: await planFromMeso() }));
     toast('Saved to Library › Templates');
   };
   const c = $('#complete'); if (c) c.onclick = async () => { check(await sb.from('mesocycles').update({ status: 'completed' }).eq('id', id)); renderMeso(id); };
@@ -662,7 +755,15 @@ async function renderWorkout(dayId) {
   }
 
   const wes = check(await sb.from('workout_exercises').select('*, exercises(*), sets(*)').eq('workout_day_id', dayId).order('position'));
-  wes.forEach(w => w.sets.sort((a, b) => a.set_index - b.set_index));
+  // Sets saved on the phone but not yet synced win over the server copy, so nothing typed offline disappears.
+  const pending = qLoad();
+  wes.forEach(w => Object.values(pending).filter(p => p.workout_exercise_id === w.id).forEach(p => {
+    const i = w.sets.findIndex(x => x.set_index === p.set_index); const row = { ...(w.sets[i] || {}), ...p, _queued: true };
+    if (i >= 0) w.sets[i] = row; else w.sets.push(row); }));
+  wes.forEach(w => { w.sets.sort((a, b) => a.set_index - b.set_index); w.sets.forEach(x => { x.weight = W(x.weight); }); });
+  // The meso's goal sets each exercise's rep range (hypertrophy keeps the exercise's own range).
+  const goal = L.goalOf(meso.goal);
+  wes.forEach(w => { w.exercises = { ...w.exercises, ...L.repRange(w.exercises, goal) }; });
   const isCardio = w => w.exercises.load_type === 'cardio';
   const muscles = [...new Set(wes.filter(w => !isCardio(w)).map(w => w.exercises.muscle_group))];
   const groups = wes.some(isCardio) ? [...muscles, 'Cardio'] : muscles; // everything that gets rated
@@ -680,7 +781,7 @@ async function renderWorkout(dayId) {
     const pd = check(await sb.from('workout_days').select('id').eq('mesocycle_id', meso.id).eq('week', day.week - 1).eq('day_index', day.day_index).maybeSingle());
     if (pd) {
       check(await sb.from('workout_exercises').select('exercise_id, target_rir, sets(set_index, weight, reps, rir, duration_min, rpe)').eq('workout_day_id', pd.id))
-        .forEach(x => prev[x.exercise_id] = { rir: x.target_rir, sets: x.sets.sort((a, b) => a.set_index - b.set_index) });
+        .forEach(x => prev[x.exercise_id] = { rir: x.target_rir, sets: x.sets.sort((a, b) => a.set_index - b.set_index).map(z => ({ ...z, weight: W(z.weight) })) });
       check(await sb.from('muscle_feedback').select('*').eq('workout_day_id', pd.id)).forEach(f => prevFb[f.muscle_group] = f);
     }
   } else {
@@ -692,7 +793,7 @@ async function renderWorkout(dayId) {
     for (const h of hist) {
       const d = h.workout_days; if (!h.sets.length || L.rirForWeek(d.week, d.mesocycles?.weeks || 99).deload) continue;
       const cur = prev[h.exercise_id];
-      if (!cur || d.completed_at > cur.at) prev[h.exercise_id] = { rir: h.target_rir, at: d.completed_at, carried: true, sets: h.sets.sort((a, b) => a.set_index - b.set_index) };
+      if (!cur || d.completed_at > cur.at) prev[h.exercise_id] = { rir: h.target_rir, at: d.completed_at, carried: true, sets: h.sets.sort((a, b) => a.set_index - b.set_index).map(z => ({ ...z, weight: W(z.weight) })) };
     }
   }
   const feedback = {};
@@ -706,9 +807,9 @@ async function renderWorkout(dayId) {
   const baseFor = (we, i) => { const p = prev[we.exercise_id]; return p?.sets.length ? (p.sets[i] || p.sets[p.sets.length - 1]) : null; };
   // Doc §4.1: if you pick a different weight, re-target reps to match (lo) or beat (hi) last time's effort.
   const repsFor = (we, i, weight) => deload ? null : L.repsAtLoad({ prev: baseFor(we, i), ex: we.exercises, weight,
-    targetRir: we.target_rir, prevTargetRir: prev[we.exercise_id]?.rir, bodyweight: profile?.bodyweight });
+    targetRir: we.target_rir, prevTargetRir: prev[we.exercise_id]?.rir, bodyweight: bwD() });
   const windowFor = we => deload ? null : L.weightRange({ prev: baseFor(we, 0), ex: we.exercises, targetRir: we.target_rir,
-    prevTargetRir: prev[we.exercise_id]?.rir, bodyweight: profile?.bodyweight, unit: unit() });
+    prevTargetRir: prev[we.exercise_id]?.rir, bodyweight: bwD(), unit: unit() });
   const suggestionFor = (we, i) => {
     const p = prev[we.exercise_id]; if (!p?.sets.length) return null;
     const base = baseFor(we, i);
@@ -716,16 +817,18 @@ async function renderWorkout(dayId) {
       jointHold: (prevFb[we.exercises.muscle_group]?.joint_pain ?? 0) >= 2, unit: unit() });
   };
   const lastOfMuscle = {}; wes.filter(w => !isCardio(w)).forEach(w => lastOfMuscle[w.exercises.muscle_group] = w.id);
+  const firstOfMuscle = {}; wes.filter(w => !isCardio(w)).forEach(w => { firstOfMuscle[w.exercises.muscle_group] ??= w.id; });
+  const infoBtn = we => `<button class="ghost sm" data-info="${we.id}" aria-label="Warm-up and tips for ${esc(we.exercises.name)}" title="Warm-up & tips">ⓘ</button>`;
   const todayWarn = day.completed_at ? [] : (await slipFor(meso)).filter(w => !w.muscle || muscles.includes(w.muscle));
   const cardioCard = we => {
     const n = Math.max(we.sets.length, we.target_sets || 0, 1);
     return `<div class="card" data-we="${we.id}" data-muscle="Cardio">
       <div class="row"><div class="grow"><h3>♥︎ ${esc(we.exercises.name)} <span class="trend" data-trend="${we.id}"></span></h3>
         <div class="muted small">Cardio · minutes + intensity (RPE 0 easy → 10 max)</div></div>
-        <button class="ghost sm" data-edit="Cardio" aria-label="Edit ratings" title="Edit ratings">✎</button></div>
+        ${infoBtn(we)}<button class="ghost sm" data-edit="Cardio" aria-label="Edit ratings" title="Edit ratings">✎</button></div>
       <div class="sets"><div class="set-head"><div>#</div><div>min</div><div>RPE</div><div></div></div>
         ${Array.from({ length: n }, (_, i) => { const s = we.sets.find(x => x.set_index === i + 1) || {};
-          return `<div class="set ${s.completed_at ? 'done' : ''}" data-idx="${i + 1}"><div class="n">${i + 1}</div>
+          return `<div class="set ${s.completed_at ? 'done' : ''} ${s._queued ? 'queued' : ''}" data-idx="${i + 1}" data-key="${we.id}:${i + 1}"><div class="n">${i + 1}</div>
             <input type="number" inputmode="decimal" step="any" data-f="duration" value="${s.duration_min ?? ''}" placeholder="min">
             <input type="number" inputmode="numeric" min="0" max="10" data-f="rpe" value="${s.rpe ?? ''}" placeholder="0–10">
             <button class="check">✓</button></div>`; }).join('')}
@@ -735,7 +838,16 @@ async function renderWorkout(dayId) {
 
   app.innerHTML = `
     ${day.completed_at ? '<div class="card good small">Finished ✓ — you can still edit sets and ratings.</div>' : ''}
+    ${day.completed_at ? '' : (() => { let seen = false; try { seen = localStorage.getItem('wl_warmup_seen') === '1'; } catch {}
+      return seen ? '<div class="muted small warm-line">🔥 Warm up first — tap ⓘ on each muscle’s first exercise for ramp-up sets. Warm-ups aren’t logged.</div>'
+        : `<div class="card info small" id="warmNote"><b>🔥 Warm up before your first set</b>
+          <ol class="tight"><li>5 min easy cardio + a few dynamic moves (leg swings, arm circles, bodyweight squats).</li>
+          <li>On the <b>first exercise for each muscle</b>, tap <b>ⓘ</b> for 2–3 light ramp-up sets worked out from today’s weight.</li>
+          <li>Warm-up sets are <b>not logged</b> and never count toward your sets or progress — only log working sets.</li></ol>
+          <button class="ghost sm" id="warmOk">Got it</button></div>`; })()}
     ${deload ? '<div class="card info small"><b>Deload week.</b> Same weights as last week, half the sets, stop well short of failure (≈4 RIR).</div>' : ''}
+    ${!deload && goal === 'athletic' ? '<div class="card info small"><b>Athleticism.</b> Move every rep of the main lifts as fast as you can with good form, and end the set when the speed drops — even if reps are left.</div>' : ''}
+    ${!deload && goal === 'strength' ? '<div class="card info small"><b>Strength.</b> Heavy main lifts first while you’re fresh; rest 3–5 min between them. Never grind to failure.</div>' : ''}
     ${todayWarn.length ? `<div class="card warn"><b>Heads up for today</b>${warnList(todayWarn, 5)}</div>` : ''}
     ${wes.map(we => {
       if (isCardio(we)) return cardioCard(we);
@@ -745,17 +857,17 @@ async function renderWorkout(dayId) {
         <div class="row"><div class="grow"><h3>${esc(ex.name)} <span class="trend" data-trend="${we.id}"></span></h3>
           <div class="muted small">${esc(ex.muscle_group)} · ${we.target_sets} sets · ${deload ? 'deload' : `${we.target_rir} RIR`} · ${ex.rep_min}–${ex.rep_max} reps</div>
           ${(w => w ? `<div class="muted tiny range">Weight window ${fmt(w.light)}–${fmt(w.heavy)} ${unit()} · change the weight and the reps re-target to match last time</div>` : '')(windowFor(we))}</div>
-          <button class="ghost sm" data-edit="${esc(ex.muscle_group)}" aria-label="Edit ratings" title="Edit ratings">✎</button></div>
+          ${infoBtn(we)}<button class="ghost sm" data-edit="${esc(ex.muscle_group)}" aria-label="Edit ratings" title="Edit ratings">✎</button></div>
         ${we.flag ? `<div class="pill bad" style="margin-top:6px">${esc(we.flag)}</div>` : ''}
         <div class="sets"><div class="set-head"><div>#</div><div>${wLabel(ex)}</div><div>reps</div><div></div></div>
           ${Array.from({ length: n }, (_, i) => {
             const s = we.sets.find(x => x.set_index === i + 1) || {}; const sg = suggestionFor(we, i);
             const wVal = s.weight ?? sg?.weight ?? (ex.load_type !== 'weighted' && s.reps == null ? '' : '');
-            return `<div class="set ${s.completed_at ? 'done' : ''}" data-idx="${i + 1}">
+            return `<div class="set ${s.completed_at ? 'done' : ''} ${s._queued ? 'queued' : ''}" data-idx="${i + 1}" data-key="${we.id}:${i + 1}" data-at="${s.completed_at || ''}">
               <div class="n">${i + 1}</div>
-              <div class="fld"><input type="number" inputmode="decimal" step="any" data-f="weight" value="${wVal ?? ''}" class="${s.weight == null && sg?.weight != null ? 'sug' : ''}" placeholder="${ex.load_type === 'weighted' ? unit() : '0'}"><span class="dir" data-dir="weight"></span></div>
-              <div class="fld"><input type="number" inputmode="numeric" data-f="reps" value="${s.reps ?? ''}" placeholder="${sg?.reps ?? ex.rep_min + '–' + ex.rep_max}" data-sug="${sg?.reps ?? ''}"><span class="dir" data-dir="reps"></span></div>
-              <button class="check">✓</button></div>`;
+              <div class="fld"><input type="number" inputmode="decimal" step="any" data-f="weight" aria-label="Set ${i + 1} weight (${wLabel(ex)})" value="${wVal ?? ''}" class="${s.weight == null && sg?.weight != null ? 'sug' : ''}" placeholder="${ex.load_type === 'weighted' ? unit() : '0'}"><span class="dir" data-dir="weight"></span></div>
+              <div class="fld"><input type="number" inputmode="numeric" data-f="reps" aria-label="Set ${i + 1} reps" value="${s.reps ?? ''}" placeholder="${sg?.reps ?? ex.rep_min + '–' + ex.rep_max}" data-sug="${sg?.reps ?? ''}"><span class="dir" data-dir="reps"></span></div>
+              <button class="check" aria-label="Set ${i + 1} done">✓</button></div>`;
           }).join('')}
         </div>
         <div class="row" style="margin-top:8px"><button class="ghost sm" data-addset>+ set</button><button class="ghost sm" data-rmset>− set</button>
@@ -787,7 +899,7 @@ async function renderWorkout(dayId) {
     const cur = [...card.querySelectorAll('.set.done')].map(r => ({ weight: Number(r.querySelector('[data-f="weight"]').value) || 0,
       reps: Number(r.querySelector('[data-f="reps"]').value), rir: we.target_rir })).filter(x => x.reps);
     const p = prev[we.exercise_id]; if (!cur.length || !p?.sets.length) return null;
-    const a = L.bestE1rm(cur, we.exercises, profile?.bodyweight), b = L.bestE1rm(p.sets.map(x => ({ ...x, rir: x.rir ?? p.rir })), we.exercises, profile?.bodyweight);
+    const a = L.bestE1rm(cur, we.exercises, bwD()), b = L.bestE1rm(p.sets.map(x => ({ ...x, rir: x.rir ?? p.rir })), we.exercises, bwD());
     if (a == null || b == null) return null;
     return { t: L.performanceTrend(a, b), pct: (a - b) / b * 100, vs: p.carried ? 'last meso' : 'last week' };
   }
@@ -855,6 +967,13 @@ async function renderWorkout(dayId) {
   function wireSet(we, row) {
     if (isCardio(we)) return wireCardio(we, row);
     updateDirs(we, row);
+    const payloadFor = done => {
+      const wIn = row.querySelector('[data-f="weight"]'), rIn = row.querySelector('[data-f="reps"]');
+      const weight = wIn.value === '' ? null : Number(wIn.value), reps = rIn.value === '' ? null : Number(rIn.value);
+      return { workout_exercise_id: we.id, set_index: +row.dataset.idx, weight: weight == null ? (we.exercises.load_type === 'weighted' ? null : 0) : toLb(weight),
+        reps, rir: we.target_rir, completed_at: done ? (row.dataset.at || new Date().toISOString()) : null };
+    };
+    if (row.classList.contains('done')) row.dataset.saved = JSON.stringify(payloadFor(true)); // what the server already has
     const save = async markDone => {
       const wIn = row.querySelector('[data-f="weight"]'), rIn = row.querySelector('[data-f="reps"]');
       if (markDone && rIn.value === '' && rIn.dataset.sug) rIn.value = rIn.dataset.sug;
@@ -863,10 +982,17 @@ async function renderWorkout(dayId) {
       if (markDone && done && reps == null) return toast('Enter reps first', true);
       if (markDone && done && weight == null && we.exercises.load_type === 'weighted') return toast('Enter the weight first', true);
       if (!markDone && weight == null && reps == null) return;
-      const payload = { workout_exercise_id: we.id, set_index: +row.dataset.idx, weight: weight ?? (we.exercises.load_type === 'weighted' ? null : 0),
-        reps, rir: we.target_rir, completed_at: done ? (row.dataset.at || new Date().toISOString()) : null };
-      const { error } = await sb.from('sets').upsert(payload, { onConflict: 'workout_exercise_id,set_index' });
-      if (error) return toast(error.message, true);
+      const payload = payloadFor(done);
+      const sig = JSON.stringify(payload);
+      if (!markDone && sig === row.dataset.saved) return;          // nothing changed → no request
+      if (row.dataset.busy) { row.dataset.again = '1'; return; }    // a save is in flight; send the latest once it lands
+      row.dataset.busy = '1'; row.dataset.key = setKey(payload); row.classList.remove('failed', 'queued'); row.classList.add('saving');
+      const res = await saveSet(payload);
+      delete row.dataset.busy; row.classList.remove('saving');
+      if (res === 'failed') { row.classList.add('failed'); return; }
+      if (res === 'queued') { row.classList.add('queued'); if (markDone && done) toast('No signal — saved on your phone, will sync automatically'); }
+      row.dataset.saved = sig;
+      if (row.dataset.again) { delete row.dataset.again; save(false); }
       row.dataset.at = payload.completed_at || ''; wIn.classList.remove('sug');
       row.classList.toggle('done', done);
       updateDirs(we, row);
@@ -901,9 +1027,15 @@ async function renderWorkout(dayId) {
       const done = markDone ? !row.classList.contains('done') : row.classList.contains('done');
       if (markDone && done && (!duration || rpe == null)) return toast('Enter minutes and RPE', true);
       if (!markDone && duration == null && rpe == null) return;
-      const { error } = await sb.from('sets').upsert({ workout_exercise_id: we.id, set_index: +row.dataset.idx, duration_min: duration, rpe,
-        weight: null, reps: null, completed_at: done ? new Date().toISOString() : null }, { onConflict: 'workout_exercise_id,set_index' });
-      if (error) return toast(error.message, true);
+      if (row.dataset.busy) return;
+      row.dataset.busy = '1'; row.classList.remove('failed', 'queued'); row.classList.add('saving');
+      const payload = { workout_exercise_id: we.id, set_index: +row.dataset.idx, duration_min: duration, rpe,
+        weight: null, reps: null, completed_at: done ? new Date().toISOString() : null };
+      row.dataset.key = setKey(payload);
+      const res = await saveSet(payload);
+      delete row.dataset.busy; row.classList.remove('saving');
+      if (res === 'failed') { row.classList.add('failed'); return; }
+      if (res === 'queued') row.classList.add('queued');
       row.classList.toggle('done', done);
       refreshTrend(we);
       if (markDone && done) enforceRatings();
@@ -917,7 +1049,8 @@ async function renderWorkout(dayId) {
     card.querySelector('[data-addset]').onclick = () => {
       const setsEl = card.querySelector('.sets'); const last = setsEl.querySelector('.set:last-child');
       const row = last.cloneNode(true); const idx = +last.dataset.idx + 1;
-      row.dataset.idx = idx; row.dataset.at = ''; row.classList.remove('done'); row.querySelector('.n').textContent = idx;
+      row.dataset.idx = idx; row.dataset.at = ''; delete row.dataset.saved; delete row.dataset.busy; row.dataset.key = we.id + ':' + idx;
+      row.classList.remove('done', 'queued', 'failed', 'saving'); row.querySelector('.n').textContent = idx;
       row.querySelectorAll('input').forEach(i => { if (i.dataset.f !== 'weight') i.value = ''; i.classList.remove('sug'); });
       setsEl.appendChild(row); wireSet(we, row);
     };
@@ -928,6 +1061,29 @@ async function renderWorkout(dayId) {
     };
   });
 
+  $('#warmOk') && ($('#warmOk').onclick = () => { try { localStorage.setItem('wl_warmup_seen', '1'); } catch {} $('#warmNote').outerHTML = '<div class="muted small warm-line">🔥 Warm up first — tap ⓘ on each muscle’s first exercise for ramp-up sets. Warm-ups aren’t logged.</div>'; });
+  $$('[data-info]').forEach(b => b.onclick = () => {
+    const we = wes.find(w => w.id === b.dataset.info), ex = we.exercises;
+    const first = isCardio(we) || firstOfMuscle[ex.muscle_group] === we.id;
+    const card = app.querySelector(`[data-we="${we.id}"]`);
+    const ww = Number(card?.querySelector('.set [data-f="weight"]')?.value) || null; // today's working weight (shown unit)
+    const plan = L.warmupPlan({ ex, workWeight: ww, firstForMuscle: first, unit: unit() });
+    const rows = plan.map((x, i) => `<tr><td>${i + 1}</td><td>${x.weight != null ? `${fmt(x.weight)} ${unit()}` : '—'}</td><td>${x.reps ?? '—'}</td><td class="muted">${esc(x.note || '')}</td></tr>`).join('');
+    openSheet(`<h3>${esc(ex.name)}</h3>
+      <div class="muted small">${isCardio(we) ? 'Cardio' : `${esc(ex.muscle_group)} · ${we.target_rir} RIR · ${ex.rep_min}–${ex.rep_max} reps`}</div>
+      <h2>Warm-up${first ? '' : ' (optional)'}</h2>
+      ${plan[0].weight == null && plan.length === 1 ? `<p>${esc(plan[0].note)}</p>` : `<table class="warm"><thead><tr><th>#</th><th>Weight</th><th>Reps</th><th></th></tr></thead><tbody>${rows}</tbody></table>`}
+      <p class="muted small">${ww || isCardio(we) || ex.load_type !== 'weighted' ? '' : 'Enter today’s working weight in set 1 to get exact ramp-up weights. '}Rest about a minute between warm-up sets, then start your first working set. Don’t log warm-ups — they don’t count toward your sets or progress.</p>
+      <h2>Tips</h2><ul class="tight small">
+        ${isCardio(we) ? '<li>Breathing scale: talk in full sentences = easy; a few words = hard.</li>'
+          : `<li>Work sets end with about <b>${we.target_rir} rep${we.target_rir === 1 ? '' : 's'} left in the tank</b>${we.target_rir === 0 ? ' (to failure, with good form)' : ''}.</li>
+             <li>Full range of motion; control the lowering.</li>
+             ${goal === 'athletic' && ex.kind === 'compound' ? '<li>Move each rep as fast as you can; end the set when speed drops.</li>' : ''}
+             ${goal === 'strength' && ex.kind === 'compound' ? '<li>Rest 3–5 min between heavy sets.</li>' : '<li>Rest 1.5–3 min between work sets.</li>'}`}
+      </ul><a class="small" href="#/learn/warmup">Why warm up this way?</a>
+      <div class="spacer"></div><button class="primary block" id="closeInfo">Done</button>`,
+      panel => { panel.querySelector('#closeInfo').onclick = closeSheet; panel.querySelector('a').onclick = () => closeSheet(); });
+  });
   $$('[data-edit]').forEach(b => b.onclick = () => {
     const m = b.dataset.edit;
     if (!isRated(m) && !muscleComplete(m)) return toast(`Finish ${m}'s sets first — ratings open automatically`);
@@ -947,7 +1103,8 @@ async function renderWorkout(dayId) {
     if (open && !confirm(`${open} set${open > 1 ? 's are' : ' is'} not checked off. Finish anyway?`)) return;
     // Performance trend per muscle vs. last week (doc §1.7), computed from what's saved.
     const fresh = check(await sb.from('workout_exercises').select('exercise_id, target_rir, exercises(*), sets(*)').eq('workout_day_id', dayId));
-    const bw = profile?.bodyweight;
+    fresh.forEach(w => w.sets.forEach(x => { x.weight = W(x.weight); }));
+    const bw = bwD();
     for (const m of muscles) {
       const trends = fresh.filter(w => w.exercises.muscle_group === m).map(w => {
         const cur = L.bestE1rm(w.sets.filter(s => s.completed_at).map(s => ({ ...s, rir: s.rir ?? w.target_rir })), w.exercises, bw);
@@ -1133,12 +1290,12 @@ async function renderProgress(exId) {
     return $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
   }
   const ss = (await fetchAll(() => sb.rpc('lift_sessions', { p_exercise_id: exId }).order('done_at').order('session_id')))
-    .map(s => ({ date: s.done_at, e: Number(s.best_e1rm), top: { weight: s.top_weight, reps: s.top_reps }, n: s.n_sets, name: s.name }));
+    .map(s => ({ date: s.done_at, e: W(s.best_e1rm), top: { weight: W(s.top_weight), reps: s.top_reps }, n: s.n_sets, name: s.name }));
   if (!ss.length) { app.innerHTML = '<p class="muted">No sets for this exercise yet.</p>'; return; }
   const vals = ss.map(s => s.e), min = Math.min(...vals), max = Math.max(...vals), span = max - min || 1;
   const pts = ss.map((s, i) => `${ss.length === 1 ? 160 : 10 + i * 300 / (ss.length - 1)},${110 - (s.e - min) / span * 95}`).join(' ');
   setHeader(ss[0].name, '#/progress', 'explore');
-  app.innerHTML = `<div class="card"><div class="muted small">Best estimated strength per session · weight × (1 + (reps + RIR)/30)</div>
+  app.innerHTML = `<div class="card"><div class="muted small">Best estimated strength per session (${unit()}) · weight × (1 + (reps + RIR)/30)</div>
       <svg class="chart" viewBox="0 0 320 120"><polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
       ${pts.split(' ').map(p => `<circle cx="${p.split(',')[0]}" cy="${p.split(',')[1]}" r="3" fill="var(--accent)"/>`).join('')}</svg>
       <div class="row muted tiny"><span class="grow">${fmt(Math.round(min))}</span><span>${fmt(Math.round(max))}</span></div></div>
@@ -1204,7 +1361,8 @@ async function renderTemplates(head, wireTabs) {
   $$('[data-del]').forEach(b => b.onclick = async () => { if (!confirm('Delete this template?')) return; check(await sb.from('templates').delete().eq('id', b.dataset.del)); renderLibrary('templates'); });
 }
 async function renderExercises(filter = '', head = '', wireTabs = () => {}) {
-  const list = await loadExercises(true);
+  const [list, prefList] = await Promise.all([loadExercises(true), loadPrefs(true)]);
+  const prefs = new Map(prefList.map(p => [p.exercise_id, p]));
   let mf = decodeURIComponent(filter || ''), q = '';
   const draw = () => {
     const shown = list.filter(e => (!mf || e.muscle_group === mf) && (!q || e.name.toLowerCase().includes(q)));
@@ -1212,9 +1370,13 @@ async function renderExercises(filter = '', head = '', wireTabs = () => {}) {
       <input id="q" placeholder="Search ${list.length} exercises" value="${esc(q)}"><div class="spacer"></div>
       <div class="chips">${['', ...L.MUSCLES, 'Cardio'].map(m => `<button class="chip ${m === mf ? 'sel' : ''}" data-mf="${m}">${m || 'All'}</button>`).join('')}</div>
       <div class="spacer"></div>
-      <div class="card">${shown.map(e => `<div class="row" style="padding:7px 0;border-bottom:1px solid var(--line)"><div class="grow">${esc(e.name)}
+      <div class="muted tiny">★ favorite = autofill picks it first · ⦸ exclude = autofill never picks it (choose what to use instead). Your choices only.</div>
+      <div class="card">${shown.map(e => { const pf = prefs.get(e.id); return `<div class="row exrow" style="padding:7px 0;border-bottom:1px solid var(--line)"><div class="grow">${esc(e.name)}${(e.tags || []).includes('axial') ? ' <span class="pill warn" title="Heavy spinal loading">spinal load</span>' : ''}
         <div class="muted tiny">${esc(e.muscle_group)} · ${esc(e.equipment || '')} · ${e.kind} · ${e.load_type} · ${e.rep_min}–${e.rep_max} reps${e.secondary?.length ? ' · also ' + e.secondary.join(', ') : ''}</div></div>
-        ${e.owner_id ? `<span class="pill">mine</span><button class="ghost sm danger" data-del="${e.id}">✕</button>` : ''}</div>`).join('') || '<p class="muted">No matches.</p>'}</div>
+        ${pf?.pref === 'exclude' ? `<div class="sub"><label for="sub-${e.id}" class="tiny">Use instead</label><select id="sub-${e.id}" data-sub="${e.id}"><option value="">— autofill decides —</option>${list.filter(x => x.muscle_group === e.muscle_group && x.id !== e.id).map(x => `<option value="${x.id}" ${pf.substitute_id === x.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></div>` : ''}</div>
+        <button class="ghost sm pref ${pf?.pref === 'favorite' ? 'on' : ''}" data-fav="${e.id}" aria-pressed="${pf?.pref === 'favorite'}" aria-label="${pf?.pref === 'favorite' ? 'Remove from favorites' : 'Mark as favorite'}: ${esc(e.name)}">${pf?.pref === 'favorite' ? '★' : '☆'}</button>
+        <button class="ghost sm pref ${pf?.pref === 'exclude' ? 'bad' : ''}" data-excl="${e.id}" aria-pressed="${pf?.pref === 'exclude'}" aria-label="${pf?.pref === 'exclude' ? 'Stop excluding' : 'Exclude'}: ${esc(e.name)}">⦸</button>
+        ${e.owner_id ? `<button class="ghost sm danger" data-del="${e.id}" aria-label="Delete ${esc(e.name)}">✕</button>` : ''}</div>`; }).join('') || '<p class="muted">No matches.</p>'}</div>
       <div class="card"><h3>Add your own</h3><form id="f">
         <label>Name</label><input name="name" required>
         <div class="row"><div class="grow"><label>Muscle</label><select name="mg">${[...L.MUSCLES, 'Cardio'].map(m => `<option ${m === mf ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
@@ -1233,6 +1395,10 @@ async function renderExercises(filter = '', head = '', wireTabs = () => {}) {
         kind: fd.get('kind'), load_type: fd.get('lt'), rep_min: rmin, rep_max: rmax }));
       toast('Added'); exCache = null; renderLibrary('exercises');
     };
+    const refresh = async () => { prefList.length = 0; prefList.push(...await loadPrefs(true)); prefs.clear(); prefList.forEach(p => prefs.set(p.exercise_id, p)); draw(); };
+    $$('[data-fav]').forEach(b => b.onclick = async () => { const id = b.dataset.fav; await setPref(id, prefs.get(id)?.pref === 'favorite' ? null : 'favorite'); refresh(); });
+    $$('[data-excl]').forEach(b => b.onclick = async () => { const id = b.dataset.excl; await setPref(id, prefs.get(id)?.pref === 'exclude' ? null : 'exclude'); refresh(); });
+    $$('[data-sub]').forEach(sel => sel.onchange = async () => { await setPref(sel.dataset.sub, 'exclude', sel.value || null); toast('Saved'); refresh(); });
     $$('[data-del]').forEach(b => b.onclick = async () => {
       if (!confirm('Delete this exercise?')) return;
       const r = await sb.from('exercises').delete().eq('id', b.dataset.del);
@@ -1243,25 +1409,52 @@ async function renderExercises(filter = '', head = '', wireTabs = () => {}) {
 }
 
 // ---------- settings ----------
-function renderSettings() {
+const EQUIPMENT = ['Barbell', 'Dumbbell', 'Machine', 'Cable', 'Smith Machine', 'Kettlebell', 'Band'];
+async function renderSettings() {
   setHeader('Settings', '#/explore', 'explore');
+  const lib = await loadExercises();
+  const axial = lib.filter(e => (e.tags || []).includes('axial'));
+  const eq = profile?.equipment; // null = everything
+  const avoidAxial = (profile?.avoid_tags || []).includes('axial');
   app.innerHTML = `<div class="card">
       <div class="muted small">Signed in as</div><div>${esc(session.user.email)}</div>
-      <label>Name</label><input id="name" value="${esc(profile?.display_name || '')}">
-      <div class="row"><div class="grow"><label>Units</label><select id="unit"><option ${unit() === 'lb' ? 'selected' : ''}>lb</option><option ${unit() === 'kg' ? 'selected' : ''}>kg</option></select></div>
-        <div class="grow"><label>Bodyweight (${unit()})</label><input id="bw" type="number" inputmode="decimal" step="any" value="${profile?.bodyweight ?? ''}"></div></div>
-      <div class="muted tiny" style="margin-top:6px">Bodyweight lets pull-ups, dips and push-ups count toward strength trends.</div>
+      <label for="name">Name</label><input id="name" autocomplete="name" value="${esc(profile?.display_name || '')}">
+      <div class="row"><div class="grow"><label for="unit">Units</label><select id="unit"><option ${unit() === 'lb' ? 'selected' : ''}>lb</option><option ${unit() === 'kg' ? 'selected' : ''}>kg</option></select></div>
+        <div class="grow"><label for="bw">Bodyweight (${unit()})</label><input id="bw" type="number" inputmode="decimal" step="any" value="${profile?.bodyweight == null ? '' : Math.round(bwD() * 10) / 10}"></div></div>
+      <div class="muted tiny" style="margin-top:6px">Bodyweight lets pull-ups, dips and push-ups count toward strength trends. Switching units only changes how weights are shown — your history stays the same.</div>
       <div class="spacer"></div><button class="primary block" id="save">Save</button></div>
+    <div class="card"><h3>Training preferences</h3>
+      <div class="muted small">Used when the app builds a mesocycle for you. These are your choices; you can still add any exercise by hand.</div>
+      <fieldset class="plain"><legend class="small">Equipment I have</legend>
+        <div class="chips">${EQUIPMENT.map(x => `<label class="chip check"><input type="checkbox" name="eq" value="${x}" ${!eq || eq.includes(x) ? 'checked' : ''}> ${x}</label>`).join('')}</div>
+        <div class="muted tiny">Bodyweight moves are always included.</div></fieldset>
+      <label class="switch"><input type="checkbox" id="avoidAxial" ${avoidAxial ? 'checked' : ''}> <span>Avoid heavy spinal loading</span></label>
+      <details class="small"><summary class="muted">${axial.length} exercises are tagged (bar on the back, shoulder-pad machines, heavy barbell hinges/rows, standing overhead press)</summary>
+        <div class="muted tiny" style="margin-top:6px">${axial.map(e => esc(e.name)).join(' · ')}</div>
+        <div class="muted tiny" style="margin-top:6px">Want to keep one of these? Star it in the Exercise library — favorites are always allowed.</div></details>
+      <div class="spacer"></div><button class="block" id="savePrefs">Save preferences</button>
+      <button class="ghost block sm" data-go="#/exercises">Favorites &amp; exclusions → Exercise library</button></div>
     <div class="card small"><a href="${DOC_URL}" target="_blank" rel="noopener">Training Logic & Evidence</a> <span class="muted">— why the app sets your weights, sets and RIR the way it does.</span></div>
     <button class="block" id="pw">Change password</button><div class="spacer"></div>
     <button class="block" id="out">Sign out</button>
-    <p class="muted small center">Install: Safari → Share → Add to Home Screen.</p>`;
+    <p class="muted small center">Install: Safari → Share → Add to Home Screen.</p>
+    <p class="muted tiny center">Woodhouse Lifts ${APP_VERSION} · <a href="${CHANGELOG_URL}" target="_blank" rel="noopener">What’s new</a></p>`;
   $('#save').onclick = async () => {
     const bw = $('#bw').value;
-    profile = check(await sb.from('profiles').update({ display_name: $('#name').value.trim(), unit: $('#unit').value, bodyweight: bw === '' ? null : Number(bw) })
+    // The bodyweight box is in the unit shown when the page opened; convert with that unit, then switch.
+    const bwLb = bw === '' ? null : bw === $('#bw').defaultValue ? profile?.bodyweight : Math.round(toLb(bw) * 10) / 10; // unchanged → keep exact stored value
+    profile = check(await sb.from('profiles').update({ display_name: $('#name').value.trim(), unit: $('#unit').value, bodyweight: bwLb })
       .eq('id', session.user.id).select().single());
-    toast('Saved');
+    toast('Saved'); renderSettings();
   };
+  $('#savePrefs').onclick = async () => {
+    const picked = $$('input[name=eq]:checked').map(i => i.value);
+    const tags = (profile?.avoid_tags || []).filter(t => t !== 'axial'); if ($('#avoidAxial').checked) tags.push('axial');
+    profile = check(await sb.from('profiles').update({ equipment: picked.length === EQUIPMENT.length ? null : picked, avoid_tags: tags })
+      .eq('id', session.user.id).select().single());
+    toast('Preferences saved — new mesocycles will use them');
+  };
+  $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
   $('#out').onclick = async () => { await sb.auth.signOut(); go('#/'); };
   $('#pw').onclick = () => renderNewPassword(false);
 }
