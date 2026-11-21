@@ -16,7 +16,7 @@ let authReturn = (() => {
   if (get('error') || get('error_code')) return { ok: false, code: get('error_code') || get('error'), desc: get('error_description') };
   return null;
 })();
-const DOC_URL = 'https://docs.google.com/document/d/1Jxhk6bIeWpApGCHCpMIe96r7JE9-GjRW_tZOZUMuisg';
+const DOC_URL = 'https://docs.google.com/document/d/1o5wZ9J00q6Gp06cORT2ZDCA7Q0-F7cKa-pKKO4VMSWY';
 
 const app = document.getElementById('app');
 const titleEl = document.getElementById('title');
