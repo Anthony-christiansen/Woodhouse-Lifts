@@ -12,6 +12,38 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.12.0 — 2026-11-23 · "Building a meso, made clear"
+
+**New mesocycle screen**
+- **Three short steps.**
+  1. *Your week*: days, time and goal, as big buttons instead of drop-downs.
+  2. *Start from*: Suggested, Templates or From scratch.
+  3. *Name & length.*
+
+  Only the options for the start you picked are shown, so the screen is much shorter.
+- **It's obvious what you picked.** A chosen option is filled in and carries a ✓; the others stay plain.
+- **Suggested (the default, one tap).** It uses the best-fitting split for your days and carries on from your current or last meso: the same muscle choices, or the same focus for imported mesos. It explains why in plain words. "Start fresh (Balanced)" ignores the last meso. Time per workout is still applied on the next screen, with the usual notes.
+- **A template library: 84 set-ups.** Seven focuses × every split that fits your days, so 14–21 show for any number of days.
+  - The focuses: Balanced, Upper body, Lower body, Glutes & hamstrings, Chest & back, Shoulders and Arms.
+  - Filter by focus. Each card shows what it emphasizes and your week, day by day.
+  - Set-ups that would train a growing muscle only once a week are left out; they are still available From scratch.
+- **Changing days keeps your template** when the same focus fits the new days, and clears it, with the Next button waiting, when it doesn't.
+- **Name filled in for you** (e.g. "Arms · 4 days"); type over it if you like.
+- **Adjusting a muscle** labels the plan "(adjusted)", so you can tell it's no longer the plain template.
+- **Library → Templates** shows the same library, filtered by days. Tapping one opens the builder with it already chosen. Your saved templates are unchanged.
+
+**Underneath**
+- logic.js: `FOCI`, `presetPriorities`, `matchPreset`, `templateCatalog`, `templateById`, `suggestPlan`, `lastMesoFor`, `daysForMuscle`. The old template ids (`whole`, `upper`, `lower`, `custom`) give exactly the same priorities as before.
+- No database change: the meso's saved focus stays one of the four allowed values. The per-muscle choices are saved as before.
+- Tests:
+  - logic: every template × goal × time (756 builds). Growing muscles are trained 2× a week, Maintain is never 0, and emphasized muscles are never moved.
+  - New browser test: `builder120.py`. Older builder tests updated for the new buttons.
+- `?v=36`.
+
+**Rollback:** point main back to `release/v1.11.5` (Playbook §6). There is nothing to undo in the database.
+
+---
+
 ## 1.11.5 — 2026-11-23 · "3 days a week, maximized"
 
 **Building a meso when time is short**

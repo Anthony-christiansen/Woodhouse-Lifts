@@ -13,8 +13,8 @@ async def build(ctx, errs, minutes):
     pg=await ctx.new_page(); pg.on('pageerror', lambda e: errs.append(str(e))); PAGES.append(pg)
     await pg.goto(B+'#/new'); await pg.wait_for_timeout(900)
     await pg.click('[data-goal="hypertrophy"]'); await pg.wait_for_timeout(100)
-    await pg.select_option('#days','3'); await pg.wait_for_timeout(150)
-    await pg.select_option('#minutes', str(minutes)); await pg.wait_for_timeout(100)
+    await pg.click('[data-days="3"]'); await pg.wait_for_timeout(150)
+    await pg.click(f'[data-min="{minutes}"]'); await pg.wait_for_timeout(100)
     await pg.fill('#name','T'); await pg.click('#next'); await pg.wait_for_timeout(600)
     return pg, await pg.inner_text('main')
 async def main():

@@ -1,7 +1,7 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import * as L from './logic.js?v=35';
-import * as LEARN from './learn.js?v=35';
-import * as MD from './md.js?v=35';
+import * as L from './logic.js?v=36';
+import * as LEARN from './learn.js?v=36';
+import * as MD from './md.js?v=36';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -18,7 +18,7 @@ let authReturn = (() => {
   return null;
 })();
 let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
-export const APP_VERSION = '1.11.5'; // keep in sync with CHANGELOG.md
+export const APP_VERSION = '1.12.0'; // keep in sync with CHANGELOG.md
 const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
 // v1.11.4: the training rules are a page inside the app (#/logic), built from this repo's docs/training-logic.md.
 // The app never links to anyone's Google Drive.
@@ -563,14 +563,16 @@ async function renderMesos() {
 // ---------- mesocycle builder ----------
 let builder = null;
 function freshBuilder() {
-  return { step: 1, name: '', weeks: 5, days: 4, focus: 'whole', goal: 'hypertrophy', priorities: L.templatePriorities('whole'), plan: [],
-    minutes: Number(localStorage.getItem('wl_session_minutes')) || 75, minRirCompound: false };
+  return { step: 1, name: '', weeks: 5, days: 4, focus: 'whole', preset: 'balanced', start: 'suggested', goal: 'hypertrophy', priorities: L.templatePriorities('whole'), plan: [],
+    minutes: Number(localStorage.getItem('wl_session_minutes')) || 75, minRirCompound: false, lastMeso: undefined };
 }
 function builderFromTemplate(t) {
-  return { step: 2, name: t.name.replace(/ \(from .*\)$/, ''), weeks: t.weeks, days: t.days_per_week, focus: t.focus, goal: L.goalOf(t.goal),
+  const b = { step: 2, start: 'scratch', nameTouched: true, weeksTouched: true, name: t.name.replace(/ \(from .*\)$/, ''), weeks: t.weeks, days: t.days_per_week, focus: t.focus, goal: L.goalOf(t.goal),
     priorities: Object.keys(t.priorities || {}).length ? Object.fromEntries(Object.entries(t.priorities).map(([m, p]) => [m, L.normPriority(p, t.focus)])) : L.templatePriorities(t.focus),
     minutes: Number(localStorage.getItem('wl_session_minutes')) || 75, minRirCompound: false,
     plan: t.plan.map(d => ({ label: d.label, slots: d.slots.map(x => ({ ...x })) })) };
+  b.preset = L.matchPreset(b.priorities) || L.presetOfFocus(b.focus); b.adjusted = !L.matchPreset(b.priorities) && !!b.preset;
+  return b;
 }
 async function renderBuilder() {
   setHeader('New mesocycle', '#/mesos', 'mesos');
@@ -588,68 +590,113 @@ async function renderBuilder() {
     [...L.candidatesFor(muscle, P.library, P.favorites), ...(sel && !P.library.some(e => e.id === sel) && exById.get(sel) ? [exById.get(sel)] : [])]
       .map(e => `<option value="${e.id}" ${e.id === sel ? 'selected' : ''}>${P.favorites.has(e.id) ? '★ ' : ''}${esc(e.name)}</option>`).join('');
 
+  // v1.12.0 — step 1: your week (days, time, goal) → start from Suggested / a template / scratch → name & length.
+  // Every pick is a filled tile with a ✓ so it's obvious what is chosen; only the chosen start's options are shown.
+  const presetName = () => S.preset ? L.FOCI[S.preset].name + (S.adjusted ? ' (adjusted)' : '') : 'Custom';
+  const autoName = () => `${S.preset ? L.FOCI[S.preset].name : 'Custom'} · ${S.days} days`;
+  const applyPriorities = (pr, preset) => { S.priorities = { ...pr }; S.preset = preset; S.focus = preset ? L.FOCI[preset].db : 'custom'; S.adjusted = false; S.autoMaintain = []; S.plan = []; };
+  const applySuggestion = () => {
+    const sg = L.suggestPlan({ days: S.days, last: S.lastMeso, fresh: S.fresh });
+    S.split = sg.split; applyPriorities(sg.priorities, sg.preset); if (!sg.preset) S.focus = sg.focus;
+    if (!S.weeksTouched) S.weeks = sg.weeks; S.sugg = sg;
+  };
+  const applyTemplate = t => { S.tpl = t.id; S.split = t.split; applyPriorities(L.presetPriorities(t.preset), t.preset); };
+  const tick = on => on ? '<span class="tick" aria-hidden="true">✓</span>' : '';
   const step1 = () => {
     if (!S.split || !L.SPLITS[S.split]?.days.includes(S.days)) S.split = L.defaultSplit(S.days);
-    const splits = L.splitsFor(S.days);
+    if (!S.nameTouched) S.name = autoName();
+    const splits = L.splitsFor(S.days), cat = L.templateCatalog(S.days);
+    const shownCat = cat.filter(t => !S.tplFocus || t.preset === S.tplFocus);
     const preview = L.splitLayout(S.split, S.days).map(d => d.label).join(' · ');
+    const G = L.GOALS[L.goalOf(S.goal)];
+    const startBody = S.start === 'suggested' ? `
+        <div class="sugg">
+          <div class="row"><b class="grow">${esc(presetName())} · ${esc(L.SPLITS[S.split].name)}</b><span class="pill">${S.weeks} weeks</span></div>
+          <div class="muted small">Your week: ${esc(preview)}</div>
+          <ul class="tight small">${(S.sugg?.reasons || []).map(r => `<li>${esc(r)}</li>`).join('')}
+            <li>Fitted to ${S.minutes} min a workout on the next screen; it tells you if anything had to change.</li></ul>
+          ${S.lastMeso ? `<div class="seg c2 mini" role="radiogroup" aria-label="Suggestion based on">
+            <button type="button" role="radio" aria-checked="${!S.fresh}" data-fresh="0" class="${!S.fresh ? 'on' : ''}">Carry on from last meso</button>
+            <button type="button" role="radio" aria-checked="${!!S.fresh}" data-fresh="1" class="${S.fresh ? 'on' : ''}">Start fresh (Balanced)</button></div>` : ''}
+        </div>` : S.start === 'template' ? `
+        <div class="muted small">${cat.length} templates fit ${S.days} days a week. Each sets the split and which muscles get the most work.</div>
+        <div class="chips" style="margin:8px 0" role="radiogroup" aria-label="Focus">${[['', 'All'], ...Object.entries(L.FOCI).map(([k, f]) => [k, f.name])].map(([k, n]) =>
+          `<button type="button" class="chip ${S.tplFocus === k || (!S.tplFocus && !k) ? 'sel' : ''}" data-tf="${k}" aria-pressed="${S.tplFocus === k || (!S.tplFocus && !k)}">${esc(n)}</button>`).join('')}</div>
+        ${shownCat.map(t => `<button type="button" class="choice tpl ${S.tpl === t.id ? 'on' : ''}" data-tpl="${t.id}" aria-pressed="${S.tpl === t.id}">
+          <div class="grow"><b>${esc(t.name)}</b> <span class="muted small">· ${esc(t.splitName)}</span>${t.recommended ? ' <span class="pill tiny-pill">fits best</span>' : ''}
+            <div class="muted small">${esc(t.blurb)}</div>
+            <div class="tiny muted">${esc(t.week.join(' · '))}</div></div>${tick(S.tpl === t.id)}</button>`).join('')}` : `
+        <div class="muted small">Pick a split, then set each muscle under “Adjust muscles” below.</div>
+        ${splits.map(x => `<button type="button" class="choice ${S.split === x.id ? 'on' : ''}" data-split="${x.id}" aria-pressed="${S.split === x.id}">
+          <div class="grow"><b>${x.name}</b>${x.id === L.defaultSplit(S.days) ? ' <span class="pill tiny-pill">fits best</span>' : ''}<div class="muted small">${esc(x.blurb)}</div></div>${tick(S.split === x.id)}</button>`).join('')}
+        <div class="muted small">Your week: <b>${esc(preview)}</b></div>`;
     app.innerHTML = `
-      <div class="card"><div class="step-h"><span class="step-n">1</span><b>Goal</b></div>
-        <div class="goal-tiles" role="radiogroup" aria-label="Training goal">${Object.entries(L.GOALS).map(([k, g]) => `<button type="button" role="radio" aria-checked="${S.goal === k}" data-goal="${k}" class="goal-tile ${S.goal === k ? 'on' : ''}"><b>${g.name}</b><span class="tiny">${esc(g.blurb)}</span></button>`).join('')}</div>
-        <a class="small" href="#/learn/${S.goal}">How ${L.GOALS[L.goalOf(S.goal)].name.toLowerCase()} training works ›</a>
+      <div class="muted small" style="margin-bottom:8px">Step 1 of 2 · set up the meso</div>
+      <div class="card"><div class="step-h"><span class="step-n">1</span><b>Your week</b></div>
+        <label id="lDays">Training days a week</label>
+        <div class="seg c5" role="radiogroup" aria-labelledby="lDays">${[2, 3, 4, 5, 6].map(n => `<button type="button" role="radio" aria-checked="${S.days === n}" data-days="${n}" class="${S.days === n ? 'on' : ''}">${n}</button>`).join('')}</div>
+        <label id="lMin">Time per workout</label>
+        <div class="seg c5" role="radiogroup" aria-labelledby="lMin">${[45, 60, 75, 90, 120].map(n => `<button type="button" role="radio" aria-checked="${S.minutes === n}" data-min="${n}" class="${S.minutes === n ? 'on' : ''}">${n}<span class="tiny"> min</span></button>`).join('')}</div>
+        <label id="lGoal">Goal</label>
+        <div class="seg c3" role="radiogroup" aria-labelledby="lGoal">${Object.entries(L.GOALS).map(([k, g]) => `<button type="button" role="radio" aria-checked="${S.goal === k}" data-goal="${k}" class="${S.goal === k ? 'on' : ''}">${g.name}</button>`).join('')}</div>
+        <div class="muted tiny" style="margin-top:6px">${esc(G.blurb)} <a href="#/learn/${L.goalOf(S.goal)}">More ›</a></div>
       </div>
-      <div class="card"><div class="step-h"><span class="step-n">2</span><b>Days & split</b></div>
-        <div class="row"><div class="grow"><label for="days">Training days / week</label>
-          <select id="days">${[2, 3, 4, 5, 6].map(n => `<option ${n === S.days ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
-          <div class="grow"><label for="weeks">Weeks (last is a light week)</label>
-          <select id="weeks">${[3, 4, 5, 6, 7, 8].map(n => `<option ${n === S.weeks ? 'selected' : ''}>${n}</option>`).join('')}</select></div></div>
-        <label for="minutes">Time per workout</label>
-        <select id="minutes">${[45, 60, 75, 90, 120].map(n => `<option value="${n}" ${n === S.minutes ? 'selected' : ''}>${n} min</option>`).join('')}</select>
-        <div class="muted tiny">Each day is fitted to this (sets × rest + warm-up). Lower-priority muscles are trimmed first.</div>
-        <div class="spacer"></div>
-        ${splits.map(x => `<button class="list-btn" data-split="${x.id}" aria-pressed="${S.split === x.id}" style="${S.split === x.id ? 'border-color:var(--accent)' : ''}">
-          <div class="grow"><b>${x.name}</b>${x.id === L.defaultSplit(S.days) ? ' <span class="pill on tiny-pill">recommended</span>' : ''}<div class="muted small">${esc(x.blurb)}</div></div>${S.split === x.id ? '<span class="pill on">✓</span>' : ''}</button>`).join('')}
-        <div class="muted small">Your week: <b>${esc(preview)}</b></div>
+      <div class="card"><div class="step-h"><span class="step-n">2</span><b>Start from</b></div>
+        <div class="start-tiles" role="radiogroup" aria-label="Start from">
+          ${[['suggested', '★', 'Suggested', 'One tap'], ['template', '▦', 'Templates', `${cat.length} to pick from`], ['scratch', '✎', 'From scratch', 'Set it all yourself']].map(([k, ico, n, sub]) =>
+            `<button type="button" role="radio" aria-checked="${S.start === k}" data-start="${k}" class="choice start ${S.start === k ? 'on' : ''}"><span class="ico">${ico}</span><b>${n}</b><span class="tiny muted">${sub}</span>${tick(S.start === k)}</button>`).join('')}
+        </div>
+        <div class="spacer"></div>${startBody}
       </div>
-      <div class="card"><div class="step-h"><span class="step-n">3</span><b>Emphasis</b></div>
-        ${Object.entries(L.TEMPLATES).map(([k, t]) => `<button class="list-btn" data-focus="${k}" style="${S.focus === k ? 'border-color:var(--accent)' : ''}">
-          <div class="grow"><b>${t.name}</b><div class="muted small">${t.blurb}</div></div>${S.focus === k ? '<span class="pill on">✓</span>' : ''}</button>`).join('')}
-      </div>
-      <div class="card"><div class="step-h"><span class="step-n">4</span><b>Name & details</b></div>
-        <label for="name">Name</label><input id="name" value="${esc(S.name)}" placeholder="e.g. Whole Body Meso 3">
-        <p class="muted small">Effort is set for you${S.goal === 'hypertrophy' ? '' : ' (main lifts)'} — reps short of failure each week: <b>${Array.from({ length: S.weeks }, (_, i) => { const r = L.targetRir(i + 1, S.weeks, S.goal, 'compound'); return r.deload ? 'light week' : (S.minRirCompound ? Math.max(1, r.rir) : r.rir); }).join(' → ')}</b>. It holds steady for any muscle whose feedback says recovery is behind.</p>
+      <div class="card"><div class="step-h"><span class="step-n">3</span><b>Name &amp; length</b></div>
+        <div class="row"><div class="grow" style="flex:2"><label for="name">Name</label><input id="name" value="${esc(S.name)}" placeholder="e.g. Whole Body Meso 3"></div>
+          <div class="grow"><label for="weeks">Weeks</label><select id="weeks">${[3, 4, 5, 6, 7, 8].map(n => `<option ${n === S.weeks ? 'selected' : ''}>${n}</option>`).join('')}</select></div></div>
+        <div class="muted tiny">The last week is a light week. Effort${S.goal === 'hypertrophy' ? '' : ' (main lifts)'} by week, as reps short of failure: <b>${Array.from({ length: S.weeks }, (_, i) => { const r = L.targetRir(i + 1, S.weeks, S.goal, 'compound'); return r.deload ? 'light' : (S.minRirCompound ? Math.max(1, r.rir) : r.rir); }).join(' → ')}</b>.</div>
         <label class="switch"><input type="checkbox" id="minRir" ${S.minRirCompound ? 'checked' : ''}> <span>Keep main (compound) lifts at least 1 rep from failure</span></label>
-        <div class="muted tiny">Isolation lifts still reach failure in the last hard week. Good for heavy or spine-loading lifts.</div>
       </div>
-      <details class="card prio-box" id="prioBox" ${S.prioOpen || S.focus === 'custom' ? 'open' : ''}><summary><b>Adjust muscles</b> <span class="muted small">optional — the emphasis above already set these</span></summary>
+      <details class="card prio-box" id="prioBox" ${S.prioOpen || S.start === 'scratch' ? 'open' : ''}><summary><b>Adjust muscles</b>&nbsp; <span class="muted small">${S.start === 'scratch' ? 'set each muscle' : `optional · now: ${esc(presetName())}`}</span></summary>
         <ul class="tight small prio-key"><li><b>Emphasize</b> — your top priority: most sets, adds more when you recover well (pick up to ${L.MAX_EMPHASIZE}).</li>
           <li><b>Grow</b> — steady growth with moderate sets.</li><li><b>Maintain</b> — keep what you have with a few sets.</li><li><b>Skip</b> — leave it out.</li></ul>
         <div class="muted tiny">Number = weekly starting sets.</div>
         ${(() => { const n = L.MUSCLES.filter(m => L.normPriority(S.priorities[m], S.focus) === 'emphasize').length;
           return n > L.MAX_EMPHASIZE ? `<div class="card warn small" style="margin:8px 0">You're emphasizing ${n} muscles. Recovery is shared — emphasizing ${L.MAX_EMPHASIZE} or fewer at a time usually grows them faster. Consider moving some to Grow.</div>` : ''; })()}
         ${L.MUSCLES.map(m => { const pr = L.normPriority(S.priorities[m], S.focus); return `<div class="prio"><div>${m} <span class="muted small">${L.weeklyTarget(m, pr, S.focus, S.goal)} sets</span></div>
-          <div class="seg c4">${L.PRIORITIES.map(p => `<button type="button" data-m="${m}" data-p="${p}" class="${pr === p ? 'on' : ''}" title="${esc(L.PRIORITY_INFO[p])}">${p[0].toUpperCase() + p.slice(1)}</button>`).join('')}</div></div>`; }).join('')}
+          <div class="seg c4">${L.PRIORITIES.map(p => `<button type="button" data-m="${m}" data-p="${p}" class="${pr === p ? 'on' : ''}" aria-pressed="${pr === p}" title="${esc(L.PRIORITY_INFO[p])}">${p[0].toUpperCase() + p.slice(1)}</button>`).join('')}</div></div>`; }).join('')}
       </details>
-      <button class="primary block" id="next">Next: build the days ›</button>`;
-    $$('[data-focus]').forEach(b => b.onclick = () => { S.focus = b.dataset.focus; S.priorities = L.templatePriorities(S.focus); S.autoMaintain = []; step1(); });
+      <button class="primary block" id="next" ${S.start === 'template' && !S.tpl ? 'disabled' : ''}>${S.start === 'template' && !S.tpl ? 'Pick a template above' : 'Next: review the days ›'}</button>`;
+    $$('[data-days]').forEach(b => b.onclick = () => { S.days = +b.dataset.days; S.daysTouched = true; S.plan = [];
+      if (S.start === 'suggested') applySuggestion();
+      else if (S.start === 'template') { const t = S.tpl && L.templateById(S.tpl.replace(/\.\d+$/, '.' + S.days)); if (t) applyTemplate(t); else { S.tpl = null; S.split = null; } }
+      else S.split = null;
+      step1(); });
+    $$('[data-min]').forEach(b => b.onclick = () => { S.minutes = +b.dataset.min; try { localStorage.setItem('wl_session_minutes', S.minutes); } catch {} S.plan = []; step1(); });
     $$('[data-goal]').forEach(b => b.onclick = () => { S.goal = b.dataset.goal; step1(); });
+    $$('[data-start]').forEach(b => b.onclick = () => { if (S.start === b.dataset.start) return; S.start = b.dataset.start;
+      if (S.start === 'suggested') applySuggestion();
+      if (S.start === 'scratch' && !S.preset && !S.adjusted) applyPriorities(L.presetPriorities('balanced'), 'balanced');
+      step1(); });
+    $$('[data-fresh]').forEach(b => b.onclick = () => { S.fresh = b.dataset.fresh === '1'; applySuggestion(); step1(); });
+    $$('[data-tf]').forEach(b => b.onclick = () => { S.tplFocus = b.dataset.tf || null; step1(); });
+    $$('[data-tpl]').forEach(b => b.onclick = () => { applyTemplate(L.templateById(b.dataset.tpl)); step1(); });
     $$('[data-split]').forEach(b => b.onclick = () => { S.split = b.dataset.split; S.plan = []; step1(); });
-    $('#name').oninput = e => S.name = e.target.value;
-    $('#weeks').onchange = e => { S.weeks = +e.target.value; step1(); };
-    $('#minutes').onchange = e => { S.minutes = +e.target.value; try { localStorage.setItem('wl_session_minutes', S.minutes); } catch {} S.plan = []; };
+    $('#name').oninput = e => { S.name = e.target.value; S.nameTouched = true; };
+    $('#weeks').onchange = e => { S.weeks = +e.target.value; S.weeksTouched = true; step1(); };
     $('#minRir').onchange = e => { S.minRirCompound = e.target.checked; step1(); };
     $('#prioBox').ontoggle = e => { S.prioOpen = e.target.open; };
-    $('#days').onchange = e => { S.days = +e.target.value; S.split = null; S.plan = []; step1(); };
     $$('[data-p]').forEach(b => b.onclick = () => {
-      S.priorities[b.dataset.m] = b.dataset.p;
+      S.priorities = { ...S.priorities, [b.dataset.m]: b.dataset.p };
       S.autoMaintain = (S.autoMaintain || []).filter(m => m !== b.dataset.m);   // your choice wins over the automatic one
-      step1();
+      const same = L.matchPreset(S.priorities); if (same) { S.preset = same; S.focus = L.FOCI[same].db; S.adjusted = false; } else { S.adjusted = !!S.preset; if (!S.preset) S.focus = 'custom'; }
+      S.plan = []; step1();
     });
     $('#next').onclick = () => {
+      if (S.start === 'template' && !S.tpl) return toast('Pick a template first', true);
       if (!S.name.trim()) return toast('Give it a name', true);
-      S.days = +$('#days').value; syncPlan(); S.step = 2;
+      syncPlan(); S.step = 2;
       if (!S.plan.some(d => d.slots.length)) S.plan = buildFit('all');
       step2();
     };
+    const sel = $('.choice.tpl.on'); if (sel && S.scrollTpl) { sel.scrollIntoView({ block: 'center' }); S.scrollTpl = false; }
   };
 
   // Doc §2.3 — autofill, then fit each day into the time available; remember what had to be trimmed.
@@ -669,7 +716,7 @@ async function renderBuilder() {
     app.innerHTML = `
       ${P.removed.length ? `<div class="card small muted">Autofill is skipping ${P.removed.length} exercise${P.removed.length > 1 ? 's' : ''} because of your preferences${P.favorites.size ? ` and putting your ${P.favorites.size} favorite${P.favorites.size > 1 ? 's' : ''} first` : ''}. <a href="#/settings">Change</a></div>` : ''}
       ${S.carry ? `<div class="card small">Week 1 weights &amp; reps start from <b>${esc(S.carry.from)} · week ${S.carry.week}</b>. <button class="ghost sm" id="noCarry">Don't carry</button></div>` : ''}
-      <div class="card"><div class="muted small">Step 2 of 2 · ${L.GOALS[L.goalOf(S.goal)].name} · ${esc(L.SPLITS[S.split]?.name || '')} · ${esc(L.TEMPLATES[S.focus].name)} emphasis · ${S.days} days</div>
+      <div class="card"><div class="muted small">Step 2 of 2 · ${L.GOALS[L.goalOf(S.goal)].name} · ${esc(L.SPLITS[S.split]?.name || '')} · ${esc(presetName())} · ${S.days} days · ${S.minutes} min</div>
         <div class="spacer"></div>
         <div class="grid3">
           <button class="sm primary" id="fillAll">Autofill all</button>
@@ -695,7 +742,7 @@ async function renderBuilder() {
           <button class="ghost danger sm" data-rm="${di}.${si}">✕</button></div>`).join('')}
         <div class="spacer"></div><button class="sm block" data-add="${di}">+ Add exercise slot</button>
       </div>`).join('')}
-      <div class="row"><button id="back1" class="grow">‹ Template</button><button class="primary grow" id="create">Create mesocycle</button></div>
+      <div class="row"><button id="back1" class="grow">‹ Back</button><button class="primary grow" id="create">Create mesocycle</button></div>
       <div class="spacer"></div><button class="ghost block" id="saveTpl">☆ Save this plan as a template</button>`;
     const at = s => s.split('.').map(Number);
     { const nc = $('#noCarry'); if (nc) nc.onclick = () => { S.carry = null; step2(); }; }
@@ -746,6 +793,16 @@ async function renderBuilder() {
       return toast(/fetch|network|failed to fetch/i.test(error.message) ? 'No connection — nothing was saved. Tap Create again when you’re back online.' : `Couldn’t create the mesocycle: ${error.message}`, true);
     }
     builder = null; toast('Mesocycle created'); go('#/meso/' + mesoId);
+  }
+  // v1.12.0 — the suggestion carries on from your current (or most recent) meso, so read it once per new builder.
+  if (S.lastMeso === undefined) {
+    const { data } = await sb.from('mesocycles').select('id, name, focus, priorities, weeks, days_per_week, goal, status, created_at').order('created_at', { ascending: false }).limit(10);
+    S.lastMeso = L.lastMesoFor(Array.isArray(data) ? data : []);
+    if (S.lastMeso && S.start === 'suggested' && !S.daysTouched) {
+      if ([2, 3, 4, 5, 6].includes(S.lastMeso.days_per_week)) S.days = S.lastMeso.days_per_week;
+      S.goal = L.goalOf(S.lastMeso.goal);
+    }
+    if (S.start === 'suggested') applySuggestion();
   }
   S.step === 2 ? (syncPlan(), step2()) : step1();
 }
@@ -1956,12 +2013,22 @@ async function renderLibrary(tab = 'exercises') {
   if (tab === 'templates') return renderTemplates(head, wireTabs);
   return renderExercises('', head, wireTabs);
 }
+let tplView = { days: null, focus: '' };
 async function renderTemplates(head, wireTabs) {
   const mine = check(await sb.from('templates').select('*').order('created_at', { ascending: false }));
   const lib = await loadExercises(); const byId = new Map(lib.map(e => [e.id, e]));
-  app.innerHTML = head + `
-    <h2>Base templates · evidence-based</h2>
-    ${Object.entries(L.TEMPLATES).map(([k, t]) => `<button class="list-btn" data-base="${k}"><div class="grow"><b>${t.name}</b><div class="muted small">${t.blurb}</div></div>›</button>`).join('')}
+  if (!tplView.days) tplView.days = builder?.days || 4;
+  const draw = () => {
+    const cat = L.templateCatalog(tplView.days).filter(t => !tplView.focus || t.preset === tplView.focus);
+    app.innerHTML = head + `
+    <h2>Templates</h2>
+    <div class="muted small">Each template sets the split and which muscles get the most work. Pick your days to see the ones that fit.</div>
+    <label id="lTd">Training days a week</label>
+    <div class="seg c5" role="radiogroup" aria-labelledby="lTd">${[2, 3, 4, 5, 6].map(n => `<button type="button" role="radio" aria-checked="${tplView.days === n}" data-td="${n}" class="${tplView.days === n ? 'on' : ''}">${n}</button>`).join('')}</div>
+    <div class="chips" style="margin:10px 0" role="radiogroup" aria-label="Focus">${[['', 'All'], ...Object.entries(L.FOCI).map(([k, f]) => [k, f.name])].map(([k, n]) =>
+      `<button type="button" class="chip ${tplView.focus === k ? 'sel' : ''}" data-tf="${k}" aria-pressed="${tplView.focus === k}">${esc(n)}</button>`).join('')}</div>
+    ${cat.map(t => `<button type="button" class="choice tpl" data-tpl="${t.id}"><div class="grow"><b>${esc(t.name)}</b> <span class="muted small">· ${esc(t.splitName)}</span>${t.recommended ? ' <span class="pill tiny-pill">fits best</span>' : ''}
+      <div class="muted small">${esc(t.blurb)}</div><div class="tiny muted">${esc(t.week.join(' · '))}</div></div>›</button>`).join('')}
     <h2>Your templates</h2>
     ${mine.length ? mine.map(t => `<div class="card"><div class="row"><div class="grow"><b>${esc(t.name)}</b>
         <div class="muted small">${t.weeks} wks · ${t.days_per_week} days/wk · ${t.plan.reduce((a, d) => a + d.slots.length, 0)} exercises</div></div></div>
@@ -1971,10 +2038,18 @@ async function renderTemplates(head, wireTabs) {
         </details>
         <div class="grid2" style="margin-top:10px"><button class="primary sm" data-use="${t.id}">Use template</button><button class="sm danger" data-del="${t.id}">Delete</button></div></div>`).join('')
       : '<p class="muted">Save a plan from the builder or a mesocycle and it shows up here.</p>'}`;
-  wireTabs();
-  $$('[data-base]').forEach(b => b.onclick = () => { builder = null; builder = freshBuilder(); builder.focus = b.dataset.base; builder.priorities = L.templatePriorities(b.dataset.base); go('#/new'); });
-  $$('[data-use]').forEach(b => b.onclick = () => { builder = builderFromTemplate(mine.find(t => t.id === b.dataset.use)); go('#/new'); });
-  $$('[data-del]').forEach(b => b.onclick = async () => { if (!confirm('Delete this template?')) return; check(await sb.from('templates').delete().eq('id', b.dataset.del)); renderLibrary('templates'); });
+    wireTabs();
+    $$('[data-td]').forEach(b => b.onclick = () => { tplView.days = +b.dataset.td; draw(); });
+    $$('[data-tf]').forEach(b => b.onclick = () => { tplView.focus = b.dataset.tf; draw(); });
+    $$('[data-tpl]').forEach(b => b.onclick = () => {
+      const t = L.templateById(b.dataset.tpl); builder = freshBuilder();
+      Object.assign(builder, { start: 'template', tpl: t.id, tplFocus: tplView.focus || null, days: t.days, daysTouched: true, split: t.split, scrollTpl: true,
+        priorities: L.presetPriorities(t.preset), preset: t.preset, focus: t.focus });
+      go('#/new'); });
+    $$('[data-use]').forEach(b => b.onclick = () => { builder = builderFromTemplate(mine.find(t => t.id === b.dataset.use)); go('#/new'); });
+    $$('[data-del]').forEach(b => b.onclick = async () => { if (!confirm('Delete this template?')) return; check(await sb.from('templates').delete().eq('id', b.dataset.del)); renderLibrary('templates'); });
+  };
+  draw();
 }
 async function renderExercises(filter = '', head = '', wireTabs = () => {}) {
   const [list, prefList] = await Promise.all([loadExercises(true), loadPrefs(true)]);

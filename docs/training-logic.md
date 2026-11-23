@@ -198,6 +198,38 @@ Example, hypertrophy Balanced, 3 × 60 min:
 - **Before:** chest and back 4/8 sets, abs/traps/forearms 0.
 - **Now:** big muscles 6–7/8, with calves on Maintain and every Maintain muscle at 1 or more.
 
+### 2.4 Starting a meso: Suggested, templates, or from scratch (v1.12.0)
+
+**Suggested (the default).** The plan uses the recommended split for your number of days (§2.0) and carries on from your current meso, or from the most recent one that wasn't abandoned.
+- It keeps that meso's muscle choices, with at most 3 emphasized; any extra, smallest first, go back to Grow.
+- An older or imported meso that saved only a focus (Upper / Lower / Balanced) carries that focus on.
+- With no usable meso, or with *Start fresh*, it is **Balanced**.
+- Length follows the last meso (3–8 weeks), otherwise 5.
+- Time per workout is applied afterwards by the builder (§2.3).
+
+This is a product choice, not a research finding: continuing what you were doing is the least surprising default, and the builder's notes still show anything time forces it to change.
+
+**Templates.** A template is a focus preset plus a split. Each preset says which muscles are emphasized and which are held; everything else grows, and traps, abs and forearms are held unless a preset says otherwise.
+
+| Preset | Emphasized | Held (Maintain) |
+|---|---|---|
+| Balanced | none | traps, abs, forearms |
+| Upper body | chest, back, shoulders | legs, calves |
+| Lower body | quads, hamstrings, glutes | upper body |
+| Glutes & hamstrings | glutes, hamstrings | biceps, triceps, calves |
+| Chest & back | chest, back | biceps, triceps, calves |
+| Shoulders | shoulders | biceps, calves |
+| Arms | biceps, triceps | legs, calves |
+
+- The library is every preset × every split that fits your days: 14–21 for any number of days, 84 in all.
+- A set-up is listed only if **every muscle it grows can be trained on 2+ days a week**, because twice a week grows more than once at equal volume (§1.4). That rules out 3-day Push/Pull/Legs and 2-day Upper/Lower, which stay available From scratch.
+- Which presets exist, and what they hold, are judgement calls, not research findings. Specialising one area while maintaining others is a common way to fit recovery around a priority (§1.1: volume is the lever, recovery is shared).
+- These are the app's own set-ups, not copies of any other program.
+
+**From scratch.** You pick the split and set each muscle (Emphasize / Grow / Maintain / Skip).
+
+In every mode, changing a muscle by hand labels the plan "(adjusted)".
+
 ### 2.2 Personal exercise preferences
 
 Before autofill picks anything, it applies the person's own preferences (Settings → Training preferences, and the ★ / ⦸ buttons in the Exercise library):

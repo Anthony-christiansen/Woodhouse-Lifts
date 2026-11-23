@@ -672,3 +672,67 @@ console.log('GUARDRAIL TESTS PASSED');
   for (const m of ['Chest', 'Back', 'Quads', 'Hamstrings', 'Glutes']) assert.ok(got[m] >= 6, `${m} ${got[m]}`);
   console.log(`V1.11.5 BUILDER TESTS PASSED (${checked} day/split/goal/template/time combinations)`);
 }
+
+// ---------- v1.12.0: template library + one-tap Suggested ----------
+{
+  // Old template ids keep their exact priorities (saved mesos and templates read the same as before).
+  const up = L.templatePriorities('upper'), lo = L.templatePriorities('lower'), wh = L.templatePriorities('whole');
+  assert.deepEqual(['Chest', 'Back', 'Shoulders'].map(m => up[m]), ['emphasize', 'emphasize', 'emphasize']);
+  assert.equal(up.Biceps, 'grow'); assert.equal(up.Quads, 'maintain'); assert.equal(up.Calves, 'maintain'); assert.equal(up.Abs, 'maintain');
+  assert.equal(lo.Calves, 'grow'); assert.equal(lo.Chest, 'maintain'); assert.equal(lo.Glutes, 'emphasize');
+  assert.ok(L.MUSCLES.every(m => wh[m] === (L.MINOR.includes(m) ? 'maintain' : 'grow')));
+  assert.deepEqual(L.templatePriorities('custom'), wh, 'custom starts from Balanced');
+  for (const [id, f] of Object.entries(L.FOCI)) {
+    const p = L.presetPriorities(id);
+    assert.ok(f.emphasize.length <= L.MAX_EMPHASIZE, `${id}: ≤${L.MAX_EMPHASIZE} emphasized`);
+    assert.equal(L.matchPreset(p), id, `${id} round-trips`);
+    assert.ok(['upper', 'lower', 'whole', 'custom'].includes(f.db), `${id}: saves a focus the database allows`);
+  }
+  assert.equal(L.matchPreset({ ...wh, Chest: 'emphasize' }), null, 'an adjusted set of priorities is not a preset');
+
+  // The library: lots of templates, filtered to the days you train, each one growing every muscle it grows 2×/week.
+  let n = 0; const lib2 = [];
+  for (const m of L.MUSCLES) for (let i = 1; i <= 5; i++) lib2.push({ id: 'c' + (++n), name: `${m} ${i}`, muscle_group: m, kind: i <= 2 ? 'compound' : 'isolation', load_type: 'weighted', equipment: 'Machine', rep_min: 8, rep_max: 15 });
+  let total = 0, runs = 0;
+  for (const days of [2, 3, 4, 5, 6]) {
+    const cat = L.templateCatalog(days); total += cat.length;
+    assert.ok(cat.length >= 14, `${days} days: ${cat.length} templates`);
+    assert.equal(new Set(cat.map(t => t.id)).size, cat.length, 'ids are unique');
+    for (const t of cat) {
+      assert.deepEqual(L.templateById(t.id), t, 'templateById finds it again');
+      assert.ok(L.splitsFor(days).some(s => s.id === t.split), `${t.id}: split fits ${days} days`);
+      const pr = L.presetPriorities(t.preset);
+      for (const goal of ['hypertrophy', 'strength', 'athletic']) for (const minutes of [45, 60, 90]) {
+        const r = L.fitPlan({ plan: Array.from({ length: days }, () => ({ label: 'D', slots: [] })), priorities: pr, focus: t.focus, goal, split: t.split, library: lib2, minutes });
+        const got = L.placedSets(r.days);
+        for (const m of L.MUSCLES) {
+          const p = L.normPriority(r.priorities[m], t.focus), freq = r.days.filter(d => d.slots.some(s => s.muscle === m)).length;
+          if (p === 'emphasize' || p === 'grow') assert.ok(freq >= 2, `${t.id} ${goal} ${minutes}: ${m} trained ${freq}×/week`);
+          if (p === 'maintain') assert.ok(got[m] >= 1, `${t.id} ${goal} ${minutes}: Maintain ${m} never 0`);
+          if (pr[m] === 'emphasize') assert.equal(p, 'emphasize', `${t.id}: emphasized muscles are never moved`);
+        }
+        runs++;
+      }
+    }
+  }
+  assert.ok(total >= 80, `library size ${total}`);
+  // Once-a-week set-ups are left out of the library (they stay available when building from scratch).
+  assert.ok(!L.templateCatalog(3).some(t => t.split === 'ppl') && !L.templateCatalog(2).some(t => t.split === 'upper_lower'));
+
+  // Suggested: fresh → Balanced on the recommended split; carries on from the last meso's choices or focus.
+  const s0 = L.suggestPlan({ days: 3 });
+  assert.equal(s0.split, L.defaultSplit(3)); assert.equal(s0.preset, 'balanced'); assert.equal(s0.from, 'new'); assert.equal(s0.weeks, 5);
+  const s1 = L.suggestPlan({ days: 4, last: { name: 'Meso B', focus: 'lower', weeks: 6, priorities: {} } });
+  assert.equal(s1.preset, 'lower'); assert.equal(s1.focus, 'lower'); assert.equal(s1.weeks, 6); assert.ok(s1.reasons[0].includes('Meso B'));
+  const s2 = L.suggestPlan({ days: 4, last: { focus: 'custom', weeks: 12, priorities: { Chest: 'emphasize', Back: 'emphasize', Biceps: 'emphasize', Calves: 'emphasize', Quads: 'skip' } } });
+  assert.equal(L.MUSCLES.filter(m => s2.priorities[m] === 'emphasize').length, L.MAX_EMPHASIZE, 'never more than 3 emphasized');
+  assert.equal(s2.priorities.Calves, 'grow', 'the smallest extra emphasized muscle goes back to Grow');
+  assert.equal(s2.priorities.Quads, 'skip', 'your own Skip is kept'); assert.equal(s2.weeks, 5, 'odd lengths fall back to 5');
+  assert.equal(L.suggestPlan({ days: 4, last: { focus: 'lower', priorities: {} }, fresh: true }).preset, 'balanced', 'Start fresh ignores the last meso');
+  assert.equal(L.suggestPlan({ days: 4, last: { focus: 'whole', priorities: { Chest: 'focus' } } }).priorities.Chest, 'grow', 'pre-1.9 "focus" reads correctly');
+  // Which meso it carries on from: active/planned first, never an abandoned one.
+  assert.equal(L.lastMesoFor([{ id: 'a', status: 'abandoned' }, { id: 'b', status: 'completed' }, { id: 'c', status: 'active' }]).id, 'c');
+  assert.equal(L.lastMesoFor([{ id: 'a', status: 'abandoned' }, { id: 'b', status: 'completed' }]).id, 'b');
+  assert.equal(L.lastMesoFor([]), null);
+  console.log(`V1.12.0 TEMPLATE LIBRARY TESTS PASSED (${total} templates, ${runs} template/goal/time builds)`);
+}
