@@ -630,3 +630,16 @@ console.log('GUARDRAIL TESTS PASSED');
   assert.equal(L.isStale(null, now), true);
   console.log('V1.11.2 PROGRESS TESTS PASSED');
 }
+
+// ---------- v1.11.4: in-app "How it works" page renderer (md.js) ----------
+{
+  const MD = await import('../md.js');
+  const { html } = MD.mdToHtml('# T\n\nHi <script>alert(1)</script> **b** [x](javascript:alert(1)) [ok](https://pubmed.ncbi.nlm.nih.gov/1/) `<i>`\n\n| a | b |\n|---|---|\n| 1 | <img src=x onerror=alert(1)> |\n\n- one\n  - two\n');
+  assert.ok(!/<script|<img|onerror=|javascript:/i.test(html.replace(/&lt;[^]*?&gt;/g, '')), 'no live markup or js links: ' + html);
+  assert.ok(html.includes('&lt;script&gt;') && html.includes('&lt;img'), 'escaped, shown as text');
+  assert.ok(html.includes('<a href="https://pubmed.ncbi.nlm.nih.gov/1/" target="_blank" rel="noopener noreferrer">ok</a>'), html);
+  assert.ok(html.includes('<b>b</b>') && html.includes('<code>&lt;i&gt;</code>') && html.includes('<table>') && html.replace(/\n/g, '').includes('<ul><li>one<ul><li>two'), html);
+  const doc = MD.mdToHtml((await import('node:fs')).readFileSync(new URL('../docs/training-logic.md', import.meta.url), 'utf8'));
+  assert.ok(doc.toc.length >= 7 && /<table>/.test(doc.html), 'the real doc renders with contents and tables');
+  console.log('V1.11.4 MD RENDER TESTS PASSED');
+}

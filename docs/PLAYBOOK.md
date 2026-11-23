@@ -62,7 +62,7 @@ How every change gets to the live app, how we check it, and how we undo it. Foll
 
 **After deploying (about 1–2 minutes for Pages)**
 12. Smoke test on the live site (§5). If it fails → §6.
-13. Drive: copy the current docs into **Archive — earlier versions** with the version in the title, then update the current docs. Update the in-app Training Logic link if its doc changed.
+13. Drive (private handoff only, owner-only sharing): copy the current docs into **Archive — earlier versions** with the version in the title, then update the current docs. The app never links to Drive; its "How it works" page is served from `docs/training-logic.md` in this repo, so rule changes go live with the release.
 14. Post the result (version live, smoke test passed, snapshot time if any) on the PR and to the owner.
 
 ## 5. Smoke test (live site, 5 minutes)
@@ -146,5 +146,6 @@ Each release entry ends with one line, e.g.:
 
 | Version | Released | Merge | Rollback point | Pre-release snapshot | Smoke test |
 |---|---|---|---|---|---|
+| 1.11.3 | 2026-11-23 03:49 UTC | `75691c0` (PR #4) | `release/v1.11.2` = `fcfda31` | not needed (tier A) | Live files 1.11.3, `?v=33`; app loads with no errors. |
 | 1.11.2 | 2026-11-23 03:43 UTC | `fcfda31` (PR #3) | `release/v1.11.1` = `936ef4b` | not needed (tier A) | Live files 1.11.2, `?v=32`, new doc link; app loads with no errors. |
 | 1.11.1 | 2026-11-23 03:25 UTC | `936ef4b` (PR #2) | `release/v1.11.0` = `d7e3e11` | 2026-11-23 03:24:06 UTC (11 tables, 14,286 sets) | Live files 1.11.1, `?v=31`, new doc link; app loads with no errors; security advisors unchanged. Signed-in steps 3–5: the owner to check on their phone. |
