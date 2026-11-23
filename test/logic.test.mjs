@@ -617,3 +617,16 @@ console.log('GUARDRAIL TESTS PASSED');
   }
   console.log(`LONGITUDINAL SIM PASSED (${profiles.length} profiles × ${exs.length} lifts, ${checks} checks)`);
 }
+
+// ---------- v1.11.2: Progress views ----------
+{
+  const es = [{ meso: 'old', week: 1, raw: 50 }, { meso: 'm', week: 1, raw: 100 }, { meso: 'm', week: 2, raw: 102 }, { meso: 'm', week: 3, raw: 104 }];
+  assert.deepEqual(L.mesoChange(es, 'm'), { weeks: 3, fromWeek: 1, toWeek: 3, pct: 4 }, 'week 1 → latest of THIS meso only (old meso ignored)');
+  assert.equal(L.mesoChange([{ meso: 'm', week: 2, raw: 100 }], 'm').pct, null, 'one week: no % yet');
+  assert.equal(L.mesoChange(es, 'none'), null);
+  const now = new Date('2026-11-22T12:00:00Z');
+  assert.equal(L.isStale('2026-07-01', now), true, 'months ago → not current');
+  assert.equal(L.isStale('2026-11-01', now), false);
+  assert.equal(L.isStale(null, now), true);
+  console.log('V1.11.2 PROGRESS TESTS PASSED');
+}

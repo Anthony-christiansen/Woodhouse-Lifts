@@ -432,6 +432,20 @@ export function mesoStatus(entries, priorBest = null, { name = 'this lift', rir 
   if (a < b * 0.99) return { status: 'dip', label: 'Dipped', pct: pct(a, b), vs, rec: `Below last week (${pct(a, b).toFixed(1)}%). One week isn't a trend — sleep, food and stress all show up here. Today: last week's weight, aim to match its reps.` };
   return { status: 'steady', label: 'Held', pct: pct(a, b), vs, rec: 'Same as last week — fine for one week. Aim for +1 rep on your first set.' };
 }
+/**
+ * v1.11.2 — Progress list, "This meso" view: change in what you actually lifted (performance, no RIR credit — the same
+ * measure as the workout screen and the status badges) from this meso's first week to its latest week.
+ * entries: [{ meso, week, raw }] (one per meso week, deloads excluded). Returns null until there are two weeks.
+ */
+export function mesoChange(entries, mesoId) {
+  const cur = (entries || []).filter(x => x.meso === mesoId && x.raw > 0).sort((a, b) => a.week - b.week);
+  if (cur.length < 2) return cur.length ? { weeks: 1, fromWeek: cur[0].week, toWeek: cur[0].week, pct: null } : null;
+  const a = cur[0], b = cur[cur.length - 1];
+  return { weeks: cur.length, fromWeek: a.week, toWeek: b.week, pct: (b.raw - a.raw) / a.raw * 100 };
+}
+/** v1.11.2 — a lift not trained for 8+ weeks is "not current": no percentages, shown greyed with its last date. */
+export const STALE_DAYS = 56;
+export const isStale = (lastAt, now = new Date()) => !lastAt || (now - new Date(lastAt)) / 864e5 > STALE_DAYS;
 /** Same meso week in the previous meso that has this lift (falls back to its closest week). */
 export function vsLastMeso(entries) {
   const es = entries || []; if (!es.length) return null;

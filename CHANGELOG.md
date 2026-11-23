@@ -12,6 +12,25 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.11.2 — 2026-11-23 · "Percentages only where they mean something"
+
+**Progress screen (More → Progress)**
+- Two views. **This meso** (default) lists only lifts in your current meso, with the change from **week 1 to your latest week of this meso**, measured on what you actually lifted (the same measure as the workout screen and the status badges). Light weeks are left out; a lift done only one week says so instead of showing a number.
+- **All time** lists every lift with how many sessions you've logged and **when you last did it**. It has **no +/− percentages**, and lifts not trained in 8+ weeks are greyed.
+- **Before:** one list with a percentage per lift = latest session vs. the very first session ever logged, with no time limit and a different measure (estimated strength with reps-in-reserve credit). A lift last done months ago could show "+37%" as if it were current.
+
+**One lift's page**
+- A lift **not in your current meso** shows "Not in this meso · last done <date>" instead of a status badge (which could be months old), and the chart's headline shows **last done** instead of a % change. Lifts in your meso are unchanged.
+
+**Underneath**
+- `logic.js`: `mesoChange(entries, mesoId)`, `isStale(lastAt)` (8 weeks, `STALE_DAYS`). "In this meso" uses the same rule as Home's "This meso's lifts" (the lift is planned in the meso), not start dates.
+- Tests: logic tests for both helpers; new e2e `progress112.py` (both views, no % on All time, greyed stale lift, "Not in this meso" page, % since week 1).
+- No database changes. `?v=32`.
+
+**Rollback:** tier A (display only, writes nothing) — `git revert -m 1` the merge, bump `?v=`.
+
+---
+
 ## 1.11.1 — 2026-11-22 · "Checked against RP"
 
 Haylee's week 3 (her current meso) run through our engine and compared set by set with what RP recommends for the same sets, plus the progression findings from the outside audit. RP's numbers were used only to find our bugs — nothing of RP's is copied.

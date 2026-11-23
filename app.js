@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import * as L from './logic.js?v=31';
-import * as LEARN from './learn.js?v=31';
+import * as L from './logic.js?v=32';
+import * as LEARN from './learn.js?v=32';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -17,9 +17,9 @@ let authReturn = (() => {
   return null;
 })();
 let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
-export const APP_VERSION = '1.11.1'; // keep in sync with CHANGELOG.md
+export const APP_VERSION = '1.11.2'; // keep in sync with CHANGELOG.md
 const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
-const DOC_URL = 'https://docs.google.com/document/d/1wmIMBPTH2Hj-lMgZTanmxTt5CV6yFaKcMP2w-0PTZ-M';
+const DOC_URL = 'https://docs.google.com/document/d/108s5nwTS3LExaFqsrUZtIvRBqkptd3630kxNq7ud4_o';
 
 const app = document.getElementById('app');
 const titleEl = document.getElementById('title');
@@ -1813,14 +1813,36 @@ async function renderProgress(exId, rangeArg, metricArg) {
   setHeader('Exercise progress', exId ? '#/progress' : '#/explore', 'explore');
   // Per-session strength is computed in the database (lift_sessions / strength_summary): deload weeks,
   // myo-rep mini-sets and cardio are excluded so sessions compare like for like.
-  if (!exId) {
-    const list = (await fetchAll(() => sb.rpc('strength_summary').order('muscle_group').order('name')));
-    app.innerHTML = list.length ? list.map(x => {
-      const ch = x.first_e1rm ? Math.round((x.last_e1rm - x.first_e1rm) / x.first_e1rm * 100) : 0;
-      return `<button class="list-btn" data-go="#/progress/${x.exercise_id}"><div class="grow"><b>${esc(x.name)}</b>
-        <div class="muted small">${esc(x.muscle_group)} · ${x.sessions} session${x.sessions > 1 ? 's' : ''}</div></div>
-        <span class="pill ${ch > 0 ? 'on' : ch < 0 ? 'bad' : ''}">${ch > 0 ? '+' : ''}${ch}%</span></button>`; }).join('')
-      : '<p class="muted">Log some sets and your progress shows up here.</p>';
+  // v1.11.2: two views. "This meso" (default) = lifts in the current meso, % = week 1 → latest week of THIS meso, on what
+  // you actually lifted. "All time" = every lift with when you last did it — no +/- %, because first-session-ever vs
+  // latest (the old list) made a lift you haven't done in months look "+37%".
+  if (!exId || exId === 'all') {
+    const allTime = exId === 'all', meso = await activeMeso();
+    const tabsHtml = `<div class="seg c2" role="tablist" aria-label="Progress view">${[['', 'This meso'], ['all', 'All time']].map(([k, v]) =>
+      `<button role="tab" aria-selected="${(k === 'all') === allTime}" class="${(k === 'all') === allTime ? 'on' : ''}" data-go="#/progress${k ? '/' + k : ''}">${v}</button>`).join('')}</div>`;
+    if (!allTime) {
+      const rows = meso ? check(await sb.from('workout_exercises').select('exercise_id, exercises!inner(name, muscle_group, load_type), workout_days!inner(mesocycle_id)')
+        .eq('workout_days.mesocycle_id', meso.id)) : [];
+      const lifts = {}; rows.filter(r => r.exercises.load_type !== 'cardio').forEach(r => lifts[r.exercise_id] = r.exercises);
+      const ins = await liftInsights(Object.keys(lifts), { meso: meso?.id || null });
+      const list = Object.entries(lifts).map(([id, e]) => ({ id, ...e, ch: L.mesoChange(ins[id]?.entries, meso?.id) }))
+        .sort((a, b) => a.muscle_group.localeCompare(b.muscle_group) || a.name.localeCompare(b.name));
+      const pill = ch => !ch ? '<span class="muted tiny">not done yet</span>' : ch.pct == null ? `<span class="muted tiny">wk ${ch.toWeek} only</span>`
+        : `<span class="pill ${ch.pct > 0.5 ? 'on' : ch.pct < -0.5 ? 'bad' : ''}">${ch.pct > 0 ? '+' : ''}${ch.pct.toFixed(1)}%</span>`;
+      app.innerHTML = tabsHtml + (meso ? `<p class="muted small">${esc(meso.name)} — change in what you lifted from week 1 to your latest week of this meso (light weeks left out).</p>
+        ${list.map(x => `<button class="list-btn" data-go="#/progress/${x.id}"><div class="grow"><b>${esc(x.name)}</b>
+          <div class="muted small">${esc(x.muscle_group)}${x.ch?.pct != null ? ` · wk ${x.ch.fromWeek} → wk ${x.ch.toWeek}` : ''}</div></div>${pill(x.ch)}</button>`).join('')}`
+        : '<p class="muted">No active mesocycle. Switch to <b>All time</b> to see every lift you’ve trained.</p>');
+    } else {
+      const list = await fetchAll(() => sb.rpc('strength_summary').order('muscle_group').order('name'));
+      const mo = d => new Date(d).toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+      app.innerHTML = tabsHtml + (list.length ? `<p class="muted small">Every lift you’ve logged and when you last did it. No percentages here — tap a lift for its full history. Greyed = not trained in the last 8 weeks.</p>
+        ${list.map(x => { const stale = L.isStale(x.last_at);
+          return `<button class="list-btn ${stale ? 'stale' : ''}" data-go="#/progress/${x.exercise_id}"><div class="grow"><b>${esc(x.name)}</b>
+          <div class="muted small">${esc(x.muscle_group)} · ${x.sessions} session${x.sessions > 1 ? 's' : ''}</div></div>
+          <span class="muted tiny">last ${mo(x.last_at)}</span></button>`; }).join('')}`
+        : '<p class="muted">Log some sets and your progress shows up here.</p>');
+    }
     return $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
   }
   const [all, meso, exRow] = await Promise.all([
@@ -1836,6 +1858,11 @@ async function renderProgress(exId, rangeArg, metricArg) {
   // Status: same rule and same data as the home screen and the workout flag (doc §6.1).
   const status = ((await liftInsights([exId]))[exId] || {}).status || { status: 'new', label: 'New', pct: null, rec: 'Log a couple of weeks and trends show up here.' };
   const mesoStart = meso?.started_on || null;
+  // v1.11.2: a lift you haven't done this meso gets no current-sounding badge or % — just when you last did it.
+  // Same rule as Home's "This meso's lifts": the lift is planned in the current meso (start dates can be missing on imports).
+  const inMeso = !!meso && check(await sb.from('workout_exercises').select('exercise_id, workout_days!inner(mesocycle_id)')
+    .eq('workout_days.mesocycle_id', meso.id)).some(x => x.exercise_id === exId);
+  const lastDone = new Date(all[all.length - 1].done_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   const ranges = { meso: 'This meso', '3m': '3 months', all: 'All' };
   const range = ranges[rangeArg] ? rangeArg : (mesoStart && series.some(x => x.date >= mesoStart) ? 'meso' : 'all');
   const from = range === 'meso' ? mesoStart : range === '3m' ? isoDay(new Date(Date.now() - 91 * 864e5)) : null;
@@ -1848,8 +1875,9 @@ async function renderProgress(exId, rangeArg, metricArg) {
   const mesoIdx = mesoStart && range !== 'meso' ? ss.findIndex(x => x.date >= mesoStart) : -1;
   const first = ss[0], last = ss[ss.length - 1], change = first.e ? (last.e - first.e) / first.e * 100 : 0;
   setHeader(all[0].name, '#/progress', 'explore');
-  app.innerHTML = `<div class="card insight st-${status.status}"><div class="row"><b class="grow">${status.status === 'new' ? 'Getting started' : 'Where this lift stands'}</b>${statusPill(status)}</div>
-      <p class="small" style="margin:6px 0 0">${esc(status.rec)}</p>${status.vs ? `<p class="small muted" style="margin:6px 0 0">${esc(status.vs.text)}</p>` : ''}</div>
+  app.innerHTML = `${inMeso ? `<div class="card insight st-${status.status}"><div class="row"><b class="grow">${status.status === 'new' ? 'Getting started' : 'Where this lift stands'}</b>${statusPill(status)}</div>
+      <p class="small" style="margin:6px 0 0">${esc(status.rec)}</p>${status.vs ? `<p class="small muted" style="margin:6px 0 0">${esc(status.vs.text)}</p>` : ''}</div>`
+      : `<div class="card"><b>Not in this meso</b><p class="small muted" style="margin:6px 0 0">Last done ${lastDone}. The chart and table below are its history — add it to a meso to get weekly targets and trends again.</p></div>`}
     <div class="seg c3" role="tablist" aria-label="Chart range">${Object.entries(ranges).map(([k, v]) => `<button role="tab" aria-selected="${k === range}" class="${k === range ? 'on' : ''}" data-go="#/progress/${exId}/${k}/${metric}" ${k === 'meso' && !mesoStart ? 'disabled' : ''}>${v}</button>`).join('')}</div>
     <div class="seg c2" role="tablist" aria-label="Chart measure" style="margin-top:8px">${[['perf', 'Performance'], ['est', 'Strength estimate']].map(([k, v]) => `<button role="tab" aria-selected="${k === metric}" class="${k === metric ? 'on' : ''}" data-go="#/progress/${exId}/${range}/${k}">${v}</button>`).join('')}</div>
     <div class="card"><div class="muted small">${metric === 'perf' ? `Performance per session (${unit()}) · weight × (1 + reps/30), no RIR credit — rises through a meso as you add reps or weight, resets a bit at each new meso's easier week 1`
@@ -1861,7 +1889,8 @@ async function renderProgress(exId, rangeArg, metricArg) {
       <div class="row muted tiny"><span class="grow">${fmt(Math.round(min))}</span><span>${fmt(Math.round(max))}</span></div>
       <div class="grid3 keep" style="margin-top:8px">
         <div class="stat center"><span class="big">${ss.length}</span><span class="muted tiny">sessions</span></div>
-        <div class="stat center"><span class="big">${change > 0 ? '+' : ''}${change.toFixed(1)}%</span><span class="muted tiny">change</span></div>
+        ${inMeso ? `<div class="stat center"><span class="big">${change > 0 ? '+' : ''}${change.toFixed(1)}%</span><span class="muted tiny">change</span></div>`
+          : `<div class="stat center"><span class="big">${new Date(all[all.length - 1].done_at).toLocaleDateString(undefined, { month: 'short', year: '2-digit' })}</span><span class="muted tiny">last done</span></div>`}
         <div class="stat center"><span class="big">${[...prDates].filter(d => ss.some(x => x.at === d)).length}</span><span class="muted tiny">PRs <span style="color:var(--warn)">●</span></span></div></div></div>
     <div class="card"><table><tr><th>Date</th><th>Top set</th><th>Sets</th><th class="right">${metric === 'perf' ? 'Perf.' : 'Est.'}</th></tr>
       ${ss.slice().reverse().map(s => `<tr><td>${new Date(s.at).toLocaleDateString()}${prDates.has(s.at) ? ' 🏆' : ''}</td><td>${fmt(s.top.weight)} × ${s.top.reps}</td><td>${s.n}</td><td class="right">${fmt(Math.round(s.e))}</td></tr>`).join('')}</table></div>`;

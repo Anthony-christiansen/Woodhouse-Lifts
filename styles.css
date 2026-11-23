@@ -301,3 +301,6 @@ nav#tabs a span svg { display: block; }
 .card[data-we] [data-addset], .card[data-we] [data-rmset] { white-space: nowrap; }
 .card[data-we] > .row .rir1 { margin-left: auto; }
 .prio-box summary b { display: block; } .prio-box summary .muted { display: block; }
+
+/* v1.11.2: lifts not trained in 8+ weeks (Progress → All time) */
+.list-btn.stale { opacity: .55; }
