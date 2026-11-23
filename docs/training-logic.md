@@ -125,8 +125,8 @@ Building a meso is four steps: **Goal** (§1.10) → **Days & split** → **Emph
 
 | Template | Focused muscles (≈10 sets/wk start, ≥2×/wk) | Maintained (≈4 sets/wk) |
 |---|---|---|
-| Upper focus | Chest, Back, Shoulders, Biceps, Triceps | Quads, Hamstrings, Glutes, Calves |
-| Lower focus | Quads, Hamstrings, Glutes, Calves | Chest, Back, Shoulders, Biceps, Triceps |
+| Upper focus | Emphasize Chest, Back, Shoulders · Grow Biceps, Triceps (v1.11.1) | Quads, Hamstrings, Glutes, Calves |
+| Lower focus | Emphasize Quads, Hamstrings, Glutes · Grow Calves (v1.11.1) | Chest, Back, Shoulders, Biceps, Triceps |
 | Whole body | All major muscles at ≈8–10 sets/wk, spread across every day | — |
 | Custom | You pick each muscle's priority: Focus / Maintain / Skip | — |
 
@@ -145,7 +145,7 @@ Autofill works backward from the whole week, so Day 1 is built knowing what Days
    | **Maintain** | Keep it with low volume, saving recovery | 4 | 4 | 3 |
    | **Skip** | Leave it out | 0 | 0 | 0 |
 
-   Templates: *Balanced* = everything Grow (small muscles Maintain); *Upper focus* = upper body Emphasize, lower Maintain; *Lower focus* = the reverse. Emphasizing more than **3** muscles shows a warning — recovery is shared, so emphasizing a few at a time usually grows them faster. Mesos made before v1.9 that say "Focus" are read as Emphasize (Balanced plans as Grow).
+   Templates: *Balanced* = everything Grow (small muscles Maintain); *Upper focus* = Chest, Back and Shoulders Emphasize, arms Grow, lower Maintain; *Lower focus* = Quads, Hamstrings and Glutes Emphasize, Calves Grow, upper Maintain. **v1.11.1:** templates never emphasize more than 3 (before, Upper focus emphasized 5 and Lower 4 — contradicting the app's own limit); arms and calves also get indirect work from the big lifts. 3 is a guideline you can override: emphasizing more than **3** muscles shows a warning — recovery is shared, so emphasizing a few at a time usually grows them faster. Mesos made before v1.9 that say "Focus" are read as Emphasize (Balanced plans as Grow).
    These are starting points at the low end of the productive range (1.1). The feedback rules in Section 5 grow them week by week.
 2. **How many days a week each muscle is trained:**
    - Focused muscles: 2× at minimum (1.4), and more often if needed to keep each session at **5 sets or fewer per muscle**. Frequency = weekly sets ÷ 5, rounded up, between 2 and the number of training days.
@@ -252,6 +252,10 @@ Each week the target RIR drops by one, so each week asks for one rep's worth mor
 
 **By weight:** suggestion = last week's weight + step × (RIR drop), same reps; the reps box shows **reps to reps + 1** so the top of the range is the stretch goal. Example: sled push 315×27 at 1 RIR → week 4 at 0 RIR → **320 × 27–28** (v1.9 step sizes; v1.5 suggested 325, RP had 325×28, and before v1.5 the app always added a rep → 315×28).
 
+**Light loads (v1.11.1).** One step can be far more than one rep's worth of effort on a light lift: 45 → 50 lb on a dumbbell row is +11%, while one RIR is ≈ +3%. So the step's reps are checked with the §4.1 effort model: if keeping last week's reps would be clearly harder than the RIR drop asks (more than ¾ of a rep), the reps are set to what fits the heavier weight — 45×12 at 2 RIR → **50×9** at 1 RIR, not 50×12. A small step that only rounds differently keeps the reps (rope crunch 57.5×7 → **60×7**). The same check applies when reps outgrow the range and the weight goes up a step. On a "faster" week the extra step is judged at the normal step, because the "felt easy" rating says you had more in reserve than logged.
+
+**When a cap lowers the weight (v1.11.1).** If the weekly +5 lb / +5% cap (§4.5) cuts a suggestion, the reps are re-solved for the capped weight and are never below last week's at a weight that isn't lighter. Found comparing against RP on Haylee's week 3: deadlift 95×12 was re-set toward the 3–8 range (107.5×8), capped to 97.5, but kept 8 reps — far easier than last week. Now: **97.5×12**, with a note that the weight climbs a step a week until the reps are back in range.
+
 The exercise line shows the style, e.g. "progresses +10 lb" or "progresses by reps". Change the weight yourself and the reps re-target as in §4.1. Deloads and joint-pain holds never add weight.
 
 ### 4.2 Warm-ups (never logged, never counted)
@@ -280,7 +284,7 @@ If you type a weight other than the suggestion, the app re-targets the reps so t
 - Tap an arrow to see the comparison (e.g. "Reps down vs last week (6 → 4)"). Every time you tick ✓ on an amber set you get a short notice — one set under last week is normal; rest a little longer and aim to match it on the next set.
 - Example: last week 200 lb × 15 at 2 RIR (e1RM ≈ 313). This week, same 2 RIR, you pick 180 lb → **20–21 reps**. Pick 220 lb → **11–12 reps**.
 
-**Weight window.** Under each weighted exercise the app shows the span of weights for which those matched reps stay inside the exercise's rep range. The heaviest end lands at the rep minimum, the lightest at the rep maximum, both rounded to the load increment. If you go outside it, you get a warning:
+**Weight window.** Under each weighted exercise the app shows the span of weights for which those matched reps stay inside the exercise's rep range. The heaviest end lands at the rep minimum, the lightest at the rep maximum, both rounded to the load increment. **v1.11.1:** if last week you worked outside the listed range on purpose (deadlift for 12 when the range says 3–8), the window stretches to include your reps instead of pointing you at weights you don't use (95–122.5 lb, not 107.5–122.5). A window that rounds to a single weight (5–5 lb on a light cable) isn't shown. If you go outside it, you get a warning:
 - **Too heavy** turns a hypertrophy set into a low-rep strength set.
 - **Too light** needs so many reps that the set becomes an endurance grind and RIR is hard to judge.
 
@@ -404,12 +408,13 @@ The rules are checked in order, and the first one that matches wins:
 | 3 | F = Down and R ≥ 2 | −1 set | Performance is dropping while recovery is only barely keeping up, which points to accumulated fatigue (1.7) |
 | 4 | J = 2 | No change | Joint stress present, so hold |
 | 5 | L = 3 (too much) | No change | Already at your limit |
-| 6 | R ≤ 1 and L ≤ 1 and F ≥ Same | +1 set, or +2 if R = 0, L = 0 and P ≤ 1 | Recovered with room to spare and performance is holding, so add volume, the main growth lever (1.1) |
+| 6 | R ≤ 1 and L ≤ 1 and F ≥ Same (or no comparison yet) | +1 set, or +2 if R = 0, L = 0, P rated ≤ 1 and F known | Recovered with room to spare and performance is holding, so add volume, the main growth lever (1.1) |
 | 7 | Everything else (e.g., healed just in time) | No change | You're near your productive limit, so hold and let the RIR drop do the work |
 
 **v1.9 — volume follows the muscle's priority, with a weekly limit and a reason every time.**
 - **Emphasize:** the rules above (+1 or +2 when recovery and workload were good). Mesos with no stored priorities (imported from RP, e.g. AC VII) keep these rules.
-- **Grow:** when recovery was good, sets are **held if performance improved** ("no extra volume is needed yet"); **+1** only if performance didn't move. Never +2.
+- **Grow:** when recovery was good, sets are **held if performance improved** ("no extra volume is needed yet"); **+1** only if performance didn't move. Never +2. **v1.11.1 (audit):** with **no performance comparison yet** (first session of a lift, no history) sets are **held** — missing data is not a plateau.
+- **Missing data is never evidence for more volume (v1.11.1).** A skipped pump or a missing performance comparison can't unlock +2; at most +1 on Emphasize. Pump is optional in the rating sheet (a growth driver it isn't, §1.6), so "All normal" really is one tap.
 - **Maintain:** never adds sets (it can still remove them).
 - **Weekly limit:** a muscle's weekly total can rise by at most **+2 sets** from one week to the next, however many sessions train it — two sessions can't each add +2.
 - **Any joint pain** (even Low) limits an increase to +1.
@@ -424,7 +429,7 @@ When rule 1, 2, 3 or 5 fires (joint pain 3, still sore, performance down with sl
 
 - **Before you start a session:** recovery questions for any muscle in today's session whose last session hasn't been rated yet. You must answer these first, because they set next week's volume for that earlier session.
 - **As soon as every set for an exercise is checked off (v1.10, one sheet since v1.11):** a locked sheet asks that exercise's workload and joint pain (with its ▲ / ● / ▼ vs. last week). If it was the **last exercise for its muscle** that day, the same sheet also asks the muscle-as-a-whole questions (pump, workload, joint pain), so a muscle trained with one exercise is one pop-up, not two. With one exercise, the muscle's workload and joint pain follow the exercise's answers until you change them.
-  - **✓ All normal** (one tap) = workload *Pretty good* and joint pain *None* for the exercise (and the muscle, when shown). On an exercise-only sheet it saves straight away; when the muscle part is shown, pick pump and it saves. Example: full-body day, 8 exercises across 7 muscles → 8 sheets, most of them one tap.
+  - **✓ All normal** (one tap) = workload *Pretty good* and joint pain *None* for the exercise (and the muscle, when shown). It saves straight away (v1.11.1 — before, combined sheets still needed a pump tap). **Pump is optional**: if you don't pick it, it's saved as *not rated*, never a made-up value. Example: full-body day, 8 exercises across 7 muscles → 8 sheets, most of them one tap.
   - After saving, the card shows a small "✓ This exercise · …" / "✓ Chest overall · …" line; tap it to change the rating. Cardio is rated once per session (breathing, workload, joint pain).
 - **Muscle-only sheet:** only appears if a muscle's exercises were already rated separately (for example after editing). It has the same All normal button.
 - **(Before v1.11)** as soon as every set for a muscle was checked off: pump, workload and joint pain for that muscle open in a **locked** sheet. It shows each of that muscle's exercises with its progression indicator (▲ up / ● same / ▼ down vs. last week, by estimated strength), and you can't dismiss it or continue until all three are answered. Every exercise also shows its progression badge as soon as its last set is checked. Tap ✎ on any exercise to adjust ratings afterward.

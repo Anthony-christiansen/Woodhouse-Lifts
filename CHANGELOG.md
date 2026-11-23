@@ -12,6 +12,31 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.11.1 — 2026-11-22 · "Checked against RP"
+
+Haylee's week 3 (her current meso) run through our engine and compared set by set with what RP recommends for the same sets, plus the progression findings from the outside audit. RP's numbers were used only to find our bugs — nothing of RP's is copied.
+
+**What the comparison showed (39 sets)**
+- 23 sets: identical weight and reps.
+- Machines/cables (hip abduction, row, calf raise): we add one small step (+2.5 lb) at the same reps; RP shows a window around last week's weight. Same effort either way (+2.5 lb ≈ one rep in reserve) — kept.
+- Leg press, pulldown: RP held reps where we add one. RP's call almost certainly uses Haylee's in-app soreness/pump ratings, which aren't in the export; with no ratings ours progresses normally — kept.
+- Deadlift and light lifts: **real bugs on our side**, fixed below.
+
+**Fixes**
+- **Capped weight now gets matching reps.** Deadlift 95×12 → was 97.5×**8** (a re-set toward the 3–8 range, capped, kept the low reps — much easier than last week) → now **97.5×12**.
+- **Light loads don't get a too-big step at the same reps.** Dumbbell row 45×12 → was 50×12 (+11% load and a lower RIR) → now **50×9**. Rounding noise keeps the reps (60×7, not 60×6).
+- **Weight window includes the reps you actually work at** (deadlift for 12: 95–122.5, not 107.5–122.5). Single-weight windows ("5–5 lb") are hidden.
+- **Missing data is not a plateau** (audit A). Grow muscles hold sets until there's a performance comparison; +2 sets needs a rated pump and a performance comparison.
+- **Templates respect the 3-muscle emphasis limit** (audit B). Upper focus: emphasize chest, back, shoulders; arms grow. Lower focus: emphasize quads, hamstrings, glutes; calves grow. Existing mesos keep their stored priorities.
+- **All normal is one tap** (audit D). Pump is optional and saved as *not rated* if skipped — never a made-up value.
+
+**Underneath**
+- `suggestSet` re-solves reps after a cap; the load-step and over-range paths check reps with `repsAtLoad` (now also returns `raw`); `weightRange` widens to last week's reps; `setAdjustment` rule 11; `TEMPLATE_EMPHASIS`.
+- New tests: regression tests for each fix, and a **longitudinal simulation** — 10 lifter profiles × 5 lifts × 6 weeks, 1,200 invariant checks (weekly cap, meso ceiling, rep jump ≤ 2, weekly demand ≤ +8%, heavier-with-fewer-reps only when equivalent, holds never add weight, deload never heavier).
+- No database changes. `?v=31`.
+
+---
+
 ## 1.11.0 — 2026-11-22 · "Easier for anyone"
 
 A usability pass from looking at every main screen as a first-time user, plus a more lime green.
