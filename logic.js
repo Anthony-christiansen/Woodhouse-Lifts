@@ -225,13 +225,17 @@ export function candidatesFor(muscle, library, favorites = null) {
 // options stay, e.g. Knees drops squats/lunges/jumps but keeps leg press and leg extension, whose range you control.
 // Matching is by exercise name, so it also covers your own and imported exercises with no tags. Lower back is the
 // old "avoid heavy spinal loading" switch (stored as the 'axial' tag, so earlier versions read it the same way).
-export const BODY_AREAS = {
+export const BODY_AREAS = {   // listed top to bottom on the body
   neck:          { name: 'Neck', tag: 'area:neck', blurb: 'Shrugs, upright rows, behind-the-neck work, heavy carries.' },
   shoulders:     { name: 'Shoulders', tag: 'area:shoulders', blurb: 'Overhead pressing, dips, upright rows, pullovers, barbell bench.' },
-  elbows_wrists: { name: 'Elbows & wrists', tag: 'area:elbows_wrists', blurb: 'Skull crushers and overhead extensions, dips, close-grip bench, straight-bar and preacher curls, wrist work.' },
+  chest:         { name: 'Chest', tag: 'area:chest', blurb: 'Barbell bench presses, dips, deep-stretch flyes and deficit push-ups; machine and cable work stays.' },
   upper_back:    { name: 'Upper back', tag: 'area:upper_back', blurb: 'Heavy barbell rows, barbell shrugs, deadlifts and rack pulls.' },
+  arms:          { name: 'Arms', tag: 'area:arms', blurb: 'Heavy barbell and preacher curls, chin-ups, skull crushers, close-grip bench and dips; cable and machine arm work stays.' },
+  elbows_wrists: { name: 'Elbows & wrists', tag: 'area:elbows_wrists', blurb: 'Skull crushers and overhead extensions, dips, close-grip bench, straight-bar and preacher curls, wrist work.' },
+  abs:           { name: 'Abs', tag: 'area:abs', blurb: 'Sit-ups, hanging leg raises, ab wheel and other loaded trunk flexion; planks, dead bugs and Pallof presses stay.' },
   lower_back:    { name: 'Lower back', tag: 'axial', blurb: 'Heavy spinal loading: bar-on-back squats, deadlifts, good mornings, barbell rows, standing overhead press, back extensions, sit-ups.' },
   hips:          { name: 'Hips', tag: 'area:hips', blurb: 'Lunges and split squats, step-ups, sumo stance, adductor work, deep single-leg squats.' },
+  legs:          { name: 'Legs', tag: 'area:legs', blurb: 'Heavy free-weight leg work: barbell squats, deadlifts, lunges, split squats, step-ups, jumping and sprinting; machines stay.' },
   knees:         { name: 'Knees', tag: 'area:knees', blurb: 'Squats, lunges and split squats, step-ups, sissy squats, jumping and running.' },
 };
 const AREA_RULES = {
@@ -248,6 +252,11 @@ const AREA_RULES = {
     // imported names like "Squat (Barbell)", "Bent Over Row (Barbell)", "Shoulder Press (Barbell)"
     n => /barbell/.test(n) && /squat|row\b|shoulder press|overhead|standing press/.test(n)],
   hips: [/lunge/, /split squat/, /bulgarian/, /step.?up/, /sumo/, /adduct/, /cossack/, /pistol/, /curtsy/],
+  chest: [n => /bench press/.test(n) && !/dumbbell|machine|smith/.test(n), /\bdips?\b/, /deficit push/, n => /(dumbbell )?fl(y|ye)\b/.test(n) && /dumbbell/.test(n)],
+  arms: [/barbell curl/, /straight.?bar/, /ez.?bar curl/, /preacher/, /chin.?up/, /underhand/, /skull ?crusher/, /lying .*extension/, /close.?grip bench/, /\bdips?\b/,
+    n => /bench press/.test(n) && /narrow|close/.test(n), /reverse curl/],
+  legs: [n => /squat/.test(n) && !/belt|sissy|bodyweight/.test(n), /deadlift/, /good ?morning/, /lunge/, /split squat/, /bulgarian/, /step.?up/, /jump/, /sprint/, /pistol/],
+  abs: [/sit.?up/, /hanging/, /leg raise/, /knee raise/, /ab wheel/, /rollout/, /v.?up/, /toes to bar/, /decline/, /candlestick/, /crunch/],
   knees: [/squat/, /lunge/, /split squat/, /bulgarian/, /step.?up/, /sissy/, /pistol/, /jump/, /sprint/, /treadmill run/, /\brun\b/, /plyo/, /box jump/, /burpee/],
 };
 /** The body areas an exercise loads the most (by its tags and name). */

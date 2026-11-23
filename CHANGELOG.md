@@ -12,6 +12,25 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.14.1 — 2026-11-23 · Injuries in the meso builder; chest, arms, legs and abs
+
+- **The builder asks "Any injuries or sore spots?"**
+  - **No** is the default and skips it.
+  - **Yes** shows the areas right there. Picks are saved to your account, so Settings matches and you can change them any time. The plan adjusts straight away.
+  - If areas are already saved, the question starts on **Yes** and shows them.
+  - Tapping **No** while areas are on asks before turning them all off.
+- **Four broader areas:** **Chest, Arms, Legs, Abs**, for a strained muscle rather than a sore joint. That's **11 areas**, listed head to toe:
+  - Chest drops barbell bench, dips, deep dumbbell flyes and deficit push-ups; machines and cables stay.
+  - Arms drops heavy barbell and preacher curls, chin-ups, skull crushers, close-grip bench and dips.
+  - Legs drops heavy free-weight leg work (barbell squats, deadlifts, lunges, split squats, step-ups, jumps, sprints); leg machines stay.
+  - Abs drops sit-ups, hanging raises, ab wheel and loaded crunches; planks, dead bugs and Pallof presses stay.
+- **Easier to find:** Injuries & sore spots is now near the top of Settings, and More → Settings mentions it.
+- The same rules still apply: gentler options stay, no muscle is left empty, and favorites are always kept.
+
+**Rollback:** app → `release/v1.14.0`. The new tags (`area:chest|arms|legs|abs`) are ignored by 1.14.0.
+
+---
+
 ## 1.14.0 — 2026-11-23 · Injuries & sore spots
 
 **Settings → Injuries & sore spots**

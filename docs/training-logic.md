@@ -232,7 +232,7 @@ In every mode, changing a muscle by hand labels the plan "(adjusted)".
 
 ### 2.2a Injuries & sore spots (v1.14.0)
 
-Settings has **7 general body areas**: neck, shoulders, elbows & wrists, upper back, lower back, hips and knees. This is deliberately not a list of conditions.
+Settings, and the meso builder's "Any injuries or sore spots?" question (v1.14.1), has **11 general body areas**, head to toe: neck, shoulders, chest, upper back, arms, elbows & wrists, abs, lower back, hips, legs, knees. This is deliberately not a list of conditions. Chest, arms, legs and abs (v1.14.1) are for a strained muscle rather than a sore joint.
 
 **What picking an area does:** when the app builds a meso or suggests a swap, it leaves out the exercises that load that area the **most** and keeps gentler ones.
 
@@ -245,6 +245,10 @@ Settings has **7 general body areas**: neck, shoulders, elbows & wrists, upper b
 | Lower back | everything tagged *axial* (heavy spinal loading), plus deadlifts, good mornings, back extensions/raises, barbell rows and squats, standing barbell presses, sit-ups, ab wheel |
 | Hips | lunges, split squats, step-ups, sumo stance, adductor work, deep single-leg squats |
 | Knees | squats of every kind, lunges and split squats, step-ups, sissy squats, jumping, sprinting, running |
+| Chest | barbell bench presses, dips, deep dumbbell flyes, deficit push-ups (machines and cables stay) |
+| Arms | heavy barbell, EZ-bar and preacher curls, chin-ups/underhand pulls, skull crushers, close-grip bench, dips |
+| Legs | heavy free-weight leg work: barbell squats, deadlifts, good mornings, lunges, split squats, step-ups, jumps, sprints (leg machines stay) |
+| Abs | sit-ups, hanging leg/knee raises, ab wheel, decline work, loaded crunches (planks, dead bugs, Pallof presses stay) |
 
 **Rules:**
 - **Gentler options stay.** For example, Knees keeps leg press and leg extension, because you set their range of motion.

@@ -18,7 +18,7 @@ async def main():
         errs=[]
         pg=await ctx.new_page(); pg.on('pageerror', lambda e: errs.append(str(e)))
         await pg.goto(B+'#/settings'); await pg.wait_for_timeout(1000)
-        ok('7 areas offered', await pg.locator('[data-area]').count()==7)
+        ok('11 areas offered', await pg.locator('[data-area]').count()==11)
         ok('old spinal switch replaced', await pg.locator('#avoidAxial').count()==0)
         await pg.click('[data-area="lower_back"]'); await pg.wait_for_timeout(500)
         w=await pg.evaluate("(window.__writes||[]).filter(x=>x[0]==='profiles').map(x=>x[1]).pop()")
@@ -38,8 +38,18 @@ async def main():
         a=await cb.evaluate("e => getComputedStyle(e.closest('.chip')).backgroundColor"); await cb.click(); await pg.wait_for_timeout(100)
         b=await cb.evaluate("e => getComputedStyle(e.closest('.chip')).backgroundColor")
         ok('equipment chip shows on/off', a!=b and (await cb.evaluate("e => getComputedStyle(e).appearance"))!='none', (a,b))
-        # builder: switch shows on/off, and the areas note
+        # builder: asks about injuries (open, since Lower back is on), switch shows on/off, and the areas note
         await pg.goto(B+'#/new'); await pg.wait_for_timeout(1000)
+        ok('builder asks about injuries, Yes when some are saved', await pg.get_attribute('[data-inj="yes"]','aria-checked')=='true' and await pg.locator('#injCard [data-area="lower_back"][aria-pressed="true"]').count()==1)
+        await pg.click('#injCard [data-area="knees"]'); await pg.wait_for_timeout(500)
+        w=await pg.evaluate("(window.__writes||[]).filter(x=>x[0]==='profiles').map(x=>x[1]).pop()")
+        ok('picking in the builder saves the same setting', w and sorted(w.get('avoid_tags'))==['area:knees','axial'], w)
+        if SHOTS: await pg.locator('#injCard').screenshot(path=os.path.join(SHOTS,'builder-injuries.png'))
+        pg.once('dialog', lambda d: asyncio.ensure_future(d.accept()))
+        await pg.click('[data-inj="no"]'); await pg.wait_for_timeout(500)
+        w=await pg.evaluate("(window.__writes||[]).filter(x=>x[0]==='profiles').map(x=>x[1]).pop()")
+        ok('No (after confirming) clears them', w and w.get('avoid_tags')==[] and await pg.locator('#injCard [data-area]').count()==0, w)
+        await pg.click('[data-inj="yes"]'); await pg.wait_for_timeout(200); await pg.click('#injCard [data-area="lower_back"]'); await pg.wait_for_timeout(500)
         sw=pg.locator('#minRir')
         a=await sw.evaluate("e => getComputedStyle(e).backgroundColor"); await sw.click(); await pg.wait_for_timeout(200)
         b=await sw.evaluate("e => getComputedStyle(e).backgroundColor")

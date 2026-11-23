@@ -1,8 +1,8 @@
 // v1.12.1: pinned to one reviewed release, so the code users get only changes with a commit here (outside audit, finding 4).
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.2/+esm';
-import * as L from './logic.js?v=42';
-import * as LEARN from './learn.js?v=42';
-import * as MD from './md.js?v=42';
+import * as L from './logic.js?v=43';
+import * as LEARN from './learn.js?v=43';
+import * as MD from './md.js?v=43';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -19,7 +19,7 @@ let authReturn = (() => {
   return null;
 })();
 let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
-export const APP_VERSION = '1.14.0'; // keep in sync with CHANGELOG.md
+export const APP_VERSION = '1.14.1'; // keep in sync with CHANGELOG.md
 const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
 // v1.11.4: the training rules are a page inside the app (#/logic), built from this repo's docs/training-logic.md.
 // The app never links to anyone's Google Drive.
@@ -822,6 +822,12 @@ async function renderBuilder() {
         <div class="seg c3" role="radiogroup" aria-labelledby="lGoal">${Object.entries(L.GOALS).map(([k, g]) => `<button type="button" role="radio" aria-checked="${S.goal === k}" data-goal="${k}" class="${S.goal === k ? 'on' : ''}">${g.name}</button>`).join('')}</div>
         <div class="muted tiny" style="margin-top:6px">${esc(G.blurb)} <a href="#/learn/${L.goalOf(S.goal)}">More ›</a></div>
       </div>
+      <div class="card" id="injCard"><div class="row"><b class="grow" id="lInj">Any injuries or sore spots?</b></div>
+        <div class="seg c2 mini mt8" role="radiogroup" aria-labelledby="lInj">
+          <button type="button" role="radio" data-inj="no" aria-checked="${!S.injOpen}" class="${!S.injOpen ? 'on' : ''}">No</button>
+          <button type="button" role="radio" data-inj="yes" aria-checked="${!!S.injOpen}" class="${S.injOpen ? 'on' : ''}">Yes${myAreas().length ? ` · ${myAreas().length}` : ''}</button></div>
+        ${S.injOpen ? `<div class="muted tiny mt8">Pick what to go easy on. The exercises that load it most are left out and gentler ones kept. Saved to your account, so it's also in Settings, where you can change it any time.</div>${areaGrid(S.lib || [])}` : '<div class="muted tiny mt6">Nothing to adjust. You can add some later in Settings.</div>'}
+      </div>
       <div class="card"><div class="step-h"><span class="step-n">2</span><b>Start from</b></div>
         <div class="start-tiles" role="radiogroup" aria-label="Start from">
           ${[['suggested', ic('star'), 'Suggested', 'One tap'], ['template', ic('calendar'), 'Templates', `${cat.length} to pick from`], ['scratch', ic('pencil'), 'From scratch', 'Set it all yourself']].map(([k, ico, n, sub]) =>
@@ -852,6 +858,13 @@ async function renderBuilder() {
       step1(); });
     $$('[data-min]').forEach(b => b.onclick = () => { S.minutes = +b.dataset.min; try { localStorage.setItem('wl_session_minutes', S.minutes); } catch {} S.plan = []; step1(); });
     $$('[data-goal]').forEach(b => b.onclick = () => { S.goal = b.dataset.goal; step1(); });
+    $$('[data-inj]').forEach(b => b.onclick = async () => {
+      if (b.dataset.inj === 'yes') { S.injOpen = true; return step1(); }
+      if (myAreas().length && !confirm(`Turn off going easy on ${myAreas().map(a => L.BODY_AREAS[a].name).join(', ')}? (Also changes Settings.)`)) return;
+      if (myAreas().length && !(await clearAreas())) return;
+      S.injOpen = false; S.plan = []; step1();
+    });
+    $$('#injCard [data-area]').forEach(b => b.onclick = async () => { if (await toggleArea(b.dataset.area, b)) { S.plan = []; step1(); } });
     $$('[data-start]').forEach(b => b.onclick = () => { if (S.start === b.dataset.start) return; S.start = b.dataset.start;
       if (S.start === 'suggested') applySuggestion();
       if (S.start === 'scratch' && !S.preset && !S.adjusted) applyPriorities(L.presetPriorities('balanced'), 'balanced');
@@ -976,6 +989,9 @@ async function renderBuilder() {
     }
     builder = null; toast('Mesocycle created'); go('#/meso/' + mesoId);
   }
+  // v1.14.1: the injuries question starts open when areas are already saved, and needs the library for its counts.
+  if (S.injOpen === undefined) S.injOpen = myAreas().length > 0;
+  if (!S.lib) S.lib = await loadExercises();
   // v1.12.0 — the suggestion carries on from your current (or most recent) meso, so read it once per new builder.
   if (S.lastMeso === undefined) {
     // v1.12.2: the running meso first (asked for directly — imported mesos share one created_at, so a "newest 10" list could miss it).
@@ -1908,7 +1924,7 @@ function renderExplore() {
     ['#/progress', 'trendUp', 'Exercise progress', 'How each lift is trending over time'],
     ['#/volume', 'bars', 'Muscle volume', 'Weekly sets per muscle vs. the range that builds muscle'],
     ['#/cardio', 'heart', 'Cardio', 'Minutes, intensity and load by week'],
-    ['#/settings', 'sliders', 'Settings', 'Name, units, bodyweight, sign out'],
+    ['#/settings', 'sliders', 'Settings', 'Injuries & sore spots, equipment, theme, units, bodyweight, sign out'],
   ];
   app.innerHTML = items.map(([h, i, t, d]) => `<button class="list-btn" data-go="${h}"><span class="list-ico">${ic(i)}</span>
     <div class="grow"><b>${t}</b><div class="muted small">${d}</div></div>›</button>`).join('') +
@@ -2305,14 +2321,39 @@ async function renderExercises(filter = '', head = '', wireTabs = () => {}) {
   draw();
 }
 
+// ---------- injuries & sore spots (shared by Settings and the meso builder) ----------
+const myAreas = () => L.avoidedAreas(profile?.avoid_tags || []);
+function areaGrid(lib) {
+  const areas = myAreas(), count = a => lib.filter(e => L.exerciseAreas(e).has(a)).length;
+  return `<div class="area-grid" role="group" aria-label="Areas to go easy on">${Object.entries(L.BODY_AREAS).map(([k, a]) => { const on = areas.includes(k), n = on ? count(k) : 0;
+    return `<button type="button" class="area ${on ? 'on' : ''}" data-area="${k}" aria-pressed="${on}"><span class="area-top"><b>${esc(a.name)}</b><span class="tick" aria-hidden="true">${on ? ic('check') : ''}</span></span>
+      <span class="tiny muted">${on ? `Leaving out ${n} exercise${n === 1 ? '' : 's'}` : 'Off'}</span></button>`; }).join('')}</div>`;
+}
+// Saves at once (the same setting everywhere), keeping any other avoid tags the account has. Returns true if saved.
+async function toggleArea(key, btn) {
+  const tag = L.BODY_AREAS[key].tag, cur = profile?.avoid_tags || [];
+  const next = cur.includes(tag) ? cur.filter(t => t !== tag) : [...cur, tag];
+  if (btn) btn.disabled = true;
+  const r = await sb.from('profiles').update({ avoid_tags: next }).eq('id', session.user.id).select().single();
+  if (r.error) { if (btn) btn.disabled = false; toast(isNetErr(r.error) ? 'No signal — try again when you’re back online' : r.error.message, true); return false; }
+  profile = { ...profile, ...r.data };
+  toast(next.includes(tag) ? `${L.BODY_AREAS[key].name}: going easy — the exercises that load it most are left out` : `${L.BODY_AREAS[key].name}: back to normal`);
+  return true;
+}
+async function clearAreas() {
+  const keep = (profile?.avoid_tags || []).filter(t => !Object.values(L.BODY_AREAS).some(a => a.tag === t));
+  const r = await sb.from('profiles').update({ avoid_tags: keep }).eq('id', session.user.id).select().single();
+  if (r.error) { toast(r.error.message, true); return false; }
+  profile = { ...profile, ...r.data }; return true;
+}
+
 // ---------- settings ----------
 const EQUIPMENT = ['Barbell', 'Dumbbell', 'Machine', 'Cable', 'Smith Machine', 'Kettlebell', 'Band'];
 async function renderSettings() {
   setHeader('Settings', '#/explore', 'explore');
   const lib = await loadExercises();
   const eq = profile?.equipment; // null = everything
-  const areas = L.avoidedAreas(profile?.avoid_tags || []);
-  const areaCount = a => lib.filter(e => L.exerciseAreas(e).has(a)).length;
+  const areas = myAreas();
   app.innerHTML = `<div class="card">
       <div class="muted small">Signed in as</div><div>${esc(session.user.email)}</div>
       <label for="name">Name</label><input id="name" autocomplete="name" value="${esc(profile?.display_name || '')}">
@@ -2320,6 +2361,13 @@ async function renderSettings() {
         <div class="grow"><label for="bw">Bodyweight (${unit()})</label><input id="bw" type="number" inputmode="decimal" step="any" value="${profile?.bodyweight == null ? '' : Math.round(bwD() * 10) / 10}"></div></div>
       <div class="muted tiny mt6">Bodyweight lets pull-ups, dips and push-ups count toward strength trends. Switching units only changes how weights are shown — your history stays the same.</div>
       <div class="spacer"></div><button class="primary block" id="save">Save</button></div>
+    <div class="card" id="areasCard"><h3>Injuries &amp; sore spots</h3>
+      <div class="muted small">Pick any area you want to go easy on. When the app builds a meso or suggests a swap, it leaves out the exercises that load that area the most and keeps gentler ones. Tap again to turn it off. This is your preference, not medical advice. You can still add any exercise by hand, and starred favorites are always kept.</div>
+      ${areaGrid(lib)}
+      ${areas.length ? `<details class="small mt8"><summary class="muted">What's left out (${areas.map(a => L.BODY_AREAS[a].name).join(', ')})</summary>
+        ${areas.map(a => `<div class="mt6"><b>${esc(L.BODY_AREAS[a].name)}</b> <span class="muted tiny">— ${esc(L.BODY_AREAS[a].blurb)}</span><div class="muted tiny">${lib.filter(e => L.exerciseAreas(e).has(a)).map(e => esc(e.name)).join(' · ') || 'none in your library'}</div></div>`).join('')}
+        <div class="muted tiny mt6">Want to keep one of these? Star it in the Exercise library. Favorites are always allowed.</div></details>` : ''}
+      <div class="muted tiny mt6">Saved to your account as soon as you tap. New mesos and swap suggestions use it; meso days already built aren't changed.</div></div>
     <div class="card"><h3>Appearance</h3>
       <div class="seg c3 theme-seg" role="radiogroup" aria-label="Theme">${[['system', 'Match phone'], ['dark', 'Dark'], ['light', 'Normal']].map(([v, l]) =>
         `<button type="button" role="radio" data-theme-pick="${v}" aria-checked="${themePref() === v}" class="${themePref() === v ? 'on' : ''}">${l}</button>`).join('')}</div>
@@ -2331,15 +2379,6 @@ async function renderSettings() {
         <div class="muted tiny">Bodyweight moves are always included.</div></fieldset>
       <div class="spacer"></div><button class="block" id="savePrefs">Save preferences</button>
       <button class="ghost block sm" data-go="#/exercises">Favorites &amp; exclusions → Exercise library</button></div>
-    <div class="card" id="areasCard"><h3>Injuries &amp; sore spots</h3>
-      <div class="muted small">Pick any area you want to go easy on. When the app builds a meso or suggests a swap, it leaves out the exercises that load that area the most and keeps gentler ones. Tap again to turn it off. This is your preference, not medical advice. You can still add any exercise by hand, and starred favorites are always kept.</div>
-      <div class="area-grid" role="group" aria-label="Areas to go easy on">${Object.entries(L.BODY_AREAS).map(([k, a]) => { const on = areas.includes(k);
-        return `<button type="button" class="area ${on ? 'on' : ''}" data-area="${k}" aria-pressed="${on}"><span class="area-top"><b>${esc(a.name)}</b><span class="tick" aria-hidden="true">${on ? ic('check') : ''}</span></span>
-          <span class="tiny muted">${on ? `Leaving out ${areaCount(k)} exercise${areaCount(k) === 1 ? '' : 's'}` : 'Off'}</span></button>`; }).join('')}</div>
-      ${areas.length ? `<details class="small mt8"><summary class="muted">What's left out (${areas.map(a => L.BODY_AREAS[a].name).join(', ')})</summary>
-        ${areas.map(a => `<div class="mt6"><b>${esc(L.BODY_AREAS[a].name)}</b> <span class="muted tiny">— ${esc(L.BODY_AREAS[a].blurb)}</span><div class="muted tiny">${lib.filter(e => L.exerciseAreas(e).has(a)).map(e => esc(e.name)).join(' · ') || 'none in your library'}</div></div>`).join('')}
-        <div class="muted tiny mt6">Want to keep one of these? Star it in the Exercise library. Favorites are always allowed.</div></details>` : ''}
-      <div class="muted tiny mt6">Saved to your account as soon as you tap. New mesos and swap suggestions use it; meso days already built aren't changed.</div></div>
     <div class="card"><h3>Smallest weight jumps</h3>
       <div class="muted small">What your gym can actually load (microplates, dumbbell pairs, pin stacks). Suggestions round to these and add about 2.5% at a time — never more than 5 lb / 2.5 kg in one step.</div>
       ${['Machine', 'Cable', 'Barbell', 'Dumbbell'].map(k => { const v = L.increment({ equipment: k }, unit()); const opts = unit() === 'kg' ? [0.5, 1, 1.25, 2, 2.5, 5] : [1, 2.5, 5, 10];
@@ -2374,15 +2413,7 @@ async function renderSettings() {
   $('#out').onclick = async () => { await sb.auth.signOut(); go('#/'); };
   $$('[data-theme-pick]').forEach(b => b.onclick = () => setTheme(b.dataset.themePick));
   // v1.14.0: tapping an area saves at once (no separate Save), keeping any other avoid tags the account has.
-  $$('[data-area]').forEach(b => b.onclick = async () => {
-    const tag = L.BODY_AREAS[b.dataset.area].tag, cur = profile?.avoid_tags || [];
-    const next = cur.includes(tag) ? cur.filter(t => t !== tag) : [...cur, tag];
-    b.disabled = true;
-    const r = await sb.from('profiles').update({ avoid_tags: next }).eq('id', session.user.id).select().single();
-    if (r.error) { b.disabled = false; return toast(isNetErr(r.error) ? 'No signal — try again when you’re back online' : r.error.message, true); }
-    profile = { ...profile, ...r.data }; const y = window.scrollY; await renderSettings(); window.scrollTo(0, y);
-    toast(next.includes(tag) ? `${L.BODY_AREAS[b.dataset.area].name}: going easy — new mesos and swaps leave out the heaviest loading` : `${L.BODY_AREAS[b.dataset.area].name}: back to normal`);
-  });
+  $$('[data-area]').forEach(b => b.onclick = async () => { if (await toggleArea(b.dataset.area, b)) { const y = window.scrollY; await renderSettings(); window.scrollTo(0, y); } });
   $('#pw').onclick = () => renderNewPassword(false);
 }
 
