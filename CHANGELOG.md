@@ -12,6 +12,32 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.15.1 — 2026-11-23 · Audit safety & reliability fixes
+
+From the OpenAI audit of 1.14.0: the four "fix first" items. Training numbers are unchanged.
+- **Injury areas are never quietly overridden (audit S1/T8).**
+  - If your areas remove every exercise for a muscle, the builder now asks: **OK** one (machines and cables first) or **leave the muscle out**. Before, it put the machine and cable options back on its own.
+  - An area now beats a starred favorite. Only an explicit OK lets one through.
+  - OKs are saved to your account and listed in Settings → Injuries & sore spots under **OK'd anyway**, each with **Take back**.
+- **Offline saves can't look safe when they aren't (audit S1, storage).**
+  - If the phone refuses to keep the offline copy (storage full, blocked, private mode), the app keeps it in memory for this session.
+  - It then says plainly to keep the app open until it syncs. The sync badge turns amber and reads "NOT saved on this phone".
+  - It no longer shows "saved on your phone" in that case. Everything still syncs when the signal returns.
+- **Popups work with a keyboard and screen readers (audit S4/S5).**
+  - Every sheet is now a labelled modal dialog and the page behind it can't be reached.
+  - Focus moves into the sheet and Tab stays inside it. Escape closes it, and focus goes back to the button that opened it.
+  - Required questions, like the rating after a muscle's last set, can't be dismissed with Escape.
+- **CI can't show a false green (audit S3/S4).**
+  - Every browser test now exits non-zero on failure, and the workflow goes by exit codes rather than the last line of output.
+  - Logs are kept as a build artifact for 14 days.
+  - Test tools are pinned: `test/package.json` + `package-lock.json` (`npm ci`) and `test/requirements.txt`.
+  - Checked with a deliberately failing test, which fails the run.
+- New test: `safety151.py` (18 checks). The engine tests now cover "no restricted exercise without an OK".
+
+**Rollback:** app → `release/v1.15.0`. OK tags (`allow:…`) are ignored by older versions.
+
+---
+
 ## 1.15.0 — 2026-11-23 · Add an exercise mid-meso, send feedback, RIR dropdown fix
 
 - **Add an exercise during a meso.** Every open workout now has **+ Add an exercise** above Finish.

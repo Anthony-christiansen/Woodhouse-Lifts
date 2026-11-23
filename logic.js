@@ -270,31 +270,43 @@ export function exerciseAreas(e) {
 export const avoidedAreas = (avoidTags = []) => Object.keys(BODY_AREAS).filter(a => avoidTags.includes(BODY_AREAS[a].tag));
 export function areaTags(areas) { return areas.map(a => BODY_AREAS[a]?.tag).filter(Boolean); }
 
+/** Exercises you've OK'd despite an area you're going easy on ("allow:<exercise id>" in profiles.avoid_tags). */
+export const allowedIds = avoidTags => new Set((avoidTags || []).filter(t => String(t).startsWith('allow:')).map(t => String(t).slice(6)));
+
+/**
+ * v1.15.1 (audit S1/T8): an area you're going easy on now wins over a favorite, and nothing you've ruled out is
+ * ever put back on its own. If a muscle is left with no exercise, it's listed in `blocked` with the options (gentler
+ * first) so you can choose: OK one of them (saved as "allow:<id>"), or leave the muscle out.
+ */
 export function applyPreferences(library, { prefs = [], equipment = null, avoidTags = [] } = {}) {
   const favorites = new Set(prefs.filter(p => p.pref === 'favorite').map(p => p.exercise_id));
   for (const p of prefs) if (p.pref === 'exclude' && p.substitute_id) favorites.add(p.substitute_id);
   const excluded = new Set(prefs.filter(p => p.pref === 'exclude').map(p => p.exercise_id));
   const eq = equipment?.length ? new Set([...equipment, 'Bodyweight']) : null;
-  const areas = avoidedAreas(avoidTags);
+  const areas = avoidedAreas(avoidTags), allow = allowedIds(avoidTags);
+  const noEquip = e => !!(eq && e.load_type !== 'cardio' && e.equipment && !eq.has(e.equipment));
   const keep = [], removed = [];
   for (const e of library) {
     const hit = areas.length ? [...exerciseAreas(e)].filter(a => areas.includes(a)) : [];
-    const why = favorites.has(e.id) ? null
+    const areaHit = (e.tags || []).some(t => avoidTags.includes(t)) || hit.length > 0;
+    const ok = allow.has(e.id);
+    const why = areaHit && !ok ? 'avoided'
+      : favorites.has(e.id) ? null
       : excluded.has(e.id) ? 'excluded'
-      : (e.tags || []).some(t => avoidTags.includes(t)) || hit.length ? 'avoided'
-      : eq && e.load_type !== 'cardio' && e.equipment && !eq.has(e.equipment) ? 'equipment' : null;
-    (why ? removed : keep).push(why ? { ...e, why, areas: hit } : e);
+      : noEquip(e) ? 'equipment' : null;
+    if (why) removed.push({ ...e, why, areas: hit, favorite: favorites.has(e.id) });
+    else keep.push(areaHit ? { ...e, kept: 'you allowed it', areas: hit } : e);
   }
-  // Never leave a muscle with nothing: if the areas you're protecting took every option for a muscle, keep the ones
-  // you have equipment for (machines and cables first) and say so, rather than silently dropping the muscle.
+  // Muscles with nothing left because of the areas: never refilled automatically — the builder asks you.
+  const blocked = [];
   for (const m of new Set(library.map(e => e.muscle_group))) {
     if (keep.some(e => e.muscle_group === m)) continue;
-    const back = removed.filter(e => e.muscle_group === m && e.why === 'avoided' && !excluded.has(e.id)
-      && !(eq && e.load_type !== 'cardio' && e.equipment && !eq.has(e.equipment)));
-    const gentle = back.filter(e => /Machine|Cable/.test(e.equipment || '')); const restore = gentle.length ? gentle : back;
-    for (const e of restore) { removed.splice(removed.indexOf(e), 1); keep.push({ ...e, kept: 'no gentler option' }); }
+    const opts = removed.filter(e => e.muscle_group === m && e.why === 'avoided' && !excluded.has(e.id) && !noEquip(e));
+    if (!opts.length) continue;
+    const gentle = e => /Machine|Cable/.test(e.equipment || '') ? 0 : 1;
+    blocked.push({ muscle: m, options: [...opts].sort((x, y) => gentle(x) - gentle(y) || x.name.localeCompare(y.name)) });
   }
-  return { library: keep, favorites, removed };
+  return { library: keep, favorites, removed, blocked };
 }
 
 const slotOrder = (lib) => (a, b) => {

@@ -56,4 +56,7 @@ async def main():
         await br.close()
     srv.terminate()
     for o in out: print(o)
-asyncio.run(main())
+    bad=[o for o in out if (str(o[0]).startswith('errs') and o[1]) or (o[0]=='expired' and not o[1])]
+    print('AUTH TESTS:', 'FAILURES '+str(bad) if bad else 'ALL PASSED'); return bad
+import sys as _sys
+_sys.exit(1 if asyncio.run(main()) else 0)   # v1.15.1: CI goes by the exit code

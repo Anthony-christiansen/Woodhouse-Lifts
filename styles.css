@@ -489,3 +489,4 @@ input[type=checkbox], input[type=radio] { -webkit-appearance: auto; appearance: 
 .stars button { min-width: 48px; min-height: 48px; font-size: 26px; line-height: 1; padding: 0; background: var(--surface-2); color: var(--muted); }
 .stars button[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
 .fb-item { padding: 8px 0; border-top: 1px solid var(--border); } .fb-item:first-of-type { border-top: 0; }
+.sync-badge.risk { background: var(--warn-bg); color: var(--warn); border-color: var(--warn-border); }

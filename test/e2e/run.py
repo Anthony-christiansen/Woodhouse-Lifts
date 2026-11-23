@@ -40,4 +40,6 @@ async def main():
         await br.close()
     srv.terminate()
     print(json.dumps(problems,indent=1)[:6000] if problems else 'NO LAYOUT PROBLEMS')
-asyncio.run(main())
+    return problems
+import sys as _sys
+_sys.exit(1 if asyncio.run(main()) else 0)   # v1.15.1: CI goes by the exit code
