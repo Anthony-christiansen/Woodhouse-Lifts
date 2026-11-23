@@ -34,4 +34,19 @@ await db.exec(fill('missing'));
 const m = await dump(A);
 assert.deepEqual(m.sets, before.sets, 'missing mode: deleted sets back');
 assert.equal(JSON.parse(m.profiles[0]).unit, 'kg', 'missing mode: existing edits left alone');
-console.log(`RESTORE DRILL PASSED (${T.length} tables, overwrite + missing modes, other user untouched)`);
+// Off-project copy (Playbook §6.5): export the snapshot in the Drive backup format, load it with --full into a fresh database.
+const { gzipSync } = await import('node:zlib'); const { writeFileSync, rmSync } = await import('node:fs');
+const { readBackup, fullSql, snapshotSql } = await import('../supabase/ops/load_backup_file.mjs');
+const snap = (await db.query(`select tbl, row_count, data from backup.snapshot where taken_at = $1`, [ts])).rows;
+const file = `/tmp/wl-drill-backup-${process.pid}.json.gz`;
+writeFileSync(file, gzipSync(JSON.stringify({ format: 'woodhouse-lifts-backup/1', taken_at: ts, tables: Object.fromEntries(snap.map(r => [r.tbl, { row_count: r.row_count, rows: r.data }])) })));
+const bk = readBackup(file); rmSync(file);
+const db2 = await freshDb();
+for (const r of (await db.query('select id, email from auth.users')).rows) await db2.query('insert into auth.users (id, email) values ($1, $2)', [r.id, r.email]);
+await db2.exec(fullSql(bk));
+for (const t of T) { const a = (await db2.query(`select to_jsonb(x) j from public.${t} x`)).rows.map(r => JSON.stringify(r.j)).sort();
+  const want = (bk.tables[t]?.rows || []).map(r => JSON.stringify(r)).sort(); assert.deepEqual(a.length, want.length, `full load ${t} row count`); }
+await assert.rejects(db2.exec(fullSql(bk)), /not empty/, '--full refuses a database that already has data');
+await db2.exec('rollback');
+await db2.exec(snapshotSql(bk)); assert.equal((await db2.query('select count(*)::int n from backup.snapshot where taken_at = $1', [ts])).rows[0].n, Object.keys(bk.tables).length);
+console.log(`RESTORE DRILL PASSED (${T.length} tables, overwrite + missing modes, other user untouched; Drive backup file → fresh database)`);

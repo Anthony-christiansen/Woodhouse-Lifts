@@ -5,3 +5,8 @@ supabase/seed/rp_*
 test/node_modules
 node_modules
 test/e2e/shots/
+
+# Database backups belong only in the owner's private Drive, never in this public repo (Playbook §6.5)
+*.json.gz
+woodhouse-lifts-backup-*
+restore.sql
