@@ -12,6 +12,22 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.11.3 — 2026-11-23 · "Nothing personal in the public repo"
+
+The code repository is public (it hosts the live app), so it now holds **no personal information**: no names of the people using the app or anyone else, no email addresses or account names, no health notes, no locations, and no personal training logs attributed to anyone. All of that lives only in the private Google Drive folder.
+
+- Docs (Start Here, Training Logic, Playbook, this changelog): people's names → "the owner" / "a second user"; account and email line, health preference line and raw-export file names removed (kept in the private Drive copy); real meso names → "Meso A / B"; times of day and local time zone removed.
+- Code comments, the new-meso name placeholder and test data: neutral names (`Alex`, `alex@example.com`, "Whole Body Meso A").
+- New `test/privacy.check.mjs`: fails if any real email address or random user/set id appears in a tracked file. Runs with every release (Playbook §4).
+- Playbook §1.8: the public-repo rule.
+- No behavior change. `?v=33`.
+
+**Rollback:** tier A (text only) — `git revert -m 1` the merge, bump `?v=`.
+
+**Note:** this cleans the current files. Earlier versions of these files are still in the repository's git history; see the Start Here doc for the options.
+
+---
+
 ## 1.11.2 — 2026-11-23 · "Percentages only where they mean something"
 
 **Progress screen (More → Progress)**
@@ -33,12 +49,12 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ## 1.11.1 — 2026-11-22 · "Checked against RP"
 
-Haylee's week 3 (her current meso) run through our engine and compared set by set with what RP recommends for the same sets, plus the progression findings from the outside audit. RP's numbers were used only to find our bugs — nothing of RP's is copied.
+A second user's week 3 (their current meso) run through our engine and compared set by set with what RP recommends for the same sets, plus the progression findings from the outside audit. RP's numbers were used only to find our bugs — nothing of RP's is copied.
 
 **What the comparison showed (39 sets)**
 - 23 sets: identical weight and reps.
 - Machines/cables (hip abduction, row, calf raise): we add one small step (+2.5 lb) at the same reps; RP shows a window around last week's weight. Same effort either way (+2.5 lb ≈ one rep in reserve) — kept.
-- Leg press, pulldown: RP held reps where we add one. RP's call almost certainly uses Haylee's in-app soreness/pump ratings, which aren't in the export; with no ratings ours progresses normally — kept.
+- Leg press, pulldown: RP held reps where we add one. RP's call almost certainly uses the user's in-app soreness/pump ratings, which aren't in the export; with no ratings ours progresses normally — kept.
 - Deadlift and light lifts: **real bugs on our side**, fixed below.
 
 **Fixes**
@@ -152,7 +168,7 @@ A usability pass from looking at every main screen as a first-time user, plus a 
 
 ---
 
-## 1.8.0 — 2026-11-21 (00:30 MT) · "Pick your day + reliability"
+## 1.8.0 — 2026-11-21 · "Pick your day + reliability"
 
 **New**
 - **Do the days of a week in any order.** Home → "Do a different day this week" lists the open days; e.g. legs today instead of back. Each day still progresses from the same day last week.
@@ -174,7 +190,7 @@ A usability pass from looking at every main screen as a first-time user, plus a 
 
 ---
 
-## 1.7.0 — 2026-11-20 (23:55 MT) · "Injury guardrails"
+## 1.7.0 — 2026-11-20 · "Injury guardrails"
 
 **New — limits on how fast weight goes up, applied to every suggestion:**
 - **Weekly cap:** at most +10% over last week (ACSM recommends 2–10% increases); one step is still allowed on light loads.
@@ -188,7 +204,7 @@ Docs: Training Logic §4.5, with 2 new sources (ACSM 2009 progression models; Ga
 
 ---
 
-## 1.6.0 — 2026-11-20 (23:40 MT) · "Feedback sets the pace"
+## 1.6.0 — 2026-11-20 · "Feedback sets the pace"
 
 **New — your ratings now change how fast a lift progresses (autoregulation).**
 - Workload **Easy** → faster: one extra step (by-weight lifts: e.g. sled 315×27 → **335×27**, capped at ~10% of the load; by-reps lifts: row 70×11 → **70×13**).
@@ -202,7 +218,7 @@ Docs: Training Logic §4.5, with 2 new sources (ACSM 2009 progression models; Ga
 
 ---
 
-## 1.5.0 — 2026-11-20 (23:15 MT) · "Weight or reps, like RP"
+## 1.5.0 — 2026-11-20 · "Weight or reps, like RP"
 
 **Fixed — suggestions always added a rep, even on lifts that progress by weight.**
 - Found on sled push: last week 315×27 at 1 RIR. RP had 325×28 for week 4; the app had 315 (+1 rep).
@@ -215,7 +231,7 @@ Docs: Training Logic §4.0.
 
 ---
 
-## 1.4.1 — 2026-11-20 (22:55 MT) · "Orange notice every time"
+## 1.4.1 — 2026-11-20 · "Orange notice every time"
 
 **Fixed**
 - **The "under last week" notice now shows on every orange set, not just the first.** When you tick ✓ on a set where reps or weight is below the same set last week (orange ▼), you get a notice each time. Example: "Set 2: Reps down vs last week (6 → 4). One set under last week is fine — rest a little longer and aim to match it next set."
@@ -225,19 +241,19 @@ Docs: Training Logic §4.0.
 
 ---
 
-## 1.4.0 — 2026-11-20 (22:45 MT) · "Stalled means stalled"
+## 1.4.0 — 2026-11-20 · "Stalled means stalled"
 
 **Fixed — lifts were flagged Stalled for hitting the plan.**
-- In a meso the target RIR drops each week, so the plan is +1 rep (or a bit of weight) every week. The old status used a strength estimate that credits reps left in the tank, so +1 rep at 1 less RIR scored **flat** → "Stalled". On AC VII that wrongly flagged 6 lifts that were exactly on plan (bent-over row, overhead triceps extension, lying curl, preacher curl, Pallof press, pec dec).
-- **Now:** inside a meso, each meso week is compared on **performance** (weight × reps, no RIR credit). Across mesos, the same meso week is compared (AC VII week 4 vs AC VI week 4). PRs still use the RIR-credited estimate.
+- In a meso the target RIR drops each week, so the plan is +1 rep (or a bit of weight) every week. The old status used a strength estimate that credits reps left in the tank, so +1 rep at 1 less RIR scored **flat** → "Stalled". On Meso B that wrongly flagged 6 lifts that were exactly on plan (bent-over row, overhead triceps extension, lying curl, preacher curl, Pallof press, pec dec).
+- **Now:** inside a meso, each meso week is compared on **performance** (weight × reps, no RIR credit). Across mesos, the same meso week is compared (Meso B week 4 vs Meso A week 4). PRs still use the RIR-credited estimate.
 - **Stalled** now means no gain two weeks in a row while the target got harder. **Down** = two weeks more than 3% under this meso's best. New **Dipped** = one off week (no flag). New **On track** = beat last week.
-- Every status shows the comparison to last meso, e.g. "vs AC VI week 4: +1 rep at the same weight".
+- Every status shows the comparison to last meso, e.g. "vs Meso A week 4: +1 rep at the same weight".
 - Chart page: new **Performance / Strength estimate** switch (Performance is the default).
 - Statuses are the same on Home, the chart page and the workout flag (one shared rule).
 
 ---
 
-## 1.3.0 — 2026-11-20 (22:10 MT) · "Tap anything on Home"
+## 1.3.0 — 2026-11-20 · "Tap anything on Home"
 
 **New — every number and chart on Home opens a drill-down:**
 - **Workouts this week (e.g. 3/5)** → that meso week's workouts: each day's status (Done / In progress / Not started / Skipped), sets done vs planned, and the muscles trained. Tap a day to open it; ‹ › moves between meso weeks.
@@ -251,7 +267,7 @@ Docs: Training Logic §4.0.
 
 ---
 
-## 1.2.0 — 2026-11-20 (21:55 MT) · "Run it again from an earlier week"
+## 1.2.0 — 2026-11-20 · "Run it again from an earlier week"
 
 **New**
 - **"↻ Run it again" lets you pick which week to restart from.** It copies the meso's plan, then asks which week's logged weights and reps the new week 1 should start from: the last working week before the deload, or up to two weeks back. Example: 7-week meso, deload in week 7 → choose week 6, 5 or 4; pick week 4 and progress again from there. "Don't carry weights" is also an option.
@@ -265,7 +281,7 @@ Docs: Training Logic §4.0.
 
 ---
 
-## 1.1.2 — 2026-11-20 (21:45 MT) · "Progress from the meso before"
+## 1.1.2 — 2026-11-20 · "Progress from the meso before"
 
 **Changed**
 - **Week 1 of a new meso now progresses only from your previous meso** (the one you trained most recently), not from any older meso. This replaces 1.1.1's 6-month rule. Weeks 2+ were already week-over-week and are unchanged.
@@ -274,7 +290,7 @@ Docs: Training Logic §4.0.
 
 ---
 
-## 1.1.1 — 2026-11-20 (21:25 MT) · "Carry-over fix"
+## 1.1.1 — 2026-11-20 · "Carry-over fix"
 
 **Fixed**
 - **Week-1 weights no longer come from very old or rehab sessions.** A new meso's first-week weights only carried over from the last 6 months (replaced in 1.1.2 by "previous meso only"). Found because a chest-supported row suggestion showed 70 × 30 — the numbers from the Sept 2025 post-surgery block.
@@ -285,7 +301,7 @@ Docs: Training Logic §4.0.
 
 ---
 
-## 1.1.0 — 2026-11-20 (22:00 MT) · "Lift insights, splits and weight guardrails"
+## 1.1.0 — 2026-11-20 · "Lift insights, splits and weight guardrails"
 
 **New**
 - **Home stats follow your current mesocycle.**
@@ -322,7 +338,7 @@ Docs: Training Logic §4.0.
 
 ---
 
-## 1.0.0 — 2026-11-20 (21:00 MT) · "Reliable, personal, goal-aware"
+## 1.0.0 — 2026-11-20 · "Reliable, personal, goal-aware"
 
 The first version built for a group: fixes from an external code review, plus training goals, preferences and warm-ups.
 
@@ -359,7 +375,7 @@ The first version built for a group: fixes from an external code review, plus tr
   - Warm-up sets never count as hard sets.
   - "Workouts" now counts finished workouts; training days are counted separately.
 - **Current program:** an active mesocycle always wins over a planned one, so building a future program no longer replaces the one you're running.
-- **Dates:** "today" uses your local date. Cardio logged after 5 PM in Utah was being dated tomorrow.
+- **Dates:** "today" uses your local date. Cardio logged in the evening (in time zones behind UTC) was being dated tomorrow.
 - A finished set kept its finish time after a reload (editing it used to reset the time to "now").
 - "+ set" no longer copies the previous row's save state.
 
@@ -388,7 +404,7 @@ The first version built for a group: fixes from an external code review, plus tr
 - The home dashboard and Exercise progress are now worked out in the database: about 2 KB per load instead of about 3.5 MB of history.
 
 **Data operations**
-- Jayd's RP mesocycle "Jayd's new new" loaded into his account: week 1 logged (70 sets), weeks 2–5 planned. Bodyweight set to 198 lb from his RP data.
+- A second user's RP mesocycle loaded into their account: week 1 logged, later weeks planned.
 
 ---
 
@@ -441,7 +457,7 @@ The first version built for a group: fixes from an external code review, plus tr
 - Week 1 of a new meso carries weights over from the last one.
 
 **Data operations**
-- RP history imported for Anthony: 25 mesocycles from Jun 2023 onward, about 8,180 sets. Kari's, Jayd's, Dakari's and Alexiya's mesos were excluded, and RP's notes and recommendations were not copied.
+- RP history imported for the owner (logged sets only). Other people's mesos in the export were excluded, and RP's notes and recommendations were not copied.
 - Personal RP export files were kept out of the public repo.
 
 ---

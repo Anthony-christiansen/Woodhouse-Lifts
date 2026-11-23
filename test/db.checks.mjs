@@ -7,7 +7,7 @@ const uuid = () => crypto.randomUUID();
 
 export async function runChecks(db) {
   // users (the signup trigger creates profiles), shared exercises
-  await db.exec(`insert into auth.users (id, email) values ('${A}', 'a@x.com'), ('${B}', 'b@x.com');
+  await db.exec(`insert into auth.users (id, email) values ('${A}', 'a@example.com'), ('${B}', 'b@example.com');
                  update public.profiles set bodyweight = 180 where id = '${A}';`);
   const ex = {
     press: { id: uuid(), name: 'Test Press', muscle_group: 'Chest', load_type: 'weighted' },

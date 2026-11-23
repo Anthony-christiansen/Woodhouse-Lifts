@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import * as L from './logic.js?v=32';
-import * as LEARN from './learn.js?v=32';
+import * as L from './logic.js?v=33';
+import * as LEARN from './learn.js?v=33';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -17,7 +17,7 @@ let authReturn = (() => {
   return null;
 })();
 let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
-export const APP_VERSION = '1.11.2'; // keep in sync with CHANGELOG.md
+export const APP_VERSION = '1.11.3'; // keep in sync with CHANGELOG.md
 const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
 const DOC_URL = 'https://docs.google.com/document/d/108s5nwTS3LExaFqsrUZtIvRBqkptd3630kxNq7ud4_o';
 
@@ -40,7 +40,7 @@ const W = v => L.toUnit(v, unit()), toLb = v => L.fromUnit(v, unit());
 const fmtNum = n => (Math.round(n * 100) / 100).toString();
 const bwD = () => W(profile?.bodyweight); // bodyweight in display units
 const fmt = n => (n == null ? '–' : Number(n) % 1 ? Number(n).toFixed(1) : String(Number(n)));
-// Local calendar date (not UTC — an evening workout in Utah must not land on tomorrow).
+// Local calendar date (not UTC — an evening workout behind UTC must not land on tomorrow).
 const today = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
 const dayName = d => d.label || 'Day ' + d.day_index;
 const order = d => d.week * 100 + d.day_index;
@@ -613,7 +613,7 @@ async function renderBuilder() {
           <div class="grow"><b>${t.name}</b><div class="muted small">${t.blurb}</div></div>${S.focus === k ? '<span class="pill on">✓</span>' : ''}</button>`).join('')}
       </div>
       <div class="card"><div class="step-h"><span class="step-n">4</span><b>Name & details</b></div>
-        <label for="name">Name</label><input id="name" value="${esc(S.name)}" placeholder="e.g. Whole Body AC VIII">
+        <label for="name">Name</label><input id="name" value="${esc(S.name)}" placeholder="e.g. Whole Body Meso 3">
         <p class="muted small">Effort is set for you${S.goal === 'hypertrophy' ? '' : ' (main lifts)'} — reps short of failure each week: <b>${Array.from({ length: S.weeks }, (_, i) => { const r = L.targetRir(i + 1, S.weeks, S.goal, 'compound'); return r.deload ? 'light week' : (S.minRirCompound ? Math.max(1, r.rir) : r.rir); }).join(' → ')}</b>. It holds steady for any muscle whose feedback says recovery is behind.</p>
         <label class="switch"><input type="checkbox" id="minRir" ${S.minRirCompound ? 'checked' : ''}> <span>Keep main (compound) lifts at least 1 rep from failure</span></label>
         <div class="muted tiny">Isolation lifts still reach failure in the last hard week. Good for heavy or spine-loading lifts.</div>

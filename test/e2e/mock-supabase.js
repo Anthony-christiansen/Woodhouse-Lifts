@@ -1,4 +1,4 @@
-const meso = { id: 'm1', name: 'Whole Body AC VI', weeks: 5, days_per_week: 4, status: 'active', focus: 'whole', priorities: {} };
+const meso = { id: 'm1', name: 'Whole Body Meso A', weeks: 5, days_per_week: 4, status: 'active', focus: 'whole', priorities: {} };
 const ex = (id, name, mg, lt = 'weighted', kind = 'compound') => ({ id, name, muscle_group: mg, equipment: 'Machine', kind, load_type: lt, rep_min: 8, rep_max: 15, secondary: ['Triceps'], owner_id: null });
 const libRaw = [ex('e1','Incline Dumbbell Press','Chest'), ex('e2','Machine Chest Press','Chest'), ex('e3','Lat Pulldown','Back'), ex('e4','Pull-Up','Back','bodyweight'),
   ex('e5','Hack Squat','Quads'), ex('e6','Leg Extension','Quads','weighted','isolation'), ex('e7','Romanian Deadlift','Hamstrings'), ex('e8','Lying Leg Curl','Hamstrings','weighted','isolation'),
@@ -29,11 +29,11 @@ const fixtures = {
   'rpc:strength_summary': [{ exercise_id: 'e5', name: 'Hack Squat', muscle_group: 'Quads', sessions: 3, first_e1rm: 245, last_e1rm: 258, last_at: now }],
   'rpc:lift_sessions': [1,2,3,4,5].map(i => ({ exercise_id: 'e5', name: 'Hack Squat', muscle_group: 'Quads', session_id: 'x'+i, done_at: `2026-11-0${i}T10:00:00Z`, best_e1rm: 240+i*5, top_weight: 180+i*5, top_reps: 10, n_sets: 3 })),
   muscle_feedback: [{ muscle_group: 'Chest', soreness: 3, workload: 3, joint_pain: 2, workout_days: { week: 1, day_index: 1 } }],
-  profiles: [{ id: 'u1', display_name: 'Anthony', unit: 'lb', bodyweight: 200, equipment: null, avoid_tags: [] }],
+  profiles: [{ id: 'u1', display_name: 'Alex', unit: 'lb', bodyweight: 200, equipment: null, avoid_tags: [] }],
   mesocycles: [meso], exercises: lib, cardio_sessions: cardio, sets: setsRows,
   workout_days: days.map(d => ({ ...d, mesocycles: meso, workout_exercises: wes })),
   workout_exercises: wes.map(w => ({ ...w, workout_days: { id: 'd11', week: 1, day_index: 1, completed_at: '2026-11-10T18:00:00Z', mesocycle_id: 'm1' } })),
-  templates: [{ id: 't1', name: 'Whole Body Split AC VI (from AC V)', focus: 'whole', priorities: {}, weeks: 6, days_per_week: 2, notes: 'AC V structure with the skull crusher swap.',
+  templates: [{ id: 't1', name: 'Whole Body Split B (from A)', focus: 'whole', priorities: {}, weeks: 6, days_per_week: 2, notes: 'Same structure as A with the skull crusher swap.',
     plan: [{ label: 'Workout 1', slots: [{ muscle: 'Quads', exerciseId: 'e5', sets: 2 }, { muscle: 'Cardio', exerciseId: 'c1', sets: 1 }] }, { label: 'Workout 2', slots: [{ muscle: 'Chest', exerciseId: 'e1', sets: 2 }] }] }],
 };
 function builder(table) {
@@ -57,6 +57,6 @@ function builder(table) {
   return b;
 }
 export function createClient() {
-  return { from: builder, rpc: (fn, args) => { window.__lastRpc = { fn, args }; if (fn === 'create_mesocycle') (window.__creates = window.__creates || []).push(args); return builder('rpc:' + fn); }, auth: { getSession: async () => ({ data: { session: { user: { id: 'u1', email: 'anthony@example.com' } } } }),
+  return { from: builder, rpc: (fn, args) => { window.__lastRpc = { fn, args }; if (fn === 'create_mesocycle') (window.__creates = window.__creates || []).push(args); return builder('rpc:' + fn); }, auth: { getSession: async () => ({ data: { session: { user: { id: 'u1', email: 'alex@example.com' } } } }),
     onAuthStateChange() {}, signOut: async () => {} } };
 }

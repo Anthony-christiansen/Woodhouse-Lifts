@@ -240,7 +240,7 @@ The weight is prefilled in grey and the target reps show as the placeholder. Tap
 
 Each week the target RIR drops by one, so each week asks for one rep's worth more effort. RP-style programs take that in one of two ways, per lift — and your imported mesos show both:
 
-| Style | What changes week to week | Examples from AC VII |
+| Style | What changes week to week | Examples from Meso B |
 |---|---|---|
 | **By weight** | +1 load step, **same reps** | Pec dec 175×8 → 180×8 → 185×8 → 190×8 · Sled push 305×27 → 315×27 → 325 · Leg press 290 → 295 → 300 |
 | **By reps** | **+1 rep**, same weight | Bent-over row 70×9 → 70×10 → 70×11 → 70×12 · Preacher curl 35×7 → 35×8 → 35×9 → 35×10 |
@@ -254,7 +254,7 @@ Each week the target RIR drops by one, so each week asks for one rep's worth mor
 
 **Light loads (v1.11.1).** One step can be far more than one rep's worth of effort on a light lift: 45 → 50 lb on a dumbbell row is +11%, while one RIR is ≈ +3%. So the step's reps are checked with the §4.1 effort model: if keeping last week's reps would be clearly harder than the RIR drop asks (more than ¾ of a rep), the reps are set to what fits the heavier weight — 45×12 at 2 RIR → **50×9** at 1 RIR, not 50×12. A small step that only rounds differently keeps the reps (rope crunch 57.5×7 → **60×7**). The same check applies when reps outgrow the range and the weight goes up a step. On a "faster" week the extra step is judged at the normal step, because the "felt easy" rating says you had more in reserve than logged.
 
-**When a cap lowers the weight (v1.11.1).** If the weekly +5 lb / +5% cap (§4.5) cuts a suggestion, the reps are re-solved for the capped weight and are never below last week's at a weight that isn't lighter. Found comparing against RP on Haylee's week 3: deadlift 95×12 was re-set toward the 3–8 range (107.5×8), capped to 97.5, but kept 8 reps — far easier than last week. Now: **97.5×12**, with a note that the weight climbs a step a week until the reps are back in range.
+**When a cap lowers the weight (v1.11.1).** If the weekly +5 lb / +5% cap (§4.5) cuts a suggestion, the reps are re-solved for the capped weight and are never below last week's at a weight that isn't lighter. Found comparing against RP on a real meso's week 3: deadlift 95×12 was re-set toward the 3–8 range (107.5×8), capped to 97.5, but kept 8 reps — far easier than last week. Now: **97.5×12**, with a note that the weight climbs a step a week until the reps are back in range.
 
 The exercise line shows the style, e.g. "progresses +10 lb" or "progresses by reps". Change the weight yourself and the reps re-target as in §4.1. Deloads and joint-pain holds never add weight.
 
@@ -348,11 +348,11 @@ Getting stronger needs progressive load, but most non-contact soft-tissue injuri
 | **Rep jumps** | Never more than **+2 reps** a week at the same or heavier weight. | 50×8 at 3 RIR → 0 RIR = 50×10, not 50×11. |
 | **Your own big jumps (manual bumps)** | Allowed. Typing a weight above the automatic limit (the smaller of +5 lb/2.5 kg and +5%) shows a "Manual bump" note with where auto increases stop. Over 1.5× asks if it's a typo. Neither blocks you. | 315 → 335: "Manual bump: +20 lb … Auto increases stop at 320". |
 
-When a guardrail trims a suggestion, the exercise note says so (e.g. "auto increases stop at +5 lb a week — go heavier by hand if you want", "capped at about +5% a week" or "at this meso's +20% ceiling — adding reps instead"). Deload weeks are never affected. The 5% and 20% limits are deliberately conservative: 5% sits at the low end of the ACSM 2–10% range and matches where Anthony's own reps held (§4.6); no trial has tested these exact caps.
+When a guardrail trims a suggestion, the exercise note says so (e.g. "auto increases stop at +5 lb a week — go heavier by hand if you want", "capped at about +5% a week" or "at this meso's +20% ceiling — adding reps instead"). Deload weeks are never affected. The 5% and 20% limits are deliberately conservative: 5% sits at the low end of the ACSM 2–10% range and matches where one lifter's own reps held (§4.6); no trial has tested these exact caps.
 
 ### 4.6 How big a weight step is — from your own history
 
-Anthony's logged history (2023–2026, **2,376** week-to-week changes on weighted lifts; 1,247 by adding weight, 1,129 by adding reps):
+One lifter's logged history (2023–2026, **2,376** week-to-week changes on weighted lifts; 1,247 by adding weight, 1,129 by adding reps):
 
 | Weight increase that week | Times | Reps held or went up |
 |---|---|---|
@@ -412,7 +412,7 @@ The rules are checked in order, and the first one that matches wins:
 | 7 | Everything else (e.g., healed just in time) | No change | You're near your productive limit, so hold and let the RIR drop do the work |
 
 **v1.9 — volume follows the muscle's priority, with a weekly limit and a reason every time.**
-- **Emphasize:** the rules above (+1 or +2 when recovery and workload were good). Mesos with no stored priorities (imported from RP, e.g. AC VII) keep these rules.
+- **Emphasize:** the rules above (+1 or +2 when recovery and workload were good). Mesos with no stored priorities (imported from RP, e.g. Meso B) keep these rules.
 - **Grow:** when recovery was good, sets are **held if performance improved** ("no extra volume is needed yet"); **+1** only if performance didn't move. Never +2. **v1.11.1 (audit):** with **no performance comparison yet** (first session of a lift, no history) sets are **held** — missing data is not a plateau.
 - **Missing data is never evidence for more volume (v1.11.1).** A skipped pump or a missing performance comparison can't unlock +2; at most +1 on Emphasize. Pump is optional in the rating sheet (a growth driver it isn't, §1.6), so "All normal" really is one tap.
 - **Maintain:** never adds sets (it can still remove them).
@@ -492,7 +492,7 @@ The cardio **progression indicator** compares session load (minutes × RPE) with
 
 **Progression always comes from the meso before.**
 - **Weeks 2+** progress week over week inside the current meso: each set's target comes from the same set last week (§4).
-- **Week 1** of a new meso progresses from your **previous meso** only — the one you trained most recently, finished or not — using its last working (non-deload) week for that exercise. The reps are set back to the new week-1 RIR target. Example: AC VII ends with bent-over row 70 × 12 at 0 RIR → AC VIII week 1 starts from that.
+- **Week 1** of a new meso progresses from your **previous meso** only — the one you trained most recently, finished or not — using its last working (non-deload) week for that exercise. The reps are set back to the new week-1 RIR target. Example: Meso B ends with bent-over row 70 × 12 at 0 RIR → Meso C week 1 starts from that.
 - **Run it again from a chosen week.** On a meso's page, "↻ Run it again" copies the plan and asks which week to start from: the last working week before the deload, or up to two weeks before it (weeks with nothing logged can't be picked). The new meso's week 1 then starts from **that week's** logged weights and reps and progresses week over week from there. Example: a 7-week meso (week 7 = deload) where weeks 5–6 went badly → pick **week 4**. If week 4 was 70 × 12 at 1 RIR, the new week 1 (3 RIR) starts at 70 lb for about 10 reps, then builds back past where you stalled. "Don't carry weights" leaves week 1 for you to fill in.
 - **An exercise that wasn't in the previous meso gets no auto weight.** If a meso changes completely there is no reliable way to translate one exercise into another, so you pick the weight. Older history for that exact exercise is shown for reference only, e.g. "No (bending, twisting…) wk 3 (70×30, 70×30) — not in your last meso, so not used". Mesos are labelled by name and week, never calendar dates.
 - **Historical notice.** If last week's strength estimate is more than 5% below your all-time best for that lift, the exercise shows "📌 N% below your all-time best estimate — for reference only". It never changes the targets. Example: Incline press last week ≈106, all-time best ≈130 → "18% below".
@@ -532,11 +532,11 @@ Example: Home shows "Sets this week 42" → tap → Quads 12, Back 10, … → t
 
 **Why this changed in 1.4.0.** In a mesocycle the target RIR drops every week (3 → 2 → 1 → 0). Following the plan exactly means adding about one rep, or a little weight, each week. The strength estimate in §1.7 gives credit for reps left in the tank, so +1 rep at 1 less RIR comes out **flat**. The old rule read that as "Stalled" — it was flagging people for doing exactly what the program asked.
 
-Example from real data (bent-over row, AC VII): 70×9 @3 → 70×10 @2 → 70×11 @1 → 70×12 @0. Estimate = 70 × (1 + 12/30) = 98 every week → old rule: **Stalled**. New rule: performance 91 → 93 → 96 → 98 → **On track**, and vs AC VI week 4 (70×11 @0): **+1 rep at the same weight**.
+Example from real data (bent-over row, Meso B): 70×9 @3 → 70×10 @2 → 70×11 @1 → 70×12 @0. Estimate = 70 × (1 + 12/30) = 98 every week → old rule: **Stalled**. New rule: performance 91 → 93 → 96 → 98 → **On track**, and vs Meso A week 4 (70×11 @0): **+1 rep at the same weight**.
 
 **How a lift is judged now:**
 - **Inside the current meso**, by meso week (not calendar dates): **performance** = weight × (1 + reps/30), with no RIR credit. That rises when you add reps or weight. Each meso week uses its best session. Deload weeks, warm-ups and myo-rep mini-sets are left out.
-- **Against the previous meso**: the same meso week, so the same target RIR (AC VII week 4 vs AC VI week 4). This is where real strength gains show. It's shown under the status, e.g. "vs AC VI week 4: +1 rep at the same weight".
+- **Against the previous meso**: the same meso week, so the same target RIR (Meso B week 4 vs Meso A week 4). This is where real strength gains show. It's shown under the status, e.g. "vs Meso A week 4: +1 rep at the same weight".
 - **PRs** still use the RIR-credited estimate (§1.7): a true strength record that beats every earlier one by more than 1%.
 
 Rules, checked in this order:
@@ -550,7 +550,7 @@ Rules, checked in this order:
 | On track | Latest week beat last week (any added rep or weight) | Keep going. |
 | Held / New | Same as last week, or first week of the meso | Aim for +1 rep. Week 1 shows the comparison to the last meso. |
 
-**AC VII check (Nov 21, 2026).** Under the old rule 6 lifts read Stalled (bent-over row, overhead triceps extension, lying curl, preacher curl, Pallof press, pec dec) — all of them were +1 rep/week exactly on plan. Under the new rule they're On track, and each is ahead of AC VI's same week (e.g. preacher curl 35×10 vs 35×9, Pallof 25×24 vs 25×23). Leg extension (200×8 → 205×5) and machine lateral raise (105×7 → 105×5) show **Dipped** for week 4.
+**Meso B check (Nov 21, 2026).** Under the old rule 6 lifts read Stalled (bent-over row, overhead triceps extension, lying curl, preacher curl, Pallof press, pec dec) — all of them were +1 rep/week exactly on plan. Under the new rule they're On track, and each is ahead of Meso A's same week (e.g. preacher curl 35×10 vs 35×9, Pallof 25×24 vs 25×23). Leg extension (200×8 → 205×5) and machine lateral raise (105×7 → 105×5) show **Dipped** for week 4.
 
 **Chart page** has two views: **Performance** (default; what you lifted, rises through each meso and resets a little at each easier week 1) and **Strength estimate** (with RIR credit; flat when you hit the plan, steps up meso to meso).
 
