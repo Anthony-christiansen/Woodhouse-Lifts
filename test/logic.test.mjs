@@ -59,8 +59,8 @@ const assisted = { load_type: 'assisted', equipment: 'Machine', rep_min: 8, rep_
 assert.equal(L.suggestSet({ prev: { weight: 50, reps: 15 }, ex: assisted, targetRir: 1, prevTargetRir: 2, unit: 'lb' }).weight, 47.5);
 
 // Set adjustment (doc §5)
-assert.deepEqual(L.setAdjustment({ R: 0, L: 0, J: 0, P: 1, F: 1 }).delta, 2);
-assert.equal(L.setAdjustment({ R: 1, L: 1, J: 0, P: 3, F: 0 }).delta, 1);
+assert.deepEqual(L.setAdjustment({ R: 0, L: 0, J: 0, P: 1, F: 0, stalls: 3 }).delta, 2);
+assert.equal(L.setAdjustment({ R: 1, L: 1, J: 0, P: 3, F: 0, stalls: 2 }).delta, 1);
 assert.equal(L.setAdjustment({ R: 3, L: 0, J: 0 }).delta, -1);
 assert.equal(L.setAdjustment({ R: 2, L: 1, J: 0, F: -1 }).delta, -1);
 assert.equal(L.setAdjustment({ R: 0, L: 0, J: 3 }).flag != null, true);
@@ -444,8 +444,8 @@ console.log('GUARDRAIL TESTS PASSED');
 
 // --- Review #2: low joint pain limits volume increases ---
 {
-  assert.equal(L.setAdjustment({ R: 0, L: 0, J: 0, P: 0, F: 1 }).delta, 2, 'everything great → +2');
-  assert.equal(L.setAdjustment({ R: 0, L: 0, J: 1, P: 0, F: 1 }).delta, 1, 'any joint pain → at most +1');
+  assert.equal(L.setAdjustment({ R: 0, L: 0, J: 0, P: 0, F: 0, stalls: 3 }).delta, 2, 'long stall, everything great → +2');
+  assert.equal(L.setAdjustment({ R: 0, L: 0, J: 1, P: 0, F: 0, stalls: 3 }).delta, 1, 'any joint pain → at most +1');
   console.log('JOINT PAIN VOLUME TESTS PASSED');
 }
 
@@ -458,13 +458,13 @@ console.log('GUARDRAIL TESTS PASSED');
   assert.equal(L.weeklyTarget('Chest', 'grow', 'custom', 'hypertrophy'), 8);
   assert.equal(L.weeklyTarget('Chest', 'maintain', 'custom', 'hypertrophy'), 4);
   // volume rules by priority
-  const good = { R: 0, L: 1, J: 0, P: 2, F: 0 };
+  const good = { R: 0, L: 1, J: 0, P: 2, F: 0, stalls: 2 };
   assert.equal(L.setAdjustment({ ...good, priority: 'emphasize' }).delta, 1);
   assert.equal(L.setAdjustment({ ...good, priority: 'grow' }).delta, 1, 'grow: performance flat → +1');
   const g = L.setAdjustment({ ...good, F: 1, priority: 'grow' });
   assert.equal(g.delta, 0, 'grow: performance up → hold'); assert.match(g.why, /no extra volume is needed yet/);
   assert.equal(L.setAdjustment({ ...good, priority: 'maintain' }).delta, 0);
-  assert.equal(L.setAdjustment({ R: 0, L: 0, J: 0, P: 0, F: 0, priority: 'grow' }).delta, 1, 'grow never jumps +2');
+  assert.equal(L.setAdjustment({ R: 0, L: 0, J: 0, P: 0, F: 0, stalls: 5, priority: 'grow' }).delta, 1, 'grow never jumps +2');
   assert.ok(L.setAdjustment({ R: 3 }).why.length > 10, 'every rule explains itself');
   // weekly cap: two sessions can't add 4 sets in one week
   const ex = [{ id: 'a', target_sets: 3 }];
@@ -537,11 +537,11 @@ console.log('GUARDRAIL TESTS PASSED');
 
   // Audit A: missing performance is not a plateau.
   assert.equal(L.setAdjustment({ R: 0, L: 1, J: 0, P: 2, F: null, priority: 'grow' }).delta, 0, 'grow + no F → hold');
-  assert.equal(L.setAdjustment({ R: 0, L: 1, J: 0, P: 2, F: 0, priority: 'grow' }).delta, 1, 'grow + flat F → +1');
+  assert.equal(L.setAdjustment({ R: 0, L: 1, J: 0, P: 2, F: 0, stalls: 2, priority: 'grow' }).delta, 1, 'grow + flat F twice → +1');
   // +2 needs a rated low pump and a performance comparison; a skipped pump is not "low stimulus".
-  assert.equal(L.setAdjustment({ R: 0, L: 0, J: 0, P: null, F: 0 }).delta, 1, 'pump not rated → +1 max');
-  assert.equal(L.setAdjustment({ R: 0, L: 0, J: 0, P: 1, F: null }).delta, 1, 'no performance → +1 max');
-  assert.equal(L.setAdjustment({ R: 0, L: 0, J: 0, P: 1, F: 0 }).delta, 2);
+  assert.equal(L.setAdjustment({ R: 0, L: 0, J: 0, P: null, F: 0, stalls: 3 }).delta, 1, 'pump not rated → +1 max');
+  assert.equal(L.setAdjustment({ R: 0, L: 0, J: 0, P: 1, F: null, stalls: 3 }).delta, 0, 'no performance → hold (v1.16)');
+  assert.equal(L.setAdjustment({ R: 0, L: 0, J: 0, P: 1, F: 0, stalls: 3 }).delta, 2);
 
   // RP comparison (a real meso's wk 3, deadlift): a capped "re-set" must re-solve reps for the capped weight.
   const dl = { name: 'Deadlift', load_type: 'weighted', equipment: 'Barbell', kind: 'compound', rep_min: 3, rep_max: 8, tags: ['axial'] };
@@ -692,7 +692,7 @@ console.log('GUARDRAIL TESTS PASSED');
   }
   assert.equal(L.matchPreset({ ...wh, Chest: 'emphasize' }), null, 'an adjusted set of priorities is not a preset');
 
-  // The library: lots of templates, filtered to the days you train, each one growing every muscle it grows 2×/week.
+  // The library: lots of templates, filtered to the days you train. v1.16.0: 2× is ranked first, 1× templates say which muscles get one day.
   let n = 0; const lib2 = [];
   for (const m of L.MUSCLES) for (let i = 1; i <= 5; i++) lib2.push({ id: 'c' + (++n), name: `${m} ${i}`, muscle_group: m, kind: i <= 2 ? 'compound' : 'isolation', load_type: 'weighted', equipment: 'Machine', rep_min: 8, rep_max: 15 });
   let total = 0, runs = 0;
@@ -709,7 +709,8 @@ console.log('GUARDRAIL TESTS PASSED');
         const got = L.placedSets(r.days);
         for (const m of L.MUSCLES) {
           const p = L.normPriority(r.priorities[m], t.focus), freq = r.days.filter(d => d.slots.some(s => s.muscle === m)).length;
-          if (p === 'emphasize' || p === 'grow') assert.ok(freq >= 2, `${t.id} ${goal} ${minutes}: ${m} trained ${freq}×/week`);
+          if ((p === 'emphasize' || p === 'grow') && !t.once.includes(m)) assert.ok(freq >= 2, `${t.id} ${goal} ${minutes}: ${m} trained ${freq}×/week`);
+          if ((p === 'emphasize' || p === 'grow') && t.once.includes(m)) assert.ok(freq >= 1 && got[m] >= 1, `${t.id}: 1× ${m} still placed`);
           if (p === 'maintain') assert.ok(got[m] >= 1, `${t.id} ${goal} ${minutes}: Maintain ${m} never 0`);
           if (pr[m] === 'emphasize') assert.equal(p, 'emphasize', `${t.id}: emphasized muscles are never moved`);
         }
@@ -718,8 +719,9 @@ console.log('GUARDRAIL TESTS PASSED');
     }
   }
   assert.ok(total >= 80, `library size ${total}`);
-  // Once-a-week set-ups are left out of the library (they stay available when building from scratch).
-  assert.ok(!L.templateCatalog(3).some(t => t.split === 'ppl') && !L.templateCatalog(2).some(t => t.split === 'upper_lower'));
+  // v1.16.0: once-a-week set-ups are offered (marked, ranked last) instead of hidden.
+  const ppl3 = L.templateCatalog(3).filter(t => t.split === 'ppl');
+  assert.ok(ppl3.length && ppl3.every(t => t.once.length && !t.recommended), '3-day PPL offered, marked 1×');
 
   // Suggested: fresh → Balanced on the recommended split; carries on from the last meso's choices or focus.
   const s0 = L.suggestPlan({ days: 3 });
@@ -785,4 +787,50 @@ console.log('GUARDRAIL TESTS PASSED');
   assert.ok(has('Back Squat', 'legs') && has('Deadlift', 'legs') && !has('Leg Press', 'legs') && !has('Belt Squat', 'legs') && !has('Lying Leg Curl', 'legs'));
   assert.ok(has('Hanging Leg Raise', 'abs') && has('Ab Wheel Rollout', 'abs') && !has('Plank (sec)', 'abs') && !has('Pallof Press', 'abs'));
   console.log('V1.14.0 BODY AREA TESTS PASSED (11 areas × 13 muscles on the shared library)');
+}
+
+// --- v1.16.0: audit training-logic changes (T1 frequency, T3 repeated stalls, T4 effort modes, T7 demotion consent) ---
+{
+  // T3 longitudinal: one flat session holds; a repeat adds; improving / missing / just-added hold; soreness or pump alone never adds
+  const base = { R: 0, L: 1, J: 0, P: 2, F: 0, priority: 'grow' };
+  assert.equal(L.setAdjustment(base).delta, 0, 'single flat session → hold (default stalls = 1)');
+  assert.match(L.setAdjustment(base).why, /isn.t a plateau yet/);
+  assert.equal(L.setAdjustment({ ...base, stalls: 2 }).delta, 1, 'second flat session in a row → +1');
+  assert.equal(L.setAdjustment({ ...base, stalls: 2, justAdded: true }).delta, 0, 'cooldown after an increase');
+  assert.equal(L.setAdjustment({ ...base, F: 1, stalls: 4 }).delta, 0, 'improving → hold, however long');
+  assert.equal(L.setAdjustment({ ...base, F: null, stalls: 4 }).delta, 0, 'no comparison → hold');
+  assert.equal(L.setAdjustment({ R: 0, L: 0, J: 0, P: 0, F: 1, stalls: 9, priority: 'emphasize' }).delta, 0, 'zero soreness + low pump alone never add');
+  assert.equal(L.setAdjustment({ R: 0, L: 0, J: 0, P: 0, F: 0, stalls: 2, priority: 'emphasize' }).delta, 1, 'emphasize: +2 needs 3+ stalls');
+  assert.equal(L.setAdjustment({ R: 2, L: 1, J: 0, P: 0, F: 0, stalls: 3 }).delta, 0, 'recovery not good → no add');
+  assert.equal(L.setAdjustment({ R: 0, L: 1, J: 3, F: 0, stalls: 3 }).delta, -1, 'joint pain still reduces');
+  // simulated 6 weeks for one muscle: flat, flat, flat(just added), up, flat, flat → adds only at weeks 2 and 6
+  const seq = [0, 0, 0, 1, 0, 0]; let run = 0, added = false; const deltas = [];
+  for (const F of seq) { run = F <= 0 ? run + 1 : 0; const d = L.setAdjustment({ ...base, F, stalls: run, justAdded: added }).delta; deltas.push(d); added = d > 0; }
+  assert.deepEqual(deltas, [0, 1, 0, 0, 0, 1], 'no oscillation: ' + deltas);
+  // T1: 1x templates kept, after 2x ones, and say which muscles get one day
+  for (const d of [2, 3, 4, 5, 6]) { const cat = L.templateCatalog(d);
+    const firstOnce = cat.findIndex(t => t.once.length);
+    for (const f of Object.keys(L.FOCI)) { const c = cat.filter(t => t.preset === f); const i = c.findIndex(t => t.once.length);
+      if (i >= 0) assert.ok(c.slice(i).every(t => t.once.length), `${d}d ${f}: 2× templates first`); }
+    assert.ok(cat.every(t => !t.recommended || !t.once.length), 'a 1× template is never the recommended one');
+    if (firstOnce >= 0) assert.ok(cat[firstOnce].once.every(m => L.MUSCLES.includes(m)));
+  }
+  assert.ok(L.templateCatalog(3).some(t => t.once.length), '3 days: some 1× templates now offered');
+  const sg = L.suggestPlan({ days: 3, last: null, fresh: true }); const tpl = sg?.templateId ? L.templateById(sg.templateId) : null;
+  if (tpl) assert.equal(tpl.once.length, 0, 'the suggestion stays 2× where it can');
+  // T4: effort modes
+  assert.equal(L.effortRir(5, 6, 'hypertrophy', 'compound', 'standard').rir, L.targetRir(5, 6, 'hypertrophy', 'compound').rir);
+  assert.equal(L.effortRir(5, 6, 'hypertrophy', 'compound', 'main1').rir, Math.max(1, L.targetRir(5, 6, 'hypertrophy', 'compound').rir));
+  for (let w = 1; w <= 5; w++) { const c = L.effortRir(w, 6, 'hypertrophy', 'compound', 'conservative'), i = L.effortRir(w, 6, 'hypertrophy', 'isolation', 'conservative');
+    assert.ok(c.rir >= 2 && i.rir >= 1, `conservative wk${w}: ${c.rir}/${i.rir}`); }
+  assert.ok(L.effortRir(6, 6, 'hypertrophy', 'compound', 'conservative').deload, 'light week unchanged');
+  assert.equal(L.effortOf('nonsense'), 'standard');
+  // T7: demotion is a proposal — fitPlan with demote:false never changes priorities
+  const lib = (await import('./seedlib.mjs')).seedLibrary();
+  const pr = L.presetPriorities('balanced');
+  const r1 = L.fitPlan({ plan: Array.from({ length: 2 }, () => ({ label: 'D', slots: [] })), priorities: pr, focus: 'whole', goal: 'hypertrophy', split: 'full_body_split', library: lib, minutes: 45, demote: false });
+  assert.deepEqual(r1.demoted, []); assert.deepEqual(r1.priorities, pr);
+  const r2 = L.fitPlan({ plan: Array.from({ length: 2 }, () => ({ label: 'D', slots: [] })), priorities: pr, focus: 'whole', goal: 'hypertrophy', split: 'full_body_split', library: lib, minutes: 45 });
+  assert.ok(r2.demoted.length > 0, 'the proposal still exists when time is short');
+  console.log('V1.16.0 TRAINING-LOGIC TESTS PASSED (stalls, cooldown, 1× templates, effort modes, demotion consent)');
 }

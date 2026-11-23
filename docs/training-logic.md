@@ -42,7 +42,7 @@ Last updated: November 20, 2026. This doc explains how the Woodhouse Lifts app b
 - **Twice a week beat once a week** in an earlier analysis, which is the practical floor for muscles you're focusing on. Schoenfeld et al., 2016, *Sports Med*. [doi:10.1007/s40279-016-0543-8](https://doi.org/10.1007/s40279-016-0543-8)
 - **Pelland 2026** found frequency's effect on hypertrophy was compatible with negligible, while it clearly helped strength (see 1.1).
 
-**App rule:** Templates hit focused muscles **at least 2× a week**. Splitting volume across days also keeps the sets per muscle per session manageable.
+**App rule (v1.16.0):** twice a week is the **practical default**, not a requirement. At equal weekly sets the evidence that 2× beats 1× is weak and mixed (Pelland et al. 2026; ACSM 2026), so templates that train a growing muscle once a week are still offered. They're ranked after the 2× ones and say which muscles get one day. Splitting volume across days mainly keeps each session's sets manageable.
 
 ### 1.5 Exercise selection and variation
 
@@ -222,7 +222,7 @@ This is a product choice, not a research finding: continuing what you were doing
 | Arms | biceps, triceps | legs, calves |
 
 - The library is every preset × every split that fits your days: 14–21 for any number of days, 84 in all.
-- A set-up is listed only if **every muscle it grows can be trained on 2+ days a week**, because twice a week grows more than once at equal volume (§1.4). That rules out 3-day Push/Pull/Legs and 2-day Upper/Lower, which stay available From scratch.
+- **v1.16.0 (audit T1):** every set-up is listed. Ones where every growing muscle gets 2+ days come first and can be "fits best"; ones that train a growing muscle once a week (e.g. 3-day Push/Pull/Legs, 2-day Upper/Lower) come after, labelled "Once a week: …". Before 1.16.0 these were hidden, which overstated the evidence for frequency at equal volume.
 - Which presets exist, and what they hold, are judgement calls, not research findings. Specialising one area while maintaining others is a common way to fit recovery around a priority (§1.1: volume is the lever, recovery is shared).
 - These are the app's own set-ups, not copies of any other program.
 
@@ -278,6 +278,31 @@ Before autofill picks anything, it applies the person's own preferences (Setting
 These are personal choices, not medical rules. Nothing is removed from the library, and anything can still be added by hand. With no preferences set, autofill output is identical to before.
 
 ---
+
+### 2.5 Effort style, and asking before Maintain (v1.16.0)
+
+**Effort style** (builder step 3, audit T4). How close to failure the meso goes:
+
+| Style | Main (compound) lifts | Other lifts | Who it suits |
+|---|---|---|---|
+| **Standard** (default) | the RP-style ramp, down to 0–1 reps left in the last hard week | same | Experienced lifters who like the RP ramp |
+| **Main lifts ≥1** | never below 1 rep left | ramp to 0 | The old "keep main lifts ≥1" switch |
+| **Conservative** | never below 2 reps left | never below 1 | Beginners, lower-fatigue training, sore joints |
+
+Light weeks are unchanged in every style. Why: closer to failure can help growth, but the best distance is uncertain and self-rated RIR is noisy (Robinson 2024; Refalo 2023). ACSM 2026 finds no consistent extra benefit from always training to failure. The 3 → 0 ramp is a programming choice, not a research requirement. An exercise added mid-meso (§5.3a-2) follows the meso's style, read back from today's targets.
+
+**Grow → Maintain is a suggestion (audit T7).** When the time you allow can't fit growth-level sets for every Grow muscle, the builder shows *"Suggestion: moving X, Y to Maintain frees sets for the rest"* with **Move to Maintain** / **Keep as Grow**. Before 1.16.0 it made the change itself and told you afterwards. If you keep them as Grow, the "not enough time to grow …" notice stays so the trade-off is visible.
+
+### 2.6 Which numbers are evidence and which are product rules (v1.16.0)
+
+| Number | Label | Note |
+|---|---|---|
+| Growth floors (≥6 large / ≥4 small / ≥3 minor direct sets a week), 22-set weekly cap, 1-set maintain floor | **Heuristic** (starting guardrails) | ~10 sets/muscle/week is a practical starting point with diminishing returns, but there's no universal minimum or maximum (Pelland 2026). Direct sets undercount work from compound lifts. |
+| 2× a week | **Practical default** | Not required at equal weekly sets (§2.4). |
+| RIR ramp and final light week | **RP-style choice** | See effort styles above. A deload every meso isn't proven growth-optimal (2024 deload RCT). |
+| +1/+2 sets after 2/3 stalled sessions; +2 weekly cap | **Heuristic** | Chosen to damp noise; not tested. |
+| +5% weekly / +20% per meso load ceilings; 2-rep cap | **Protective rule** | §4.5. |
+| ±1% "on track / stalled" band on estimated strength | **Heuristic, noisy** | Estimated 1RM from reps + RIR is a training-performance proxy, not muscle growth; high-rep, bodyweight and assisted sets compare less reliably (audit T6). |
 
 ## 3. What you rate, and when
 
@@ -426,7 +451,7 @@ Getting stronger needs progressive load, but most non-contact soft-tissue injuri
 | **Rep jumps** | Never more than **+2 reps** a week at the same or heavier weight. | 50×8 at 3 RIR → 0 RIR = 50×10, not 50×11. |
 | **Your own big jumps (manual bumps)** | Allowed. Typing a weight above the automatic limit (the smaller of +5 lb/2.5 kg and +5%) shows a "Manual bump" note with where auto increases stop. Over 1.5× asks if it's a typo. Neither blocks you. | 315 → 335: "Manual bump: +20 lb … Auto increases stop at 320". |
 
-When a guardrail trims a suggestion, the exercise note says so (e.g. "auto increases stop at +5 lb a week — go heavier by hand if you want", "capped at about +5% a week" or "at this meso's +20% ceiling — adding reps instead"). Deload weeks are never affected. The 5% and 20% limits are deliberately conservative: 5% sits at the low end of the ACSM 2–10% range and matches where one lifter's own reps held (§4.6); no trial has tested these exact caps.
+When a guardrail trims a suggestion, the exercise note says so (e.g. "auto increases stop at +5 lb a week — go heavier by hand if you want", "capped at about +5% a week" or "at this meso's +20% ceiling — adding reps instead"). Deload weeks are never affected. **Wording (v1.16.0, audit T5):** "+5%" means *up to about 5%, except where the smallest weight step is bigger* (then one step, or reps instead). These limits are protective product rules, not physiological thresholds. The 5% and 20% limits are deliberately conservative: 5% sits at the low end of the ACSM 2–10% range and matches where one lifter's own reps held (§4.6); no trial has tested these exact caps.
 
 ### 4.6 How big a weight step is — from your own history
 
@@ -486,12 +511,15 @@ The rules are checked in order, and the first one that matches wins:
 | 3 | F = Down and R ≥ 2 | −1 set | Performance is dropping while recovery is only barely keeping up, which points to accumulated fatigue (1.7) |
 | 4 | J = 2 | No change | Joint stress present, so hold |
 | 5 | L = 3 (too much) | No change | Already at your limit |
-| 6 | R ≤ 1 and L ≤ 1 and F ≥ Same (or no comparison yet) | +1 set, or +2 if R = 0, L = 0, P rated ≤ 1 and F known | Recovered with room to spare and performance is holding, so add volume, the main growth lever (1.1) |
+| 6 | R ≤ 1 and L ≤ 1, and performance **flat or down 2+ sessions in a row** (v1.16.0) | +1 set; +2 only after **3+** flat sessions with R = 0, L = 0, P rated ≤ 1 and no joint pain | Recovered with room to spare but performance has stalled more than once, so add volume, the main growth lever (1.1) |
+| 6a | R ≤ 1 and L ≤ 1 but performance **improved**, has **no comparison**, stalled **only once**, or sets were **added last week** (v1.16.0) | No change | One session is weak evidence; an increase gets a week to show (audit T3) |
 | 7 | Everything else (e.g., healed just in time) | No change | You're near your productive limit, so hold and let the RIR drop do the work |
 
+**v1.16.0 — volume needs repeated evidence (audit T3).** A single flat session no longer adds sets: performance must be flat or down for **two comparable sessions in a row** (same day of the meso, light weeks excluded), with good recovery and workload. Sets are **held** while performance is improving, when there's no earlier session to compare, and for one week after an increase (so the change can show). Zero soreness or a low pump never adds sets on their own. These thresholds (2 and 3 sessions) are **product heuristics**, chosen to damp noise in a single session's numbers and in self-rated RIR; no trial has tested them. Simulated 6-week run (flat, flat, flat, up, flat, flat) → +1 only at weeks 2 and 6, no oscillation.
+
 **v1.9 — volume follows the muscle's priority, with a weekly limit and a reason every time.**
-- **Emphasize:** the rules above (+1 or +2 when recovery and workload were good). Mesos with no stored priorities (imported from RP, e.g. Meso B) keep these rules.
-- **Grow:** when recovery was good, sets are **held if performance improved** ("no extra volume is needed yet"); **+1** only if performance didn't move. Never +2. **v1.11.1 (audit):** with **no performance comparison yet** (first session of a lift, no history) sets are **held** — missing data is not a plateau.
+- **Emphasize:** the rules above (+1 after a repeated stall, +2 only after 3+). Mesos with no stored priorities (imported from RP) use these rules.
+- **Grow:** when recovery was good, sets are **held if performance improved** ("no extra volume is needed yet"); **+1** only after performance stalled twice in a row. Never +2. **v1.11.1 (audit):** with **no performance comparison yet** (first session of a lift, no history) sets are **held** — missing data is not a plateau.
 - **Missing data is never evidence for more volume (v1.11.1).** A skipped pump or a missing performance comparison can't unlock +2; at most +1 on Emphasize. Pump is optional in the rating sheet (a growth driver it isn't, §1.6), so "All normal" really is one tap.
 - **Maintain:** never adds sets (it can still remove them).
 - **Weekly limit:** a muscle's weekly total can rise by at most **+2 sets** from one week to the next, however many sessions train it — two sessions can't each add +2.

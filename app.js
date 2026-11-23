@@ -1,8 +1,8 @@
 // v1.12.1: pinned to one reviewed release, so the code users get only changes with a commit here (outside audit, finding 4).
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.2/+esm';
-import * as L from './logic.js?v=45';
-import * as LEARN from './learn.js?v=45';
-import * as MD from './md.js?v=45';
+import * as L from './logic.js?v=46';
+import * as LEARN from './learn.js?v=46';
+import * as MD from './md.js?v=46';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -19,7 +19,7 @@ let authReturn = (() => {
   return null;
 })();
 let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
-export const APP_VERSION = '1.15.1'; // keep in sync with CHANGELOG.md
+export const APP_VERSION = '1.16.0'; // keep in sync with CHANGELOG.md
 const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
 // v1.11.4: the training rules are a page inside the app (#/logic), built from this repo's docs/training-logic.md.
 // The app never links to anyone's Google Drive.
@@ -798,16 +798,18 @@ async function renderMesos() {
   $$('[data-go]').forEach(b => b.onclick = () => { if (b.dataset.go === '#/new') builder = null; go(b.dataset.go); });
 }
 
+// v1.16.0 (audit T1): templates that train a growing muscle once a week are offered, ranked after the 2× ones, and say so.
+const onceNote = t => t.once?.length ? `<div class="tiny warn-text">Once a week: ${esc(t.once.join(', '))}. Works at the same weekly sets; splitting them over two days is the usual default.</div>` : '';
 // ---------- mesocycle builder ----------
 let builder = null;
 function freshBuilder() {
   return { step: 1, name: '', weeks: 5, days: 4, focus: 'whole', preset: 'balanced', start: 'suggested', goal: 'hypertrophy', priorities: L.templatePriorities('whole'), plan: [],
-    minutes: Number(localStorage.getItem('wl_session_minutes')) || 75, minRirCompound: false, lastMeso: undefined };
+    minutes: Number(localStorage.getItem('wl_session_minutes')) || 75, effort: L.effortOf(localStorage.getItem('wl_effort_mode')), lastMeso: undefined };
 }
 function builderFromTemplate(t) {
   const b = { step: 2, start: 'scratch', nameTouched: true, weeksTouched: true, name: t.name.replace(/ \(from .*\)$/, ''), weeks: t.weeks, days: t.days_per_week, focus: t.focus, goal: L.goalOf(t.goal),
     priorities: Object.keys(t.priorities || {}).length ? Object.fromEntries(Object.entries(t.priorities).map(([m, p]) => [m, L.normPriority(p, t.focus)])) : L.templatePriorities(t.focus),
-    minutes: Number(localStorage.getItem('wl_session_minutes')) || 75, minRirCompound: false,
+    minutes: Number(localStorage.getItem('wl_session_minutes')) || 75, effort: L.effortOf(localStorage.getItem('wl_effort_mode')),
     plan: t.plan.map(d => ({ label: d.label, slots: d.slots.map(x => ({ ...x })) })) };
   b.preset = L.matchPreset(b.priorities) || L.presetOfFocus(b.focus); b.adjusted = !L.matchPreset(b.priorities) && !!b.preset;
   return b;
@@ -865,7 +867,7 @@ async function renderBuilder() {
         ${shownCat.map(t => `<button type="button" class="choice tpl ${S.tpl === t.id ? 'on' : ''}" data-tpl="${t.id}" aria-pressed="${S.tpl === t.id}">
           <div class="grow"><b>${esc(t.name)}</b> <span class="muted small">· ${esc(t.splitName)}</span>${t.recommended ? ' <span class="pill tiny-pill">fits best</span>' : ''}
             <div class="muted small">${esc(t.blurb)}</div>
-            <div class="tiny muted">${esc(t.week.join(' · '))}</div></div>${tick(S.tpl === t.id)}</button>`).join('')}` : `
+            <div class="tiny muted">${esc(t.week.join(' · '))}</div>${onceNote(t)}</div>${tick(S.tpl === t.id)}</button>`).join('')}` : `
         <div class="muted small">Pick a split, then set each muscle under “Adjust muscles” below.</div>
         ${splits.map(x => `<button type="button" class="choice ${S.split === x.id ? 'on' : ''}" data-split="${x.id}" aria-pressed="${S.split === x.id}">
           <div class="grow"><b>${x.name}</b>${x.id === L.defaultSplit(S.days) ? ' <span class="pill tiny-pill">fits best</span>' : ''}<div class="muted small">${esc(x.blurb)}</div></div>${tick(S.split === x.id)}</button>`).join('')}
@@ -897,8 +899,9 @@ async function renderBuilder() {
       <div class="card"><div class="step-h"><span class="step-n">3</span><b>Name &amp; length</b></div>
         <div class="row"><div class="grow" style="flex:2"><label for="name">Name</label><input id="name" value="${esc(S.name)}" placeholder="e.g. Whole Body Meso 3"></div>
           <div class="grow"><label for="weeks">Weeks</label><select id="weeks">${[3, 4, 5, 6, 7, 8].map(n => `<option ${n === S.weeks ? 'selected' : ''}>${n}</option>`).join('')}</select></div></div>
-        <div class="muted tiny">The last week is a light week. Effort${S.goal === 'hypertrophy' ? '' : ' (main lifts)'} by week, as reps short of failure: <b>${Array.from({ length: S.weeks }, (_, i) => { const r = L.targetRir(i + 1, S.weeks, S.goal, 'compound'); return r.deload ? 'light' : (S.minRirCompound ? Math.max(1, r.rir) : r.rir); }).join(' → ')}</b>.</div>
-        <label class="switch"><input type="checkbox" id="minRir" ${S.minRirCompound ? 'checked' : ''}> <span>Keep main (compound) lifts at least 1 rep from failure</span></label>
+        <div class="lbl">How hard (reps short of failure)</div>
+        <div class="seg c3" role="group" aria-label="How hard">${Object.entries(L.EFFORT_MODES).map(([k, m]) => `<button type="button" data-effort="${k}" aria-pressed="${S.effort === k}" class="${S.effort === k ? 'on' : ''}">${esc(m.name)}</button>`).join('')}</div>
+        <div class="muted tiny mt6">${esc(L.EFFORT_MODES[S.effort].blurb)} Main lifts by week: <b>${Array.from({ length: S.weeks }, (_, i) => { const r = L.effortRir(i + 1, S.weeks, S.goal, 'compound', S.effort); return r.deload ? 'light' : r.rir; }).join(' → ')}</b>; other lifts: <b>${Array.from({ length: S.weeks }, (_, i) => { const r = L.effortRir(i + 1, S.weeks, S.goal, 'isolation', S.effort); return r.deload ? 'light' : r.rir; }).join(' → ')}</b>. The last week is a light week.</div>
       </div>
       <details class="card prio-box" id="prioBox" ${S.prioOpen || S.start === 'scratch' ? 'open' : ''}><summary><b>Adjust muscles</b>&nbsp; <span class="muted small">${S.start === 'scratch' ? 'set each muscle' : `optional · now: ${esc(presetName())}`}</span></summary>
         <ul class="tight small prio-key"><li><b>Emphasize</b> — your top priority: most sets, adds more when you recover well (pick up to ${L.MAX_EMPHASIZE}).</li>
@@ -934,7 +937,7 @@ async function renderBuilder() {
     $$('[data-split]').forEach(b => b.onclick = () => { S.split = b.dataset.split; S.plan = []; step1(); });
     $('#name').oninput = e => { S.name = e.target.value; S.nameTouched = true; };
     $('#weeks').onchange = e => { S.weeks = +e.target.value; S.weeksTouched = true; step1(); };
-    $('#minRir').onchange = e => { S.minRirCompound = e.target.checked; step1(); };
+    $$('[data-effort]').forEach(b => b.onclick = () => { S.effort = b.dataset.effort; try { localStorage.setItem('wl_effort_mode', S.effort); } catch {} step1(); });
     $('#prioBox').ontoggle = e => { S.prioOpen = e.target.open; };
     $$('[data-p]').forEach(b => b.onclick = () => {
       S.priorities = { ...S.priorities, [b.dataset.m]: b.dataset.p };
@@ -957,9 +960,12 @@ async function renderBuilder() {
   const buildFit = mode => {
     // Muscles the builder moved to Maintain last time go back to Grow first, so more time (or another day) restores them.
     if (mode === 'all' && S.autoMaintain?.length) { S.priorities = { ...S.priorities }; S.autoMaintain.forEach(m => { S.priorities[m] = 'grow'; }); S.autoMaintain = []; }
-    const f = L.fitPlan({ plan: S.plan, priorities: S.priorities, focus: S.focus, goal: S.goal, split: S.split, library: P.library, favorites: P.favorites, mode, minutes: S.minutes });
-    if (f.demoted.length) { S.priorities = f.priorities; S.autoMaintain = f.demoted; }
-    S.trimmed = f.trimmed; S.demoted = f.demoted; S.under = f.under; return f.days;
+    // v1.16.0 (audit T7): moving Grow → Maintain is a proposal you accept, never done for you.
+    const args = { plan: S.plan, priorities: S.priorities, focus: S.focus, goal: S.goal, split: S.split, library: P.library, favorites: P.favorites, mode, minutes: S.minutes };
+    const f = L.fitPlan({ ...args, demote: false });
+    const alt = mode === 'all' && f.under.length ? L.fitPlan(args) : null;
+    S.proposal = alt?.demoted.length ? { demoted: alt.demoted, priorities: alt.priorities, days: alt.days, trimmed: alt.trimmed, under: alt.under } : null;
+    S.trimmed = f.trimmed; S.demoted = []; S.under = f.under; return f.days;
   };
   const step2 = () => {
     const targets = L.weeklyTargets(S.priorities, S.focus, S.goal), placed = L.placedSets(S.plan);
@@ -984,6 +990,8 @@ async function renderBuilder() {
               <div class="chips mt6">${b.options.slice(0, 4).map(e => `<button class="sm" data-allow="${e.id}">OK ${esc(e.name)}</button>`).join('')}</div>
               <button class="sm ghost mt6" data-leaveout="${esc(b.muscle)}">Leave ${esc(b.muscle)} out</button>
               <div class="muted tiny mt6">An OK is saved to your account and shown in Settings, where you can take it back.</div></div>`; }).join(''); })()}
+        ${S.proposal ? `<div class="card small mt10-only" id="proposal"><b>Suggestion:</b> in ~${S.minutes} min there isn’t room to grow everything. Moving <b>${esc(S.proposal.demoted.join(', '))}</b> to <b>Maintain</b> (still trained, and ${S.proposal.demoted.length > 1 ? 'they get' : 'it gets'} work from the big lifts) frees sets for the rest.
+          <div class="row mt6"><button class="sm primary" id="propYes">Move to Maintain</button><button class="sm" id="propNo">Keep as Grow</button></div></div>` : ''}
         ${S.demoted?.length ? `<div class="card small mt10-only">To keep your bigger muscles growing in ~${S.minutes} min, <b>${esc(S.demoted.join(', '))}</b> ${S.demoted.length > 1 ? 'were' : 'was'} set to <b>Maintain</b> (still trained; ${S.demoted.length > 1 ? 'they also get' : 'it also gets'} work from the big lifts). Growing a few muscles properly beats spreading too little across all of them. Change it under “Adjust muscles”.</div>` : ''}
         ${S.under?.length ? `<div class="card warn small mt10-only"><b>Not enough time to grow ${esc(S.under.map(u => u.muscle).join(', '))}</b> — ${esc(S.under.map(u => `${u.muscle} ${u.sets} sets/week`).join(', '))}, which maintains rather than grows (about ${S.under[0].floor}+ a week is the growth range here). Allow more time per workout, add a day, or set fewer muscles to Grow.</div>` : ''}
         ${trimmedTxt ? `<div class="card warn small mt10-only">To fit ~${S.minutes} min a workout, these weekly sets were trimmed (lowest priority first): <b>${esc(trimmedTxt)}</b>. Want them back? Add a day, allow more time, or set fewer muscles to Emphasize/Grow.</div>` : ''}
@@ -1021,6 +1029,9 @@ async function renderBuilder() {
       const m = L.MUSCLES.find(x => p[x] < t[x]) || 'Chest';
       S.plan[+b.dataset.add].slots.push({ muscle: m, exerciseId: null, sets: 3 }); step2();
     });
+    { const y = $('#propYes'), n = $('#propNo');
+      if (y) y.onclick = () => { const pp = S.proposal; S.priorities = pp.priorities; S.autoMaintain = pp.demoted; S.plan = pp.days; S.trimmed = pp.trimmed; S.under = pp.under; S.demoted = pp.demoted; S.proposal = null; step2(); };
+      if (n) n.onclick = () => { S.proposal = null; step2(); }; }
     $$('[data-allow]').forEach(b => b.onclick = async () => { b.disabled = true;
       if (!await setAllowed(b.dataset.allow, true)) { b.disabled = false; return; }
       recomputeP(); S.plan = buildFit('fill'); step2(); });
@@ -1047,10 +1058,10 @@ async function renderBuilder() {
     const libById = new Map(lib.map(e => [e.id, e]));
     for (let w = 1; w <= S.weeks; w++) {
       S.plan.forEach((d, i) => days.push({ week: w, day_index: i + 1, label: d.label,
-        exercises: d.slots.map(s => { const kind = libById.get(s.exerciseId)?.kind, { rir, deload } = L.targetRir(w, S.weeks, S.goal, kind);
-          // optional floor: compounds never prescribed below 1 RIR (review #2 — not every lift needs to reach failure)
-          const t = !deload && S.minRirCompound && kind === 'compound' ? Math.max(1, rir) : rir;
-          return { exercise_id: s.exerciseId, target_sets: deload ? L.deloadSets(s.sets) : Number(s.sets), target_rir: t }; }) }));
+        exercises: d.slots.map(s => { const kind = libById.get(s.exerciseId)?.kind;
+          // v1.16.0 (audit T4): the chosen effort style sets the floor (Standard / Main lifts ≥1 / Conservative).
+          const { rir, deload } = L.effortRir(w, S.weeks, S.goal, kind, S.effort);
+          return { exercise_id: s.exerciseId, target_sets: deload ? L.deloadSets(s.sets) : Number(s.sets), target_rir: rir }; }) }));
     }
     const { data: mesoId, error } = await sb.rpc('create_mesocycle', { p: { client_key: S.clientKey, name: S.name.trim(), weeks: S.weeks,
       days_per_week: S.days, focus: S.focus, goal: L.goalOf(S.goal), priorities: Object.fromEntries(L.MUSCLES.map(m => [m, L.normPriority(S.priorities[m], S.focus)])), started_on: today(), days,
@@ -1175,9 +1186,19 @@ async function applyAdjustment(fb, R, meso) {
     // Mesos imported from RP (or made before v1.9) have no stored priorities: keep their original behaviour (Emphasize rules).
     const rawP = meso.priorities?.[fb.muscle_group];
     const priority = rawP ? L.normPriority(rawP, meso.focus) : 'emphasize';
-    const adj = L.setAdjustment({ R, L: fb.workload, J: fb.joint_pain, P: fb.pump, F: fb.performance, priority });
     const bothWeeks = check(await sb.from('workout_exercises').select('id, workout_day_id, exercise_id, target_sets, target_rir, position, exercises!inner(muscle_group), workout_days!inner(week, mesocycle_id)')
-      .eq('workout_days.mesocycle_id', meso.id).in('workout_days.week', [src.week, target.week]).eq('exercises.muscle_group', fb.muscle_group));
+      .eq('workout_days.mesocycle_id', meso.id).in('workout_days.week', [src.week - 1, src.week, target.week]).eq('exercises.muscle_group', fb.muscle_group));
+    // v1.16.0 (audit T3): how many sessions in a row (this day, this muscle) performance has been flat or down, and
+    // whether sets were just added — one flat session isn't a plateau, and an increase gets a week to show.
+    const hist = check(await sb.from('muscle_feedback').select('performance, workout_days!inner(week, day_index, mesocycle_id)')
+      .eq('muscle_group', fb.muscle_group).eq('workout_days.mesocycle_id', meso.id).eq('workout_days.day_index', src.day_index).lt('workout_days.week', src.week));
+    const perfByWeek = new Map(hist.map(h => [h.workout_days.week, h.performance]));
+    let stalls = 0;
+    if (fb.performance != null && fb.performance <= 0) { stalls = 1;
+      for (let w = src.week - 1; w >= 1; w--) { const pf = perfByWeek.get(w); if (pf == null || pf > 0 || L.rirForWeek(w, meso.weeks).deload) break; stalls++; } }
+    const wkTotal = w => bothWeeks.filter(x => x.workout_days.week === w).reduce((a, x) => a + (x.target_sets || 0), 0);
+    const justAdded = src.week > 1 && wkTotal(src.week) > wkTotal(src.week - 1);
+    const adj = L.setAdjustment({ R, L: fb.workload, J: fb.joint_pain, P: fb.pump, F: fb.performance, priority, stalls, justAdded });
     const weekWes = bothWeeks.filter(w => w.workout_days.week === target.week);
     const prevWeeklyTotal = bothWeeks.filter(w => w.workout_days.week === src.week).reduce((a, w) => a + (w.target_sets || 0), 0);
     const sess = weekWes.filter(w => w.workout_day_id === target.id).sort((a, b) => a.position - b.position);
@@ -1900,11 +1921,11 @@ async function renderWorkout(dayId, mode) {
         panel.querySelectorAll('[data-ax]').forEach(x => x.onclick = async () => {
           if (!pick) return; x.disabled = true;
           const kind = pick.kind, goalName = meso.goal;
-          // Respect the meso's "keep main lifts ≥1 rep short of failure" choice: if a main lift here sits above
-          // this week's normal target, the meso was built with it on.
-          const minOne = kind === 'compound' && wes.some(z => z.exercises.kind === 'compound' && z.target_rir > L.targetRir(day.week, meso.weeks, goalName, 'compound').rir);
-          const rirAt = w => { const r = L.targetRir(w, meso.weeks, goalName, kind);
-            return r.deload ? r : { deload: false, rir: minOne ? Math.max(1, r.rir) : r.rir }; };
+          // Follow the meso's effort style (v1.16.0): read it back from today's targets — any lift above this week's
+          // normal target shows a floor (main lifts ≥1, or Conservative).
+          const above = k => wes.filter(z => (z.exercises.kind === 'compound') === (k === 'compound') && z.target_rir != null && z.target_rir > L.targetRir(day.week, meso.weeks, goalName, k).rir).map(z => z.target_rir);
+          const mode = above('isolation').length || above('compound').some(r => r >= 2) ? 'conservative' : above('compound').length ? 'main1' : 'standard';
+          const rirAt = w => L.effortRir(w, meso.weeks, goalName, kind, mode);
           const row = (dId, w, pos) => { const r = rirAt(w); return { workout_day_id: dId, exercise_id: pick.id, position: pos, target_sets: r.deload ? L.deloadSets(sets) : sets, target_rir: r.rir }; };
           const pos = Math.max(0, ...wes.map(w => w.position || 0)) + 1;
           try {
@@ -2428,7 +2449,7 @@ async function renderTemplates(head, wireTabs) {
     <div class="chips" style="margin:10px 0" role="radiogroup" aria-label="Focus">${[['', 'All'], ...Object.entries(L.FOCI).map(([k, f]) => [k, f.name])].map(([k, n]) =>
       `<button type="button" class="chip ${tplView.focus === k ? 'sel' : ''}" data-tf="${k}" aria-pressed="${tplView.focus === k}">${esc(n)}</button>`).join('')}</div>
     ${cat.map(t => `<button type="button" class="choice tpl" data-tpl="${t.id}"><div class="grow"><b>${esc(t.name)}</b> <span class="muted small">· ${esc(t.splitName)}</span>${t.recommended ? ' <span class="pill tiny-pill">fits best</span>' : ''}
-      <div class="muted small">${esc(t.blurb)}</div><div class="tiny muted">${esc(t.week.join(' · '))}</div></div>›</button>`).join('')}
+      <div class="muted small">${esc(t.blurb)}</div><div class="tiny muted">${esc(t.week.join(' · '))}</div>${onceNote(t)}</div>›</button>`).join('')}
     <h2>Your templates</h2>
     ${mine.length ? mine.map(t => `<div class="card"><div class="row"><div class="grow"><b>${esc(t.name)}</b>
         <div class="muted small">${t.weeks} wks · ${t.days_per_week} days/wk · ${t.plan.reduce((a, d) => a + d.slots.length, 0)} exercises</div></div></div>

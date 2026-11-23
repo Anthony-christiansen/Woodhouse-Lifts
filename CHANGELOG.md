@@ -12,6 +12,29 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.16.0 — 2026-11-23 · Training logic: audit changes (approved by the owner)
+
+From the OpenAI audit's training-engine findings. **Mesos already running keep their sets, RIR and exercises.** What changes: how they adjust from now on (sets), and new mesos (templates, effort style, the Maintain suggestion).
+- **Sets are added only after a repeated stall (T3).**
+  - One flat session no longer adds a set. Performance must be flat or down two sessions in a row, with good recovery and workload.
+  - +2 (Emphasize only) needs three in a row.
+  - Sets are held while you're improving, when there's nothing to compare, and for a week after an increase.
+  - Zero soreness or a low pump never adds sets on their own.
+- **Once-a-week templates are back (T1).** Twice a week is still ranked first and is "fits best"; 1× set-ups (e.g. 3-day Push/Pull/Legs) are listed after, labelled "Once a week: …". The template list grows from 84 to 98.
+- **Effort style (T4).** The builder's "keep main lifts ≥1" switch becomes three choices:
+  - **Standard**: the RP-style ramp.
+  - **Main lifts ≥1**: what the old switch did.
+  - **Conservative**: main lifts ≥2 reps short, everything else ≥1.
+  - The preview shows both schedules. Your choice is remembered on this phone. Added exercises follow the meso's style.
+- **Grow → Maintain is now a suggestion you accept (T7)**, with **Move to Maintain** / **Keep as Grow**. Before, it was done for you.
+- **Docs:** training-logic §2.5 (effort styles, the Maintain suggestion) and §2.6 (which numbers are evidence vs product rules). The §5 table now has the stall rules. "+5%" is described as "up to ~5%, except one unavoidable step" (T5). Estimated strength is described as a noisy performance proxy (T6).
+- Not changed (yet): the final light week is still planned every meso (making it trend-triggered needs a schema change), and there's no fractional indirect-set accounting (T9). Strength and athletic goals keep their current rules (T10).
+- Tests: engine (stalls, cooldown, simulated 6-week run with no oscillation, 1× ranking, effort floors, demotion off by default in the builder) and `logic160.py` (9 checks).
+
+**Rollback:** app → `release/v1.15.1`. Nothing in the database changes.
+
+---
+
 ## 1.15.1 — 2026-11-23 · Audit safety & reliability fixes
 
 From the OpenAI audit of 1.14.0: the four "fix first" items. Training numbers are unchanged.
