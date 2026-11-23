@@ -521,3 +521,99 @@ console.log('GUARDRAIL TESTS PASSED');
   assert.equal(L.suggestSet({ ...base, speed: S({ workload: 1, joint_pain: 2 }, mOk) }).weight, 315, 'exercise joint pain → hold');
   console.log('EXERCISE FEEDBACK TESTS PASSED');
 }
+
+// ---------- v1.11.1: RP comparison + audit fixes ----------
+{
+  // Audit B: templates never emphasize more than MAX_EMPHASIZE muscles.
+  for (const f of ['upper', 'lower', 'whole', 'custom']) {
+    const n = Object.values(L.templatePriorities(f)).filter(p => p === 'emphasize').length;
+    assert.ok(n <= L.MAX_EMPHASIZE, `${f} emphasizes ${n}`);
+  }
+  assert.equal(L.templatePriorities('upper').Biceps, 'grow');
+  assert.equal(L.templatePriorities('upper').Quads, 'maintain');
+  assert.equal(L.templatePriorities('lower').Calves, 'grow');
+
+  // Audit A: missing performance is not a plateau.
+  assert.equal(L.setAdjustment({ R: 0, L: 1, J: 0, P: 2, F: null, priority: 'grow' }).delta, 0, 'grow + no F → hold');
+  assert.equal(L.setAdjustment({ R: 0, L: 1, J: 0, P: 2, F: 0, priority: 'grow' }).delta, 1, 'grow + flat F → +1');
+  // +2 needs a rated low pump and a performance comparison; a skipped pump is not "low stimulus".
+  assert.equal(L.setAdjustment({ R: 0, L: 0, J: 0, P: null, F: 0 }).delta, 1, 'pump not rated → +1 max');
+  assert.equal(L.setAdjustment({ R: 0, L: 0, J: 0, P: 1, F: null }).delta, 1, 'no performance → +1 max');
+  assert.equal(L.setAdjustment({ R: 0, L: 0, J: 0, P: 1, F: 0 }).delta, 2);
+
+  // RP comparison (Haylee wk 3, deadlift): a capped "re-set" must re-solve reps for the capped weight.
+  const dl = { name: 'Deadlift', load_type: 'weighted', equipment: 'Barbell', kind: 'compound', rep_min: 3, rep_max: 8, tags: ['axial'] };
+  const s = L.suggestSet({ prev: { weight: 95, reps: 12, rir: 1 }, ex: dl, targetRir: 0, prevTargetRir: 1, unit: 'lb',
+    mode: L.progressionMode([{ weight: 105, reps: 7 }, { weight: 95, reps: 12 }], dl, 'lb'), speed: { speed: 'normal' }, mesoStart: 105 });
+  assert.equal(s.weight, 97.5); assert.ok(s.reps >= 12, `reps ${s.reps} must not drop below last week at a heavier weight`);
+  assert.ok(!/Re-set/.test(s.note), 'no contradictory "re-set" note once capped');
+  // the window includes the reps you actually work at
+  const w = L.weightRange({ prev: { weight: 95, reps: 12, rir: 1 }, ex: dl, targetRir: 0, unit: 'lb' });
+  assert.ok(w.light <= 97.5 && w.heavy >= 97.5, JSON.stringify(w));
+  // a load step on a light dumbbell re-targets reps; a small step (rounding noise) keeps them
+  const row = { name: 'DB row', load_type: 'weighted', equipment: 'Dumbbell', kind: 'compound', rep_min: 6, rep_max: 12, tags: [] };
+  const r1 = L.suggestSet({ prev: { weight: 45, reps: 12, rir: 2 }, ex: row, targetRir: 1, unit: 'lb', mode: { mode: 'load', step: 5 }, speed: { speed: 'normal' } });
+  assert.deepEqual([r1.weight, r1.reps], [50, 9], '45×12 → 50×9, not 50×12');
+  const cr = { name: 'Rope crunch', load_type: 'weighted', equipment: 'Cable', kind: 'isolation', rep_min: 6, rep_max: 20, tags: [] };
+  const r2 = L.suggestSet({ prev: { weight: 57.5, reps: 7, rir: 1 }, ex: cr, targetRir: 0, unit: 'lb', mode: { mode: 'load', step: 2.5 }, speed: { speed: 'normal' } });
+  assert.deepEqual([r2.weight, r2.reps], [60, 7]);
+  console.log('V1.11.1 FIX TESTS PASSED');
+}
+
+// ---------- Longitudinal simulation (audit §6): 10 profiles × 6 weeks ----------
+// A simulated lifter does exactly what's suggested and reports a feedback profile. Invariants:
+//  - an automatic weekly raise is ≤ 5 lb (≤ 10 lb only on a "faster" week), ≤ +20% over week 1
+//  - reps never jump more than +2 at a weight that isn't lighter
+//  - the demand (e1RM needed to hit the suggestion at target RIR) never rises more than ~8% in a week
+//  - a weight increase never comes with fewer reps unless the effort model says it's equivalent or easier
+//  - joint pain / "too much" never gets a heavier weight; the deload is never heavier or longer than last week
+{
+  const e1 = (w, r, rir) => w * (1 + (r + rir) / 30);
+  const exs = [
+    { name: 'Pec deck', load_type: 'weighted', equipment: 'Machine', kind: 'isolation', rep_min: 8, rep_max: 15, tags: [] },
+    { name: 'Row', load_type: 'weighted', equipment: 'Dumbbell', kind: 'compound', rep_min: 6, rep_max: 12, tags: [] },
+    { name: 'Squat', load_type: 'weighted', equipment: 'Barbell', kind: 'compound', rep_min: 5, rep_max: 10, tags: ['axial'] },
+    { name: 'Lateral raise', load_type: 'weighted', equipment: 'Dumbbell', kind: 'isolation', rep_min: 10, rep_max: 20, tags: [] },
+    { name: 'Deadlift (worked high)', load_type: 'weighted', equipment: 'Barbell', kind: 'compound', rep_min: 3, rep_max: 8, tags: ['axial'] },
+  ];
+  const profiles = [
+    { name: 'beginner, easy', start: [100, 10], fb: () => ({ workload: 0, joint_pain: 0, soreness: 0 }) },
+    { name: 'normal', start: [135, 8], fb: () => ({ workload: 1, joint_pain: 0, soreness: 1 }) },
+    { name: 'pushed', start: [60, 12], fb: () => ({ workload: 2, joint_pain: 0, soreness: 1 }) },
+    { name: 'too much', start: [200, 6], fb: () => ({ workload: 3, joint_pain: 0, soreness: 2 }) },
+    { name: 'joint pain wk3+', start: [80, 9], fb: wk => ({ workload: 1, joint_pain: wk >= 3 ? 2 : 0, soreness: 1 }) },
+    { name: 'no feedback', start: [45, 11], fb: () => null },
+    { name: 'light dumbbell', start: [15, 12], fb: () => ({ workload: 1, joint_pain: 0, soreness: 1 }) },
+    { name: 'high reps', start: [95, 12], fb: () => ({ workload: 1, joint_pain: 0, soreness: 1 }) },
+    { name: 'heavy', start: [315, 5], fb: () => ({ workload: 1, joint_pain: 0, soreness: 1 }) },
+    { name: 'mixed', start: [120, 9], fb: wk => (wk % 2 ? { workload: 0, joint_pain: 0, soreness: 0 } : { workload: 2, joint_pain: 1, soreness: 2 }) },
+  ];
+  let checks = 0;
+  for (const P of profiles) for (const ex of exs) {
+    if (ex.equipment === 'Barbell' && P.start[0] < 45) continue;   // no barbell is lighter than the bar
+    const weeks = 6, trail = [];
+    let prev = { weight: P.start[0], reps: P.start[1], rir: L.rirForWeek(1, weeks).rir };
+    trail.push({ weight: prev.weight, reps: prev.reps });
+    for (let wk = 2; wk <= weeks; wk++) {
+      const t = L.rirForWeek(wk, weeks), fb = P.fb(wk - 1);
+      const speed = L.liftSpeed(fb, fb);
+      const s = L.suggestSet({ prev, ex, targetRir: t.rir, prevTargetRir: prev.rir, deload: t.deload, unit: 'lb',
+        mode: L.progressionMode(trail, ex, 'lb'), speed, mesoStart: trail[0].weight });
+      const tag = `${P.name} / ${ex.name} wk${wk}: ${prev.weight}×${prev.reps} → ${s.weight}×${s.reps}`;
+      assert.ok(s && s.weight != null && s.reps >= 1, tag);
+      if (t.deload) { assert.ok(s.weight <= prev.weight && s.reps <= prev.reps, 'deload ' + tag); checks++; break; }
+      const up = s.weight - prev.weight;
+      assert.ok(up <= (speed.speed === 'fast' ? 10 : 5) + 1e-9, 'weekly cap ' + tag);
+      assert.ok(s.weight <= Math.max(prev.weight, trail[0].weight * 1.2) + 1e-9, 'meso ceiling ' + tag);
+      if (s.weight >= prev.weight) assert.ok(s.reps <= prev.reps + L.GUARD.maxRepJump, 'rep jump ' + tag);
+      const demand = e1(s.weight, s.reps, t.rir) / e1(prev.weight, prev.reps, prev.rir);
+      assert.ok(demand <= 1.08, `demand +${((demand - 1) * 100).toFixed(1)}% ` + tag);
+      if (up > 0 && s.reps < prev.reps) assert.ok(demand <= 1.06, 'heavier + fewer reps must be near-equivalent ' + tag);
+      if (speed.speed === 'hold') assert.ok(s.weight <= prev.weight, 'hold never adds weight ' + tag);
+      checks += 6;
+      prev = { weight: s.weight, reps: s.reps, rir: t.rir };
+      trail.push({ weight: s.weight, reps: s.reps });
+    }
+  }
+  console.log(`LONGITUDINAL SIM PASSED (${profiles.length} profiles × ${exs.length} lifts, ${checks} checks)`);
+}

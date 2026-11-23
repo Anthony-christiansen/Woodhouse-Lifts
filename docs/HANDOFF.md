@@ -1,8 +1,12 @@
 # Woodhouse Lifts — Start Here (handoff for a new chat)
 
-**Current version: 1.11.0 (2026-11-22).** If you are a new chat picking this up: read this page first, then *Woodhouse Lifts — Training Logic* (the full rules and evidence) and *Woodhouse Lifts — Changelog* (what changed, version by version). All three live in the Google Drive folder **Woodhouse Lifts**; older copies are in its **Archive — earlier versions** subfolder. The repo holds the same files under `docs/` and `CHANGELOG.md`, and the repo copy is the one that changes first.
+**Current version: 1.11.1 (2026-11-22).** If you are a new chat picking this up: read this page first, then *Woodhouse Lifts — Training Logic* (the full rules and evidence) and *Woodhouse Lifts — Changelog* (what changed, version by version). All three live in the Google Drive folder **Woodhouse Lifts**; older copies are in its **Archive — earlier versions** subfolder. The repo holds the same files under `docs/` and `CHANGELOG.md`, and the repo copy is the one that changes first.
 
 ---
+
+## 0. Status (2026-11-22)
+
+Live: **1.11.0**. Open PRs: **#2** (1.11.1, engine fixes + this playbook) and **#1** (1.12.0, design foundations; rebase after #2, `?v=32`). Release order, one at a time with a smoke test between: 1.11.1 → 1.12.0 → body-area protection (uses `profiles.avoid_tags`, no migration) → workout screen → home/library/mesos → install/offline/service worker (rehearse the kill switch first) → onboarding → code quality (module split, CI, linter, one version number, pinned supabase-js). Every release follows `docs/PLAYBOOK.md`. User-specific status (accounts, pending data fixes) lives only in the private Drive copy of this page, never in this public repo.
 
 ## 1. What it is
 
@@ -34,18 +38,20 @@ No build step. Plain ES modules served by GitHub Pages.
 
 | File | What's in it |
 |---|---|
-| `index.html` | Shell. Loads `styles.css?v=N` and `app.js?v=N` — **bump `?v=` on every release** (now `v=29`). |
-| `app.js` (~1,900 lines) | UI + data access. Hash router (`#/`, `#/workout/<dayId>`, `#/workout/<id>/view`, `#/meso/<id>`, `#/new`, `#/templates`, `#/cardio`, settings…). Supabase client, offline save queue, workout logger, recovery gate, builder, home dashboard and drill-downs. `APP_VERSION` constant at the top (now `'1.11.0'`) must match the changelog. |
+| `index.html` | Shell. Loads `styles.css?v=N` and `app.js?v=N` — **bump `?v=` on every release** (now `v=31`; one number for every file). |
+| `app.js` (~1,900 lines) | UI + data access. Hash router (`#/`, `#/workout/<dayId>`, `#/workout/<id>/view`, `#/meso/<id>`, `#/new`, `#/templates`, `#/cardio`, settings…). Supabase client, offline save queue, workout logger, recovery gate, builder, home dashboard and drill-downs. `APP_VERSION` constant at the top (now `'1.11.1'`) must match the changelog. |
 | `logic.js` (~850 lines) | **Pure training engine, no I/O.** Everything testable lives here (see §5). |
 | `learn.js` | In-app "Learn" explanations and app defaults. |
 | `styles.css` | Styling; phone-first (inputs ≥16 px font, ≥44 px tap targets, small text ≥13 px). Accent colour `--accent` = lime `#9be33c` (v1.11). |
 | `supabase/migrations/` | Every schema change, in order (§4). `supabase/seed/` = exercise library. |
 | `docs/training-logic.md` | The rules and evidence (master of the Drive "Training Logic" doc). |
 | `docs/HANDOFF.md` | This page. |
+| `docs/PLAYBOOK.md` | Release & rollback playbook: approvals, risk tiers, checklist, smoke test, app/DB/data rollback. |
+| `supabase/ops/restore_user_from_snapshot.sql` | Tested script that restores one user's data from `backup.snapshot` (preview + `missing`/`overwrite` modes). |
 | `CHANGELOG.md` | Every release. |
-| `test/` | `logic.test.mjs` (engine), `db.test.mjs` + `db.checks.mjs` + `dbkit.mjs` (fresh DB from all migrations in PGlite), `e2e/*.py` (real Chromium against a mocked Supabase). |
+| `test/` | `logic.test.mjs` (engine), `db.test.mjs` + `db.checks.mjs` + `dbkit.mjs` (fresh DB from all migrations in PGlite), `e2e/*.py` (real Chromium against a mocked Supabase), `restore.drill.mjs` (rollback drill on a throwaway DB). |
 
-### Release checklist (what every change has followed)
+### Release checklist (summary; the full version with rollback is `docs/PLAYBOOK.md`, Drive: *Woodhouse Lifts — Release & Rollback Playbook*)
 1. Branch off `main`.
 2. Change `logic.js` / `app.js`; add tests.
 3. Run **all** suites: `node test/logic.test.mjs`; `node test/db.test.mjs` (needs `npm i @electric-sql/pglite` in `test/`); serve the folder on port 8765 and `for f in test/e2e/*.py; do python3 "$f" | tail -1; done`.
@@ -79,7 +85,7 @@ Row Level Security is on for every table ("own rows" policies keyed on `user_id`
 
 **Offline queue:** unsaved sets are kept per account in localStorage `wl_pending_sets_v1:<user id>` and retried; saves the database permanently refuses (SQLSTATE classes 22/23/42) move to a "failed" list instead of retrying forever. Other phone-only settings: `wl_increments` (smallest weight jumps), `wl_session_minutes`.
 
-## 5. The training engine as it stands (1.11.0)
+## 5. The training engine as it stands (1.11.1)
 
 Full rules, examples and sources: *Training Logic* doc. Quick map of `logic.js`:
 
@@ -92,7 +98,7 @@ Full rules, examples and sources: *Training Logic* doc. Quick map of `logic.js`:
 | Speed from feedback | Each lift: its **own exercise rating** (workload, joint pain) capped by the **muscle rating**. Hold (Too much or joint pain ≥2 on the exercise; muscle Too much) · Slow (Pushed my limit; muscle joint pain from another lift) · Normal · **Fast only if exercise and muscle were Easy + never got sore + no joint pain**, never at 0 RIR or on axial lifts. Older sessions without exercise ratings use the muscle rating alone. | `liftSpeed`, `progressionSpeed` |
 | Guardrails | Every automatic raise ≤ `safeMax` = smaller of +1 step (≤5 lb / 2.5 kg; 2 steps on a Fast week) and +5%; meso ceiling +20% over week 1 (then reps); ≤+2 reps a week; deloads untouched. Manual entries above `safeMax` save and show a "Manual bump" note; >1.5× asks "typo?". | `suggestSet`, `safeMax`, `GUARD`, `weightSanity` |
 | Equivalent reps | Changing the weight re-targets reps by e1RM (`w × (1 + (reps+RIR)/30)`), capped at 20 reps+RIR. | `repsAtLoad`, `weightRange`, `e1rm` |
-| Sets per muscle | From pump, workload, joint pain, soreness, performance and priority: Emphasize adds when recovered, Grow adds only on a stall, Maintain never adds; ≤+2 sets per muscle per week; every change explains itself. | `setAdjustment`, `distributeDelta`, `WEEKLY_STEP_CAP` |
+| Sets per muscle | From pump, workload, joint pain, soreness, performance and priority: Emphasize adds when recovered, Grow adds only on a measured stall (no comparison yet = hold), Maintain never adds; missing pump/performance never unlocks +2; ≤+2 sets per muscle per week; every change explains itself. | `setAdjustment`, `distributeDelta`, `WEEKLY_STEP_CAP` |
 | Lift status | PR / progressing / steady / dip / stalled / regressing judged on raw performance by meso week (not RIR-credited e1RM), plus same-week-last-meso comparison. Orange notice on every set below last week. | `mesoStatus`, `vsLastMeso`, `prsInMeso`, `slipWarnings` |
 | Warm-ups | Never logged; rounded to 5 lb / 2.5 kg plates, never below the empty bar. | `warmupPlan` |
 | Carry-over | New meso / run-it-again starts from a chosen week of the last meso (up to 2 weeks before the deload), weeks not dates. | `carry_week` in DB |
@@ -109,6 +115,7 @@ Useful so a future change doesn't reintroduce an old problem.
 | 1.5–1.8 | Step = your last observed jump (sled +10 lb). Weekly cap +10%. | History (2,376 changes) showed jumps >4% kept reps only 27–39% of the time vs 94–97% at ≤4%. | 1.9.0: ~2.5% step, ≤5 lb, +5% cap. |
 | 1.6–1.9.0 | "Faster" on workload Easy alone (+2 steps, e.g. sled +10). Two-RIR drop = 2 × step. | Anthony: never more than 2.5 or 5 lb unless manual, or the work was insufficient **and** never sore. | 1.9.1: `safeMax`, Fast needs never-sore. |
 | ≤1.10 | Separate exercise and muscle pop-ups; jargon (RIR) on every screen; the same warnings on Home, meso and workout. | Usability review as a first-time user: ~15 pop-ups per full-body day, alarm fatigue, first set 1.5 screens down. | 1.11.0 combined sheet + All normal, plain language, one place per warning. |
+| ≤1.11.0 | Capped re-set kept low reps (95×12 → 97.5×8); light-load steps kept reps (45×12 → 50×12); Grow added sets with no performance data; templates emphasized 4–5 muscles; All normal still needed pump. | Set-by-set comparison with RP on Haylee's week 3 + outside audit + new 6-week simulation. | 1.11.1 re-solves reps after caps and steps, missing data never adds volume, ≤3 emphasized, pump optional. |
 | ≤1.9.1 | Feedback only per muscle; joint pain on one exercise held every lift for that muscle. | Anthony wanted each exercise rated, plus the muscle. | 1.10.0 `exercise_feedback` + `liftSpeed`. |
 | ≤1.8 | "Focus" muscles (on/off). | Too coarse; couldn't say "keep it" vs "grow it". | 1.9.0 Emphasize / Grow / Maintain / Skip (old "focus" reads as Emphasize). |
 | ≤1.8 | Fixed set counts regardless of time. | 2-day full body came out at 35–38 sets. | 1.9.0 fit-to-time builder. |

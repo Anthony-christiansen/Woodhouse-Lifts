@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import * as L from './logic.js?v=27';
-import * as LEARN from './learn.js?v=27';
+import * as L from './logic.js?v=31';
+import * as LEARN from './learn.js?v=31';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -17,9 +17,9 @@ let authReturn = (() => {
   return null;
 })();
 let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
-export const APP_VERSION = '1.11.0'; // keep in sync with CHANGELOG.md
+export const APP_VERSION = '1.11.1'; // keep in sync with CHANGELOG.md
 const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
-const DOC_URL = 'https://docs.google.com/document/d/1IwIAbNanYbF8PZ0lBcXvjWrXHlNXdWZG6HWynHLwlxg';
+const DOC_URL = 'https://docs.google.com/document/d/1wmIMBPTH2Hj-lMgZTanmxTt5CV6yFaKcMP2w-0PTZ-M';
 
 const app = document.getElementById('app');
 const titleEl = document.getElementById('title');
@@ -85,6 +85,10 @@ const RATINGS = {
   breathing: { label: 'Breathing (talk test)', opts: ['Could sing', 'Talked easily', 'Short phrases', "Couldn't talk"] },
 };
 const rateKeys = m => m === 'Cardio' ? ['breathing', 'workload', 'joint_pain'] : ['pump', 'workload', 'joint_pain'];
+// v1.11.1 (audit D): pump is optional — skipping it saves "not rated", never a made-up value. The engine treats a
+// missing pump as no evidence (it can't unlock the +2 sets rule).
+const needKeys = m => rateKeys(m).filter(k => k !== 'pump');
+const OPTIONAL = { pump: true };
 const segHtml = (key, val, attrs = '') => `<div class="seg">${RATINGS[key].opts.map((o, i) =>
   `<button type="button" ${attrs} data-k="${key}" data-v="${i}" class="${val === i ? 'on' : ''}">${o}</button>`).join('')}</div>`;
 
@@ -1113,9 +1117,9 @@ async function renderWorkout(dayId, mode) {
 
   // Rated lines only (v1.11): the rating sheets open on their own when the sets are done, so unrated = nothing to show.
   function rateLine(m, f) {
-    if (!f || rateKeys(m).some(k => f[k] == null)) return '';
-    const first = m === 'Cardio' ? `breathing ${RATINGS.breathing.opts[f.breathing].toLowerCase()}` : `pump ${RATINGS.pump.opts[f.pump].toLowerCase()}`;
-    return `<button class="rated-line" data-open="${esc(m)}"><span>✓ ${esc(m)} overall · ${first}, ${RATINGS.workload.opts[f.workload].toLowerCase()}, joints ${RATINGS.joint_pain.opts[f.joint_pain].toLowerCase()}</span><span class="edit">✎</span></button>`;
+    if (!f || needKeys(m).some(k => f[k] == null)) return '';
+    const first = m === 'Cardio' ? `breathing ${RATINGS.breathing.opts[f.breathing].toLowerCase()}, ` : f.pump != null ? `pump ${RATINGS.pump.opts[f.pump].toLowerCase()}, ` : '';
+    return `<button class="rated-line" data-open="${esc(m)}"><span>✓ ${esc(m)} overall · ${first}${RATINGS.workload.opts[f.workload].toLowerCase()}, joints ${RATINGS.joint_pain.opts[f.joint_pain].toLowerCase()}</span><span class="edit">✎</span></button>`;
   }
   function exRated(we) { return !exFbOn || isCardio(we) || (exFb[we.id]?.workload != null && exFb[we.id]?.joint_pain != null); }
   function exRateLine(we, f) {
@@ -1150,13 +1154,13 @@ async function renderWorkout(dayId, mode) {
   const trendHtml = tr => !tr ? '' : `<span class="pill ${tr.t > 0 ? 'on' : tr.t < 0 ? 'bad' : ''}" title="vs ${tr.vs}">${tr.t > 0 ? '▲' : tr.t < 0 ? '▼' : '●'} ${tr.pct > 0 ? '+' : ''}${tr.pct.toFixed(1)}%</span>`;
   const exComplete = we => { const c = app.querySelector(`[data-we="${we.id}"]`); return !!c && [...c.querySelectorAll('.set')].every(r => r.classList.contains('done')); };
   function refreshTrend(we) { const el = app.querySelector(`[data-trend="${we.id}"]`); if (el) el.innerHTML = exComplete(we) ? trendHtml(exerciseTrend(we)) : ''; }
-  const isRated = m => !!feedback[m] && rateKeys(m).every(k => feedback[m][k] != null);
+  const isRated = m => !!feedback[m] && needKeys(m).every(k => feedback[m][k] != null);
   const exsOf = m => wes.filter(w => !isCardio(w) && w.exercises.muscle_group === m);
 
   // Per-exercise rating (v1.10): workload + joint pain for THIS exercise, asked after its last set.
   // One sheet per finished exercise (v1.11). When it was the last exercise for its muscle, the muscle-as-a-whole
   // questions are on the same sheet, so a muscle with one exercise is one pop-up, not two.
-  // "All normal" = Pretty good + no joint pain (pump still needs one tap when the muscle part is shown).
+  // "All normal" = Pretty good + no joint pain, saved in one tap. Pump stays whatever you picked (or not rated).
   function openExRating(we, required = true, withMuscle = null) {
     const m = we.exercises.muscle_group;
     if (withMuscle == null) withMuscle = required && muscleComplete(m) && !isRated(m) && exsOf(m).every(w => w.id === we.id || exRated(w));
@@ -1171,7 +1175,7 @@ async function renderWorkout(dayId, mode) {
       ${['workload', 'joint_pain'].map(k => `<div class="fb-row"><label>${RATINGS[k].label}</label>${segHtml(k, f[k], 'data-s="e"')}</div>`).join('')}
       ${withMuscle ? `<div class="rate-h">${esc(m)} overall today</div>
         <div class="muted small">All of today's ${esc(m)} work together — sets next week come from this.${others.length ? ` Also today: ${others.map(w => esc(w.exercises.name)).join(', ')}.` : ''}</div>
-        ${rateKeys(m).map(k => `<div class="fb-row" data-row="${k}"><label>${RATINGS[k].label}</label>${segHtml(k, g[k], 'data-s="m"')}</div>`).join('')}` : ''}
+        ${rateKeys(m).map(k => `<div class="fb-row" data-row="${k}"><label>${RATINGS[k].label}${OPTIONAL[k] ? ' <span class="muted tiny">(optional)</span>' : ''}</label>${segHtml(k, g[k], 'data-s="m"')}</div>`).join('')}` : ''}
       <div class="spacer"></div><button class="primary block" id="saveExRate">Save</button>
       ${required ? '' : '<button class="ghost block" id="later">Cancel</button>'}`, panel => {
       const pick = (sec, k, v) => {
@@ -1185,8 +1189,8 @@ async function renderWorkout(dayId, mode) {
       });
       const save = async () => {
         if (f.workload == null || f.joint_pain == null) return toast('Pick workload and joint pain for this exercise', true);
-        if (withMuscle && rateKeys(m).some(k => g[k] == null)) {
-          const miss = rateKeys(m).find(k => g[k] == null), row = panel.querySelector(`[data-row="${miss}"]`);
+        if (withMuscle && needKeys(m).some(k => g[k] == null)) {
+          const miss = needKeys(m).find(k => g[k] == null), row = panel.querySelector(`[data-row="${miss}"]`);
           if (row) { row.classList.add('need'); row.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
           return toast(`Pick ${RATINGS[miss].label.toLowerCase()} for ${m} to finish`, true);
         }
@@ -1225,7 +1229,7 @@ async function renderWorkout(dayId, mode) {
         ${exs.map(w => { const tr = exComplete(w) ? exerciseTrend(w) : null;
           const ef = exFb[w.id], er = ef?.workload != null ? ` <span class="muted tiny">· ${RATINGS.workload.opts[ef.workload].toLowerCase()}, joints ${RATINGS.joint_pain.opts[ef.joint_pain].toLowerCase()}</span>` : '';
           return `<div class="mover"><span>${esc(w.exercises.name)}${er}</span>${tr ? trendHtml(tr) : `<span class="muted tiny">${exComplete(w) ? 'no history yet' : 'not finished'}</span>`}</div>`; }).join('')}</div>
-      ${rateKeys(m).map(k => `<div class="fb-row" data-row="${k}"><label>${RATINGS[k].label}</label>${segHtml(k, f[k])}</div>`).join('')}
+      ${rateKeys(m).map(k => `<div class="fb-row" data-row="${k}"><label>${RATINGS[k].label}${OPTIONAL[k] ? ' <span class="muted tiny">(optional)</span>' : ''}</label>${segHtml(k, f[k])}</div>`).join('')}
       <div class="spacer"></div><button class="primary block" id="saveRate">Save</button>
       ${required ? '' : '<button class="ghost block" id="later">Cancel</button>'}`, panel => {
       panel.querySelectorAll('[data-k]').forEach(b => b.onclick = () => {
@@ -1238,7 +1242,7 @@ async function renderWorkout(dayId, mode) {
         panel.querySelector('#saveRate').click();
       };
       panel.querySelector('#saveRate').onclick = async () => {
-        const miss = rateKeys(m).find(k => f[k] == null);
+        const miss = needKeys(m).find(k => f[k] == null);
         if (miss) { const r = panel.querySelector(`[data-row="${miss}"]`); if (r) { r.classList.add('need'); r.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
           return toast(`Pick ${RATINGS[miss].label.toLowerCase()} to finish`, true); }
         const payload = { workout_day_id: dayId, muscle_group: m }; rateKeys(m).forEach(k => payload[k] = f[k]);
@@ -1439,7 +1443,7 @@ async function renderWorkout(dayId, mode) {
       ${!isCardio(we) ? (() => { const w = windowFor(we), m = !deload && prev[we.exercise_id]?.sets.length && ex.load_type === 'weighted' ? modeFor(we) : null, h = histNote(we);
         return (m || w || h) ? `<h2>This lift</h2><ul class="tight small">
           ${m ? `<li>Progresses ${m.mode === 'load' ? `by weight — about +${fmt(m.step)} ${unit()} when you're ready` : 'by reps at the same weight'}.</li>` : ''}
-          ${w ? `<li>Weight window ${fmt(w.light)}–${fmt(w.heavy)} ${unit()}: change the weight and the suggested reps adjust to match last week.</li>` : ''}
+          ${w && w.light < w.heavy ? `<li>Weight window ${fmt(w.light)}–${fmt(w.heavy)} ${unit()}: change the weight and the suggested reps adjust to match last week.</li>` : ''}
           ${h ? `<li>${h}</li>` : ''}</ul>` : ''; })() : ''}
       <h2>Warm-up${first ? '' : ' (optional)'}</h2>
       ${plan[0].weight == null && plan.length === 1 ? `<p>${esc(plan[0].note)}</p>` : `<table class="warm"><thead><tr><th>#</th><th>Weight</th><th>Reps</th><th></th></tr></thead><tbody>${rows}</tbody></table>`}

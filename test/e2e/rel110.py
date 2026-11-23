@@ -29,14 +29,12 @@ async def main():
         await pg.click('#sheet [data-s="e"][data-k="workload"][data-v="2"]'); await pg.wait_for_timeout(50)
         pre=await pg.evaluate("[...document.querySelectorAll('#sheet [data-s=\"m\"].on')].map(b=>b.dataset.k+':'+b.dataset.v)")
         ok('single exercise: muscle answers follow the exercise', 'workload:2' in pre, pre)
-        await pg.click('#allNormal'); await pg.wait_for_timeout(300)
-        t=await pg.inner_text('#sheet'); ok('All normal still needs pump', 'Pump' in t and not await pg.evaluate('document.getElementById("sheet").hidden'), t[:80])
-        w=[x for x in await pg.evaluate('window.__writes||[]') if x[0]=='exercise_feedback']; ok('nothing saved before pump', not w, w)
-        await pg.click('#sheet [data-s="m"][data-k="pump"][data-v="2"]'); await pg.click('#saveExRate'); await pg.wait_for_timeout(500)
+        ok('pump marked optional', 'optional' in t, t[:300])
+        await pg.click('#allNormal'); await pg.wait_for_timeout(500)
         w=[x for x in await pg.evaluate('window.__writes||[]') if x[0]=='exercise_feedback']
-        ok('exercise rating saved (All normal)', w and w[-1][1].get('workout_exercise_id')=='w1' and w[-1][1].get('workload')==1 and w[-1][1].get('joint_pain')==0, w)
+        ok('exercise rating saved in one tap (All normal)', w and w[-1][1].get('workout_exercise_id')=='w1' and w[-1][1].get('workload')==1 and w[-1][1].get('joint_pain')==0, w)
         m=[x for x in await pg.evaluate('window.__writes||[]') if x[0]=='muscle_feedback']
-        ok('muscle rating saved from the same sheet', m and m[-1][1].get('muscle_group')=='Chest' and m[-1][1].get('pump')==2 and m[-1][1].get('workload')==1, m)
+        ok('muscle rating saved, pump NOT made up (v1.11.1)', m and m[-1][1].get('muscle_group')=='Chest' and m[-1][1].get('pump') is None and m[-1][1].get('workload')==1, m)
         ok('sheet closed, rated lines shown', await pg.evaluate('document.getElementById("sheet").hidden') and await pg.locator('.card[data-we="w1"] .rated-line').count()==2)
         ok('no JS errors (a)', not errs, errs); await ctx.close()
         # b) finish is blocked until the exercise is rated

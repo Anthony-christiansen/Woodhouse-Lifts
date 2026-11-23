@@ -55,18 +55,21 @@ export const defaultSplit = days => splitsFor(days).find(x => x.recommended)?.id
 export const splitLayout = (split, days) => (SPLITS[split] && SPLITS[split].days.includes(days) ? SPLITS[split] : SPLITS.full_body_split).layout(days);
 
 export const TEMPLATES = {
-  upper:  { name: 'Upper focus', blurb: 'Grow chest, back, shoulders and arms; hold legs.' },
-  lower:  { name: 'Lower focus', blurb: 'Grow quads, hamstrings, glutes and calves; hold upper body.' },
+  upper:  { name: 'Upper focus', blurb: 'Emphasize chest, back and shoulders, grow arms; hold legs.' },
+  lower:  { name: 'Lower focus', blurb: 'Emphasize quads, hamstrings and glutes, grow calves; hold upper body.' },
   whole:  { name: 'Balanced', blurb: 'Grow everything evenly, every muscle 2×+ a week.' },
   custom: { name: 'Custom', blurb: 'Start from whole body and set each muscle yourself.' },
 };
 
+// v1.11.1 (audit B): a template never emphasizes more than MAX_EMPHASIZE muscles — the three biggest of the focus
+// area are emphasized, the rest of it grows (arms and calves also get indirect work from the big lifts).
+export const TEMPLATE_EMPHASIS = { upper: ['Chest', 'Back', 'Shoulders'], lower: ['Quads', 'Hamstrings', 'Glutes'] };
 export function templatePriorities(focus) {
   const p = {};
   for (const m of MUSCLES) {
+    const area = focus === 'upper' ? UPPER : focus === 'lower' ? LOWER : null;
     if (MINOR.includes(m)) p[m] = 'maintain';
-    else if (focus === 'upper') p[m] = UPPER.includes(m) ? 'emphasize' : 'maintain';
-    else if (focus === 'lower') p[m] = LOWER.includes(m) ? 'emphasize' : 'maintain';
+    else if (area) p[m] = !area.includes(m) ? 'maintain' : TEMPLATE_EMPHASIS[focus].includes(m) ? 'emphasize' : 'grow';
     else p[m] = 'grow';
   }
   return p;
@@ -655,7 +658,9 @@ export function suggestSet(args) {
   // (≤ 10 lb / 5 kg) only on a "faster" week (too easy + never sore). Bigger jumps are yours to make by hand.
   const absCap = w0 + (speed?.speed === 'fast' ? 2 : 1) * Math.max(inc, STEP_MAX[unit === 'kg' ? 'kg' : 'lb']);
   const weekCap = safeMax(w0, ex, unit, speed?.speed === 'fast');
+  let capped = false;
   if (r.weight > weekCap) {
+    capped = true;
     const u = unit || 'lb', add = Math.round((weekCap - w0) * 100) / 100;
     r.weight = weekCap;
     if (r.note) r.note = r.note.replace(/^\+[\d.]+ (lb|kg)/, `+${add} ${u}`);
@@ -663,7 +668,16 @@ export function suggestSet(args) {
   }
   if (args.mesoStart > 0) {
     const ceil = Math.floor(args.mesoStart * (1 + GUARD.mesoPct) / inc) * inc;
-    if (r.weight > Math.max(ceil, w0)) { r.weight = Math.max(ceil, w0); r.reps = Math.min((ex?.rep_max ?? 30), Number(prev.reps) + 1); notes.push('at this meso\'s +20% ceiling — adding reps instead'); }
+    if (r.weight > Math.max(ceil, w0)) { capped = false; r.weight = Math.max(ceil, w0); r.reps = Math.min((ex?.rep_max ?? 30), Number(prev.reps) + 1); notes.push('at this meso\'s +20% ceiling — adding reps instead'); }
+  }
+  // v1.11.1: when a cap lowered the weight, the reps must match the CAPPED weight. Before, a "re-set into the rep
+  // range" (95×12 → 107.5×8) that got capped to 97.5 kept the 8 reps — far easier than last week. Re-solve with the
+  // same effort model as the weight window, never below last week's reps at a weight that's not lighter.
+  if (capped && prev.reps != null && r.weight >= w0 && r.reps < Number(prev.reps)) {
+    const m = repsAtLoad({ prev, ex, weight: r.weight, targetRir: args.targetRir, prevTargetRir: args.prevTargetRir });
+    r.reps = Math.max(Number(prev.reps), m ? m.lo : Number(prev.reps));
+    if (r.note) r.note = r.note.replace(/^Re-set into the rep range( · )?/, '');
+    if (r.reps > (ex?.rep_max ?? 30)) notes.push(`above the ${ex.rep_min}–${ex.rep_max} range — the weight climbs a step a week until it's back in`);
   }
   if (prev.reps != null && r.weight >= w0 && r.reps > Number(prev.reps) + GUARD.maxRepJump) r.reps = Number(prev.reps) + GUARD.maxRepJump;
   if (notes.length) r.note = `${r.note ? r.note + ' · ' : ''}${notes.join(' · ')}`;
@@ -681,7 +695,15 @@ function suggestSetCore({ prev, ex, targetRir, prevTargetRir, deload, jointHold,
       if (sp === 'slow') return { weight: w0, reps: Number(prev.reps) + drop, note: `Same weight, +${drop} rep — ${speed.why}` };
       let add = step * drop;
       if (sp === 'fast') add = step * (drop + 1);   // suggestSet's cap keeps every auto raise ≤ 5 lb (10 lb on a faster week)
-      return { weight: Math.max(barFloor(ex, unit), w0 + add), reps: Number(prev.reps), note: `+${add} ${u}, same reps${sp === 'fast' && add > step * drop ? ` — faster: ${speed.why}` : ''}` };
+      const nw = Math.max(barFloor(ex, unit), w0 + add);
+      // v1.11.1: on light loads one step can be far more than the effort the RIR drop allows (45 → 50 lb is +11%).
+      // Keep the reps only when the effort model says they still fit; otherwise target the reps that do.
+      // A "faster" week's extra step is backed by the easy rating (more in reserve than logged), so it's judged at the normal step.
+      const fit = repsAtLoad({ prev, ex, weight: Math.max(barFloor(ex, unit), w0 + step * drop), targetRir, prevTargetRir });
+      // Rounding noise (6.4 vs 7) keeps the reps; only a clearly-too-big step (more than ¾ of a rep) lowers them.
+      const reps = fit && fit.raw < Number(prev.reps) - 0.75 ? Math.max(1, fit.lo) : Number(prev.reps);
+      const fast = sp === 'fast' && add > step * drop ? ` — faster: ${speed.why}` : '';
+      return { weight: nw, reps, note: reps < Number(prev.reps) ? `+${add} ${u}, ${reps} reps at the heavier weight${fast}` : `+${add} ${u}, same reps${fast}` };
     }
   }
   const r = suggestSetRaw({ prev, ex, targetRir, prevTargetRir, deload, jointHold, unit, extraReps: sp === 'fast' ? 1 : sp === 'slow' ? -1 : 0 });
@@ -726,6 +748,8 @@ function suggestSetRaw({ prev, ex, targetRir, prevTargetRir, deload, jointHold, 
   if (reps > max && w != null) {
     w = ex?.load_type === 'assisted' ? Math.max(0, w - inc) : w + inc;
     reps = Math.max(min, reps - 2);
+    // v1.11.1: on light loads one increment is a big jump (15 → 20 lb is +33%) — target the reps that fit the new weight.
+    if (ex?.load_type === 'weighted') { const fit = repsAtLoad({ prev, ex, weight: w, targetRir, prevTargetRir }); if (fit) reps = Math.max(1, Math.min(reps, fit.lo)); }
   } else if (reps < min && w != null && w > 0 && ex?.load_type !== 'bodyweight') {
     w = ex?.load_type === 'assisted' ? w + inc : Math.max(0, w - inc);
     reps = Math.min(max, reps + 2);
@@ -748,7 +772,7 @@ export function repsAtLoad({ prev, ex, weight, targetRir, prevTargetRir, bodywei
   const reps = 30 * (bench / load - 1) - (targetRir ?? 0);
   const lo = Math.max(1, Math.round(reps)), hi = lo + 1;
   const min = ex?.rep_min ?? 5, max = ex?.rep_max ?? 30;
-  return { lo, hi, outside: lo < min ? 'heavy' : lo > max ? 'light' : null };
+  return { lo, hi, raw: reps, outside: lo < min ? 'heavy' : lo > max ? 'light' : null };
 }
 
 /**
@@ -759,7 +783,10 @@ export function weightRange({ prev, ex, targetRir, prevTargetRir, bodyweight, un
   if (!prev || prev.reps == null || ex?.load_type !== 'weighted') return null;
   const bench = e1rm({ ...prev, rir: prev.rir ?? prevTargetRir ?? targetRir }, ex, bodyweight);
   if (!bench) return null;
-  const inc = increment(ex, unit), min = ex?.rep_min ?? 5, max = ex?.rep_max ?? 30, t = targetRir ?? 0;
+  // v1.11.1: if you deliberately work outside the listed range (e.g. deadlifts for 12 when the range says 3–8), the
+  // window includes your reps instead of pushing you to a weight you don't use.
+  const pr = Number(prev.reps), inc = increment(ex, unit), t = targetRir ?? 0;
+  const min = Math.min(ex?.rep_min ?? 5, pr), max = Math.max(ex?.rep_max ?? 30, Math.min(30, pr + 1));
   const heavy = Math.floor(bench / (1 + (min + t) / 30) / inc) * inc;
   const light = Math.ceil(bench / (1 + (max + t) / 30) / inc) * inc;
   return light <= heavy ? { light, heavy } : null;
@@ -767,7 +794,8 @@ export function weightRange({ prev, ex, targetRir, prevTargetRir, bodyweight, un
 
 /**
  * Doc §5 — next week's set change for one muscle in one session.
- * R recovery, L workload, J joint pain, P pump (0–3), F performance (−1/0/1). Missing → treated as neutral.
+ * R recovery, L workload, J joint pain, P pump (0–3), F performance (−1/0/1). Missing → neutral, and never counted as
+ * evidence for adding volume (v1.11.1): Grow holds without a performance comparison; +2 needs a rated pump.
  */
 export function setAdjustment({ R, L, J, P, F, priority = 'emphasize' }) {
   const n = v => (v == null ? null : Number(v));
@@ -783,10 +811,14 @@ export function setAdjustment({ R, L, J, P, F, priority = 'emphasize' }) {
     if (priority === 'maintain' || priority === 'skip') return { delta: 0, rule: 8, why: 'maintain muscle — volume stays low on purpose' };
     if (priority === 'grow') {
       if (F === 1) return { delta: 0, rule: 9, why: 'performance improved and recovery was good, so no extra volume is needed yet' };
+      // v1.11.1 (audit A): no performance comparison yet is NOT a plateau — hold until there's evidence.
+      if (F == null) return { delta: 0, rule: 11, why: 'no earlier session to compare performance with yet — sets held until there is' };
       return { delta: 1, rule: 10, why: 'recovery was good but performance didn\'t move — one set added' };
     }
-    // +2 only with no joint discomfort at all; any joint pain (even "Low") limits the increase to +1 (review #2)
-    const two = R === 0 && L === 0 && (P == null || P <= 1) && !(J >= 1);
+    // +2 only with no joint discomfort at all; any joint pain (even "Low") limits the increase to +1 (review #2).
+    // v1.11.1: +2 also needs a pump that was actually rated low and a performance comparison — a skipped pump or
+    // missing performance is never read as "low stimulus".
+    const two = R === 0 && L === 0 && P != null && P <= 1 && F != null && !(J >= 1);
     return { delta: two ? 2 : 1, rule: 6, why: two ? 'recovered fully with an easy workload and low pump — two sets added' : 'recovery and workload were good — one set added' };
   }
   return { delta: 0, rule: 7, why: 'recovery and workload were in the normal range — sets held' };
