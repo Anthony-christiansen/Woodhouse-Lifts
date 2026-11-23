@@ -323,7 +323,9 @@ nav#tabs a span svg { display: block; }
 .choice.on { background: rgba(155, 227, 60, .12); border-color: var(--accent); }
 .choice .tick { flex: none; width: 26px; height: 26px; border-radius: 99px; background: var(--accent); color: var(--accent-ink);
   display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; }
-.start-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.start-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.choice.start b, .choice.start .tiny { overflow-wrap: anywhere; }
+@media (max-width: 359px) { .choice.start { padding: 10px 8px; } .start-tiles { gap: 6px; } }
 .choice.start { flex-direction: column; align-items: flex-start; gap: 2px; margin: 0; padding: 12px 10px; min-height: 92px; }
 .choice.start .ico { font-size: 20px; color: var(--accent); }
 .choice.start .tick { position: absolute; top: 8px; right: 8px; width: 22px; height: 22px; font-size: 12px; }
