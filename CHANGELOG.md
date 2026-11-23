@@ -12,6 +12,40 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.11.0 — 2026-11-22 · "Easier for anyone"
+
+A usability pass from looking at every main screen as a first-time user, plus a more lime green.
+
+**Fewer interruptions**
+- **One rating sheet per exercise.** When an exercise is the last one for its muscle, the muscle questions are on the same sheet — a muscle trained with one exercise is now one pop-up instead of two.
+- **✓ All normal**: one tap = Pretty good + no joint pain. Exercise-only sheets save immediately; combined sheets just need pump.
+- Rating buttons no longer sit on every card; after you rate, a small "✓ … ✎" line shows what you picked and lets you change it. The header ✎ is gone.
+
+**Plain language**
+- "RIR" is gone from the workout, home, meso and builder screens: "2 reps short", "stop 2 reps short of failure", "to failure". The ⓘ sheet still shows "2 RIR = reps in reserve" for anyone who wants the term.
+- "Deload" → "light (deload) week"; "Hard sets" → "Working sets"; set-1 picker reads "Set 1 reps left: as planned (2)"; "First time — pick a weight for 8–15 reps, stop 2 reps short of failure".
+- Lift status pills: "Stalled 0.0%" → "Flat 2 wks" (neutral grey); "Down" is amber, not red.
+- Mesos page explains what a mesocycle is.
+
+**Each warning once, in one place**
+- Home no longer shows the Watch list; the meso card has one line ("⚠ 6 things to check on this meso ›"). The full list ("Things to check") is only on the meso page.
+- Workout "Heads up" shows only how today's muscles recovered (soreness, joint pain, workload), collapsed to one line you can tap open. Missed sets from earlier weeks are no longer repeated there.
+- Each lift has **one coach note**: this week's plan, plus a trend line only when it needs attention (tap for the tip). The 📌 all-time-best reference moved into ⓘ.
+
+**First set sooner, easier to read**
+- Exercise card header is one line: "Chest · 3 × 8–15 reps · 2 reps short". How the lift progresses and the weight window moved into ⓘ.
+- Last week's numbers / first-time hint get their own line under the set buttons (no more squeezed column).
+- Small text is larger (13–14 px) and lighter grey for gym lighting. Empty weight boxes say "weight", not "lb".
+
+**Builder, navigation, small things**
+- "Adjust muscles" (Emphasize / Grow / Maintain / Skip) is collapsed and optional, with a plain explanation of each; it opens automatically for Custom.
+- Home charts explain themselves when empty; the all-time numbers have an "All time" heading.
+- Tab bar uses matching line icons; **Explore is now "More"** (Learn, History, Progress, Volume, Cardio, Settings) — Library and Mesos are no longer duplicated there.
+- "Delete this mesocycle…" moved away from "Mark complete" to the bottom of the page.
+- Accent green is now a brighter lime (#9be33c).
+
+---
+
 ## 1.10.0 — 2026-11-21 · "Rate each exercise"
 
 **Per-exercise feedback, plus the muscle rating**

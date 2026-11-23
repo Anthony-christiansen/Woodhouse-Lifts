@@ -1,6 +1,6 @@
 # Woodhouse Lifts — Start Here (handoff for a new chat)
 
-**Current version: 1.10.0 (2026-11-21).** If you are a new chat picking this up: read this page first, then *Woodhouse Lifts — Training Logic* (the full rules and evidence) and *Woodhouse Lifts — Changelog* (what changed, version by version). All three live in the Google Drive folder **Woodhouse Lifts**; older copies are in its **Archive — earlier versions** subfolder. The repo holds the same files under `docs/` and `CHANGELOG.md`, and the repo copy is the one that changes first.
+**Current version: 1.11.0 (2026-11-22).** If you are a new chat picking this up: read this page first, then *Woodhouse Lifts — Training Logic* (the full rules and evidence) and *Woodhouse Lifts — Changelog* (what changed, version by version). All three live in the Google Drive folder **Woodhouse Lifts**; older copies are in its **Archive — earlier versions** subfolder. The repo holds the same files under `docs/` and `CHANGELOG.md`, and the repo copy is the one that changes first.
 
 ---
 
@@ -34,11 +34,11 @@ No build step. Plain ES modules served by GitHub Pages.
 
 | File | What's in it |
 |---|---|
-| `index.html` | Shell. Loads `styles.css?v=N` and `app.js?v=N` — **bump `?v=` on every release** (now `v=28`). |
-| `app.js` (~1,900 lines) | UI + data access. Hash router (`#/`, `#/workout/<dayId>`, `#/workout/<id>/view`, `#/meso/<id>`, `#/new`, `#/templates`, `#/cardio`, settings…). Supabase client, offline save queue, workout logger, recovery gate, builder, home dashboard and drill-downs. `APP_VERSION` constant at the top (now `'1.10.0'`) must match the changelog. |
+| `index.html` | Shell. Loads `styles.css?v=N` and `app.js?v=N` — **bump `?v=` on every release** (now `v=29`). |
+| `app.js` (~1,900 lines) | UI + data access. Hash router (`#/`, `#/workout/<dayId>`, `#/workout/<id>/view`, `#/meso/<id>`, `#/new`, `#/templates`, `#/cardio`, settings…). Supabase client, offline save queue, workout logger, recovery gate, builder, home dashboard and drill-downs. `APP_VERSION` constant at the top (now `'1.11.0'`) must match the changelog. |
 | `logic.js` (~850 lines) | **Pure training engine, no I/O.** Everything testable lives here (see §5). |
 | `learn.js` | In-app "Learn" explanations and app defaults. |
-| `styles.css` | Styling; phone-first (inputs ≥16 px font, ≥44 px tap targets). |
+| `styles.css` | Styling; phone-first (inputs ≥16 px font, ≥44 px tap targets, small text ≥13 px). Accent colour `--accent` = lime `#9be33c` (v1.11). |
 | `supabase/migrations/` | Every schema change, in order (§4). `supabase/seed/` = exercise library. |
 | `docs/training-logic.md` | The rules and evidence (master of the Drive "Training Logic" doc). |
 | `docs/HANDOFF.md` | This page. |
@@ -79,7 +79,7 @@ Row Level Security is on for every table ("own rows" policies keyed on `user_id`
 
 **Offline queue:** unsaved sets are kept per account in localStorage `wl_pending_sets_v1:<user id>` and retried; saves the database permanently refuses (SQLSTATE classes 22/23/42) move to a "failed" list instead of retrying forever. Other phone-only settings: `wl_increments` (smallest weight jumps), `wl_session_minutes`.
 
-## 5. The training engine as it stands (1.10.0)
+## 5. The training engine as it stands (1.11.0)
 
 Full rules, examples and sources: *Training Logic* doc. Quick map of `logic.js`:
 
@@ -108,12 +108,22 @@ Useful so a future change doesn't reintroduce an old problem.
 | ≤1.4 | Load lifts copied the RIR drop as +1 rep at same weight. | Sled 315×27 vs RP's 325×28 — didn't match how weighted lifts progress. | 1.5.0 load-vs-reps modes. |
 | 1.5–1.8 | Step = your last observed jump (sled +10 lb). Weekly cap +10%. | History (2,376 changes) showed jumps >4% kept reps only 27–39% of the time vs 94–97% at ≤4%. | 1.9.0: ~2.5% step, ≤5 lb, +5% cap. |
 | 1.6–1.9.0 | "Faster" on workload Easy alone (+2 steps, e.g. sled +10). Two-RIR drop = 2 × step. | Anthony: never more than 2.5 or 5 lb unless manual, or the work was insufficient **and** never sore. | 1.9.1: `safeMax`, Fast needs never-sore. |
+| ≤1.10 | Separate exercise and muscle pop-ups; jargon (RIR) on every screen; the same warnings on Home, meso and workout. | Usability review as a first-time user: ~15 pop-ups per full-body day, alarm fatigue, first set 1.5 screens down. | 1.11.0 combined sheet + All normal, plain language, one place per warning. |
 | ≤1.9.1 | Feedback only per muscle; joint pain on one exercise held every lift for that muscle. | Anthony wanted each exercise rated, plus the muscle. | 1.10.0 `exercise_feedback` + `liftSpeed`. |
 | ≤1.8 | "Focus" muscles (on/off). | Too coarse; couldn't say "keep it" vs "grow it". | 1.9.0 Emphasize / Grow / Maintain / Skip (old "focus" reads as Emphasize). |
 | ≤1.8 | Fixed set counts regardless of time. | 2-day full body came out at 35–38 sets. | 1.9.0 fit-to-time builder. |
 | ≤1.7 | Days in fixed order; recovery asked about "the previous day". | Wanted legs today instead of back. | 1.8.0 any order within a week, read-only preview of later weeks, recovery uses the most recently finished session. |
 | ≤1.1 | Run-it-again from calendar dates. | Dates aren't tracked meaningfully. | 1.2.0 pick a meso week. |
 | ≤1.7 | Single shared offline queue; retried refused saves forever. | Could mix accounts; stuck retries. | 1.8.0 per-account queue + failed list. |
+
+## 6a. UI conventions (v1.11 usability pass)
+
+Keep these when adding screens, so the app stays usable for someone who didn't build it:
+- **Plain words on screen; jargon in ⓘ / Learn.** Use `effortText(rir)` / `effortShort(rir)` ("stop 2 reps short of failure" / "2 reps short") instead of "RIR".
+- **Each warning in one place.** Lift trends → the lift's coach note; muscle recovery → the workout's one-line Heads up; everything else → "Things to check" on the meso page. Home only links to it.
+- **One pop-up per finished exercise**, with the muscle questions folded in when it's the muscle's last exercise; always offer **✓ All normal**.
+- **First set within about one screen**: details go in ⓘ, not on the card.
+- Tabs: Home · Workout · Mesos · Library (exercises, templates) · More (learn, stats, settings). Don't duplicate tab destinations inside More.
 
 ## 7. Open ideas (not started)
 

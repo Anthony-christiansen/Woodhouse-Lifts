@@ -60,7 +60,7 @@ async def main():
         await pg.goto(BASE+'#/new'); await pg.wait_for_timeout(600)
         await pg.click('[data-goal="strength"]'); await pg.wait_for_timeout(100)
         t=await pg.inner_text('main')
-        ok('builder: strength RIR schedule never 0', 'RIR is set for you (main lifts): 3 → 2 → 1 → 1 → deload' in t, t[t.find('RIR is'):t.find('RIR is')+70])
+        ok('builder: strength effort schedule never 0', 'Effort is set for you (main lifts) — reps short of failure each week: 3 → 2 → 1 → 1 → light week' in t, t[t.find('Effort is'):t.find('Effort is')+110])
         await pg.fill('#name','Test strength'); await pg.click('#next'); await pg.wait_for_timeout(400)
         t=await pg.inner_text('main')
         ok('builder: preference note shown', 'skipping' in t)
