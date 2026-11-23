@@ -1,0 +1,44 @@
+# Runs every test suite on each pull request and on main (outside audit: "make passing tests mandatory").
+# No secrets are used: the database tests run on a throwaway in-memory Postgres (PGlite) and the browser tests
+# use the mocked Supabase in test/e2e/mock-supabase.js, so nothing here can reach the live project.
+name: tests
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Install test tools
+        run: |
+          (cd test && npm install --no-save @electric-sql/pglite)
+          pip install playwright
+          python -m playwright install --with-deps chromium
+      - name: Engine tests
+        run: node test/logic.test.mjs
+      - name: Database tests (all migrations on a fresh database)
+        run: cd test && node db.test.mjs
+      - name: Restore drill
+        run: node test/restore.drill.mjs
+      - name: Privacy check (no personal data in this public repo)
+        run: node test/privacy.check.mjs
+      - name: Browser tests
+        run: |
+          python -m http.server 8765 >/dev/null 2>&1 &
+          sleep 1
+          fail=0
+          for f in test/e2e/*.py; do
+            out=$(timeout 300 python "$f" 2>&1 | tail -1)
+            echo "$(basename "$f"): $out"
+            case "$out" in *FAIL*|*Traceback*|*Error*|"]") fail=1;; esac
+          done
+          exit $fail
