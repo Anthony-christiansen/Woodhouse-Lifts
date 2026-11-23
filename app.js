@@ -1,8 +1,8 @@
 // v1.12.1: pinned to one reviewed release, so the code users get only changes with a commit here (outside audit, finding 4).
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.2/+esm';
-import * as L from './logic.js?v=40';
-import * as LEARN from './learn.js?v=40';
-import * as MD from './md.js?v=40';
+import * as L from './logic.js?v=41';
+import * as LEARN from './learn.js?v=41';
+import * as MD from './md.js?v=41';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -19,7 +19,7 @@ let authReturn = (() => {
   return null;
 })();
 let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
-export const APP_VERSION = '1.13.0'; // keep in sync with CHANGELOG.md
+export const APP_VERSION = '1.13.1'; // keep in sync with CHANGELOG.md
 const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
 // v1.11.4: the training rules are a page inside the app (#/logic), built from this repo's docs/training-logic.md.
 // The app never links to anyone's Google Drive.
@@ -73,7 +73,22 @@ function applyTheme(t = themePref()) {
   const light = t === 'light' || (t === 'system' && matchMedia('(prefers-color-scheme: light)').matches);
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', light ? '#f3f4f6' : '#0d0f13');
 }
-matchMedia('(prefers-color-scheme: light)').addEventListener?.('change', () => applyTheme());
+// v1.13.1: one-tap Dark ↔ Normal (light) switch in the header on every screen. It pins the choice on this phone;
+// Settings → Appearance can set it back to "Match phone".
+const isDark = () => { const t = themePref(); return t === 'dark' || (t === 'system' && !matchMedia('(prefers-color-scheme: light)').matches); };
+function syncThemeBtn() {
+  const b = document.getElementById('themeBtn'); if (!b) return;
+  const dark = isDark();
+  b.innerHTML = ic(dark ? 'sun' : 'moon');
+  b.setAttribute('aria-label', dark ? 'Switch to normal (light) mode' : 'Switch to dark mode');
+  b.title = dark ? 'Normal mode' : 'Dark mode';
+}
+function setTheme(t) {
+  try { localStorage.setItem('wl_theme', t); } catch {}
+  applyTheme(t); syncThemeBtn();
+  document.querySelectorAll('[data-theme-pick]').forEach(x => { const on = x.dataset.themePick === t; x.classList.toggle('on', on); x.setAttribute('aria-checked', on); });
+}
+matchMedia('(prefers-color-scheme: light)').addEventListener?.('change', () => { applyTheme(); syncThemeBtn(); });
 // Small haptic tick on set completion where supported (Android). Never required for anything.
 const haptic = () => { try { if (!matchMedia('(prefers-reduced-motion: reduce)').matches) navigator.vibrate?.(12); } catch {} };
 const ic = (name, cls = '') => `<svg class="ic${cls ? ' ' + cls : ''}" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${ICONS[name] || ''}</svg>`;
@@ -83,6 +98,8 @@ const titleEl = document.getElementById('title');
 const backBtn = document.getElementById('backBtn');
 const tabs = document.getElementById('tabs');
 const gearBtn = document.getElementById('gearBtn');
+const themeBtn = document.getElementById('themeBtn');
+themeBtn.onclick = () => setTheme(isDark() ? 'light' : 'dark');
 const sheet = document.getElementById('sheet');
 let session = null, profile = null, exCache = null;
 
@@ -124,8 +141,22 @@ function setHeader(title, back, tab) {
   backBtn.hidden = !back; backBtn.onclick = () => go(back);
   tabs.hidden = !session;
   gearBtn.hidden = !session || tab !== 'home'; gearBtn.onclick = () => go('#/settings');
+  themeBtn.hidden = false; syncThemeBtn();
   tabs.querySelectorAll('a').forEach(a => a.classList.toggle('on', a.dataset.tab === tab));
 }
+// v1.13.1 (accessibility): a <label> written just before its field is linked to it (for/id), on every screen and sheet,
+// so screen readers announce each field's name and tapping the label focuses the field.
+let labelSeq = 0;
+function linkLabels(root) {
+  root?.querySelectorAll('label:not([for])').forEach(l => {
+    if (l.querySelector('input, select, textarea')) return;              // already wraps its field
+    const c = l.nextElementSibling;
+    if (!c || !/^(INPUT|SELECT|TEXTAREA)$/.test(c.tagName)) return;
+    if (!c.id) c.id = `fld-${++labelSeq}`;
+    l.htmlFor = c.id;
+  });
+}
+new MutationObserver(() => { linkLabels(app); linkLabels(sheet); }).observe(document.body, { childList: true, subtree: true });
 function openSheet(html, wire, locked = false) {
   sheet.innerHTML = `<div class="panel">${html}</div>`; sheet.hidden = false;
   if (locked) sheet.dataset.lock = '1'; else delete sheet.dataset.lock;
@@ -625,9 +656,9 @@ async function renderHome() {
   const doneDays = days.filter(d => d.completed_at || d.skipped_at).length;
   const maxSets = Math.max(1, ...setsPerWeek), maxC = Math.max(1, ...cardioPerWeek);
   const bars = (vals, max, color, kind) => `<svg class="chart h110" viewBox="0 0 320 110">${vals.map((v, i) => { const h = Math.round(v / max * 74);   // 74 + label room: the tallest bar's number is never clipped
-    return `<g class="bar-hit" data-go="#/stats/${kind}/${isoDay(weeks[i])}" role="button" tabindex="0" aria-label="Week of ${weeks[i].getMonth() + 1}/${weeks[i].getDate()}: ${Math.round(v)}"><rect x="${i * 40 + 2}" y="0" width="36" height="110" fill="transparent"></rect><rect class="cbar${i === 7 ? ' now' + (kind === 'cardio' ? ' cardio' : '') : ''}" x="${i * 40 + 6}" y="${92 - h}" width="28" height="${h}" rx="4"></rect>
-      <text x="${i * 40 + 20}" y="${88 - h}" font-size="10" text-anchor="middle">${v ? Math.round(v) : ''}</text>
-      <text x="${i * 40 + 20}" y="106" font-size="9" text-anchor="middle">${weeks[i].getMonth() + 1}/${weeks[i].getDate()}</text></g>`; }).join('')}</svg>`;
+    return `<g class="bar-hit" data-go="#/stats/${kind}/${isoDay(weeks[i])}" role="button" tabindex="0" aria-label="Week of ${weeks[i].getMonth() + 1}/${weeks[i].getDate()}: ${Math.round(v)}, open details"><rect x="${i * 40 + 2}" y="0" width="36" height="110" fill="transparent"></rect><rect class="cbar${i === 7 ? ' now' + (kind === 'cardio' ? ' cardio' : '') : ''}" x="${i * 40 + 6}" y="${92 - h}" width="28" height="${h}" rx="4"></rect></g>
+      <text aria-hidden="true" x="${i * 40 + 20}" y="${88 - h}" font-size="10" text-anchor="middle">${v ? Math.round(v) : ''}</text>
+      <text aria-hidden="true" x="${i * 40 + 20}" y="106" font-size="9" text-anchor="middle">${weeks[i].getMonth() + 1}/${weeks[i].getDate()}</text>`; }).join('')}</svg>`;   // numbers sit outside each bar's tap target (v1.13.1), so its name is just its aria-label
 
   app.innerHTML = `
     <div class="muted small">Hi ${esc(profile?.display_name || '')} ${ic('smile', 'accent')}</div><div class="spacer"></div>
@@ -1234,7 +1265,7 @@ async function renderWorkout(dayId, mode) {
     const flag = we.flag ? `<div class="coach-flag">${esc(we.flag)}</div>` : '';
     if (!plan && !trend) return flag;
     const inner = `${plan ? `<div>${plan}</div>` : ''}${trend ? `<div class="coach-trend">${trend}</div>` : ''}`;
-    return (st ? `<button class="coach lift-flag st-${st.status}" data-flag="${we.id}" aria-label="Trend for ${esc(we.exercises.name)}: show tip">${inner}</button>` : `<div class="coach">${inner}</div>`) + flag;
+    return (st ? `<button class="coach lift-flag st-${st.status}" data-flag="${we.id}">${inner}<span class="sr-only"> Show the tip for ${esc(we.exercises.name)}.</span></button>` : `<div class="coach">${inner}</div>`) + flag;
   };
   const feedback = {};
   check(await sb.from('muscle_feedback').select('*').eq('workout_day_id', dayId)).forEach(f => feedback[f.muscle_group] = f);
@@ -2167,7 +2198,7 @@ async function renderVolume(mesoId) {
   }
   const bandCls = { low: 'bad', maintain: 'info', productive: 'on', high: 'warn', over: 'bad' };
   app.innerHTML = `<div class="card"><div class="row"><div class="grow"><b>${esc(meso.name)}</b></div>
-      <select class="w120" id="wk">${[...new Set(days.map(d => d.week))].map(w => `<option value="${w}" ${w === wk ? 'selected' : ''}>Week ${w}</option>`).join('')}</select></div>
+      <select class="w120" id="wk" aria-label="Week">${[...new Set(days.map(d => d.week))].map(w => `<option value="${w}" ${w === wk ? 'selected' : ''}>Week ${w}</option>`).join('')}</select></div>
       <div class="muted small mt6">Planned sets per muscle (direct + ½ indirect). Productive range ≈ 10–20; under 4 is below maintenance (doc §1.1).</div></div>
     <div class="card">${L.MUSCLES.filter(m => plan[m] || ind[m]).map(m => { const tot = plan[m] + ind[m], band = L.volumeBand(tot);
       return `<div class="my10"><div class="row small"><span class="grow">${m}</span><span class="muted tiny">${done[m]}/${plan[m]} done${ind[m] ? ` · +${fmt(ind[m])} indirect` : ''}</span>
@@ -2287,9 +2318,9 @@ async function renderSettings() {
       <div class="muted tiny mt6">Bodyweight lets pull-ups, dips and push-ups count toward strength trends. Switching units only changes how weights are shown — your history stays the same.</div>
       <div class="spacer"></div><button class="primary block" id="save">Save</button></div>
     <div class="card"><h3>Appearance</h3>
-      <div class="seg c3 theme-seg" role="radiogroup" aria-label="Theme">${[['system', 'Match phone'], ['dark', 'Dark'], ['light', 'Light']].map(([v, l]) =>
+      <div class="seg c3 theme-seg" role="radiogroup" aria-label="Theme">${[['system', 'Match phone'], ['dark', 'Dark'], ['light', 'Normal']].map(([v, l]) =>
         `<button type="button" role="radio" data-theme-pick="${v}" aria-checked="${themePref() === v}" class="${themePref() === v ? 'on' : ''}">${l}</button>`).join('')}</div>
-      <div class="muted tiny mt6">Saved on this phone.</div></div>
+      <div class="muted tiny mt6">Saved on this phone. The sun / moon button at the top of every screen switches between Dark and Normal in one tap.</div></div>
     <div class="card"><h3>Training preferences</h3>
       <div class="muted small">Used when the app builds a mesocycle for you. These are your choices; you can still add any exercise by hand.</div>
       <fieldset class="plain"><legend class="small">Equipment I have</legend>
@@ -2334,11 +2365,7 @@ async function renderSettings() {
   };
   $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
   $('#out').onclick = async () => { await sb.auth.signOut(); go('#/'); };
-  $$('[data-theme-pick]').forEach(b => b.onclick = () => {
-    try { localStorage.setItem('wl_theme', b.dataset.themePick); } catch {}
-    applyTheme(b.dataset.themePick);
-    $$('[data-theme-pick]').forEach(x => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-checked', on); });
-  });
+  $$('[data-theme-pick]').forEach(b => b.onclick = () => setTheme(b.dataset.themePick));
   $('#pw').onclick = () => renderNewPassword(false);
 }
 

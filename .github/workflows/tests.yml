@@ -20,7 +20,7 @@ jobs:
         with: { python-version: '3.12' }
       - name: Install test tools
         run: |
-          (cd test && npm install --no-save @electric-sql/pglite)
+          (cd test && npm install --no-save @electric-sql/pglite axe-core)
           pip install playwright
           python -m playwright install --with-deps chromium
       - name: Engine tests

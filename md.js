@@ -39,7 +39,7 @@ export function mdToHtml(md) {
     if (isTable(l) && isTable(lines[i + 1] || '') && /^\s*\|?\s*:?-{2,}/.test(lines[i + 1])) {
       const head = cells(l); i += 2; const rows = [];
       while (i < lines.length && isTable(lines[i])) rows.push(cells(lines[i++]));
-      out.push(`<div class="md-table"><table><thead><tr>${head.map(c => `<th>${inline(c)}</th>`).join('')}</tr></thead><tbody>${
+      out.push(`<div class="md-table" tabindex="0" role="region" aria-label="Table (scrolls sideways)"><table><thead><tr>${head.map(c => `<th>${inline(c)}</th>`).join('')}</tr></thead><tbody>${
         rows.map(r => `<tr>${r.map(c => `<td>${inline(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`);
       continue;
     }
