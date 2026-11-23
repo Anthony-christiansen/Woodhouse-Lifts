@@ -1,7 +1,8 @@
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import * as L from './logic.js?v=36';
-import * as LEARN from './learn.js?v=36';
-import * as MD from './md.js?v=36';
+// v1.12.1: pinned to one reviewed release, so the code users get only changes with a commit here (outside audit, finding 4).
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.2/+esm';
+import * as L from './logic.js?v=37';
+import * as LEARN from './learn.js?v=37';
+import * as MD from './md.js?v=37';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -18,7 +19,7 @@ let authReturn = (() => {
   return null;
 })();
 let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
-export const APP_VERSION = '1.12.0'; // keep in sync with CHANGELOG.md
+export const APP_VERSION = '1.12.1'; // keep in sync with CHANGELOG.md
 const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
 // v1.11.4: the training rules are a page inside the app (#/logic), built from this repo's docs/training-logic.md.
 // The app never links to anyone's Google Drive.
@@ -120,23 +121,60 @@ L.setIncrements(loadIncrements());
 const isPermanentErr = e => /^(22|23|42)/.test(e?.code || '') || e?.code === 'PGRST116';
 const isNetErr = e => !navigator.onLine || /failed to fetch|network|load failed|timeout|fetch/i.test(e?.message || '');
 const setKey = p => p.workout_exercise_id + ':' + p.set_index;
+// v1.12.1 (outside audit, finding 2): no stale writes.
+//  - Write-ahead: every edit is stored on the phone (with a version) BEFORE it is sent, so closing the app mid-save
+//    loses nothing.
+//  - One write at a time per set: saves and offline retries for the same set go out in order, so an older value can
+//    never land on the server after a newer one.
+//  - A save only clears the phone copy if that copy is still the version it sent; a newer edit made meanwhile stays
+//    queued and is sent next.
+//  - The account is fixed per write: if you switch accounts mid-save, the other account's queue is never touched.
+let verSeq = 0;
+const newVer = () => `${Date.now().toString(36)}.${(++verSeq).toString(36)}.${Math.random().toString(36).slice(2, 6)}`;
+const stripLocal = p => { const { _v, _queued, ...row } = p; return row; };
+const sameVersion = (a, b) => !!a && !!b && (a._v ?? JSON.stringify(a)) === (b._v ?? JSON.stringify(b));
+const qLoadFor = k => { try { return k ? JSON.parse(localStorage.getItem(k) || '{}') : {}; } catch { return {}; } };
+const qStoreFor = (k, q) => { if (!k) return; try { localStorage.setItem(k, JSON.stringify(q)); } catch { /* private mode */ } };
+const setChains = new Map();
+function inOrder(key, fn) {           // runs fn after every earlier write for this set has finished
+  const next = (setChains.get(key) || Promise.resolve()).catch(() => {}).then(fn);
+  setChains.set(key, next);
+  next.finally(() => { if (setChains.get(key) === next) setChains.delete(key); }).catch(() => {});
+  return next;
+}
+// Sends the phone copy of one set (whatever is newest when its turn comes). Result: 'saved' | 'queued' | 'failed' | 'gone'.
+function sendQueued(k, qk, uid) {
+  return inOrder(qk + '|' + k, async () => {
+    const cur = qLoadFor(qk)[k];
+    if (!cur) return 'gone';                                         // removed meanwhile (set deleted)
+    if (session?.user?.id !== uid) return 'queued';                  // account switched: leave it for its owner
+    const { error } = await sb.from('sets').upsert(stripLocal(cur), { onConflict: 'workout_exercise_id,set_index' });
+    if (session?.user?.id !== uid) return 'queued';
+    if (!error) { const q = qLoadFor(qk); if (sameVersion(q[k], cur)) { delete q[k]; qStoreFor(qk, q); } return 'saved'; }
+    if (!isPermanentErr(error)) return 'queued';                     // network or server hiccup → keep & retry
+    const q = qLoadFor(qk); if (sameVersion(q[k], cur)) { delete q[k]; qStoreFor(qk, q); qAddFailed(stripLocal(cur), error.message); }
+    return Object.assign(new String('failed'), { message: error.message });
+  });
+}
 async function saveSet(payload) {
-  const { error } = await sb.from('sets').upsert(payload, { onConflict: 'workout_exercise_id,set_index' });
-  const q = qLoad();
-  if (!error) { delete q[setKey(payload)]; qStore(q); syncBadge(); return 'saved'; }    // newest value is on the server
-  if (!isPermanentErr(error)) { q[setKey(payload)] = payload; qStore(q); syncBadge(); return 'queued'; }   // network or server hiccup → keep & retry
-  toast(`Couldn’t save that set: ${error.message}`, true); return 'failed';
+  const qk = qKey(), uid = session?.user?.id, k = setKey(payload);
+  if (!qk) return 'failed';
+  const q = qLoadFor(qk); q[k] = { ...payload, _v: newVer() }; qStoreFor(qk, q);   // on the phone first
+  const res = await sendQueued(k, qk, uid);
+  syncBadge();
+  if (String(res) === 'failed') { toast(`Couldn’t save that set: ${res.message}`, true); return 'failed'; }
+  return res === 'queued' ? 'queued' : 'saved';
 }
 let flushing = false;
 async function flushQueue() {
-  if (flushing || !session) return; flushing = true;
+  if (flushing || !session) return;
+  flushing = true;
+  const qk = qKey(), uid = session.user.id;
   try {
-    const q = qLoad();
-    for (const [k, p] of Object.entries(q)) {
-      const { error } = await sb.from('sets').upsert(p, { onConflict: 'workout_exercise_id,set_index' });
-      if (!error) { const cur = qLoad(); if (JSON.stringify(cur[k]) === JSON.stringify(p)) delete cur[k]; qStore(cur); }
-      else if (isPermanentErr(error)) { const cur = qLoad(); delete cur[k]; qStore(cur); qAddFailed(p, error.message); toast(`A saved-offline set was refused by the server and kept aside: ${error.message}`, true); }
-      else break;   // network / server hiccup: keep it queued and try again later
+    for (const k of Object.keys(qLoadFor(qk))) {
+      const res = await sendQueued(k, qk, uid);
+      if (String(res) === 'failed') toast(`A saved-offline set was refused by the server and kept aside: ${res.message}`, true);
+      if (res === 'queued') break;                                   // still offline: try again later
     }
   } finally { flushing = false; syncBadge(); }
   const left = Object.keys(qLoad()).length;
@@ -144,7 +182,7 @@ async function flushQueue() {
   return left;
 }
 function syncBadge() {
-  const n = Object.keys(qLoad()).length;
+  const qk = qKey(), n = Object.keys(qLoad()).filter(k => !setChains.has(qk + '|' + k)).length;   // in-flight saves aren't "waiting"
   let b = document.getElementById('syncBadge');
   if (!n) { b?.remove(); return; }
   if (!b) { b = document.createElement('button'); b.id = 'syncBadge'; b.className = 'sync-badge'; b.onclick = () => flushQueue(); document.body.appendChild(b); }
@@ -896,9 +934,9 @@ async function applyAdjustment(fb, R, meso) {
   const src = fb.workout_days;
   const update = { soreness: R, recovery_at: new Date().toISOString() };
   const srcDeload = L.rirForWeek(src.week, meso.weeks).deload;
-  const target = !srcDeload && check(await sb.from('workout_days').select('id, week, completed_at')
+  const target = !srcDeload && check(await sb.from('workout_days').select('id, week, completed_at, skipped_at')
     .eq('mesocycle_id', meso.id).eq('week', src.week + 1).eq('day_index', src.day_index).maybeSingle());
-  if (fb.muscle_group !== 'Cardio' && target && !target.completed_at && !L.rirForWeek(target.week, meso.weeks).deload && !fb.adjusted) {
+  if (fb.muscle_group !== 'Cardio' && target && !target.completed_at && !target.skipped_at && !L.rirForWeek(target.week, meso.weeks).deload && !fb.adjusted) {
     // Mesos imported from RP (or made before v1.9) have no stored priorities: keep their original behaviour (Emphasize rules).
     const rawP = meso.priorities?.[fb.muscle_group];
     const priority = rawP ? L.normPriority(rawP, meso.focus) : 'emphasize';
