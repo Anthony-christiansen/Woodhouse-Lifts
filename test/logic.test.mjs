@@ -183,8 +183,10 @@ console.log('GOAL TESTS PASSED');
   assert.deepEqual(ax.library.map(e => e.id).sort(), ['bk', 'bs', 'lc', 'le', 'lp']);
   assert.ok(ax.removed.every(e => e.why === 'avoided'));
   const keepHack = L.applyPreferences(lib, { avoidTags: ['axial'], prefs: [{ exercise_id: 'hk', pref: 'favorite' }] });
-  assert.ok(keepHack.library.some(e => e.id === 'hk'), 'a favorite overrides a tag filter');
-  assert.equal(L.candidatesFor('Quads', keepHack.library, keepHack.favorites)[0].id, 'hk', 'favorites rank first');
+  assert.ok(!keepHack.library.some(e => e.id === 'hk') && keepHack.removed.find(e => e.id === 'hk').favorite, 'v1.15.1: an avoided area beats a favorite');
+  const okHack = L.applyPreferences(lib, { avoidTags: ['axial', 'allow:hk'], prefs: [{ exercise_id: 'hk', pref: 'favorite' }] });
+  assert.ok(okHack.library.find(e => e.id === 'hk')?.kept, 'an explicit OK brings it back, marked');
+  assert.equal(L.candidatesFor('Quads', okHack.library, okHack.favorites)[0].id, 'hk', 'favorites rank first');
   const sub = L.applyPreferences(lib, { prefs: [{ exercise_id: 'lp', pref: 'exclude', substitute_id: 'bs' }] });
   assert.ok(!sub.library.some(e => e.id === 'lp') && L.candidatesFor('Quads', sub.library, sub.favorites)[0].id === 'bs', 'substitute replaces excluded lift');
   const eq = L.applyPreferences(lib, { equipment: ['Machine'] });
@@ -756,14 +758,21 @@ console.log('GUARDRAIL TESTS PASSED');
   for (const a of Object.keys(L.BODY_AREAS)) {
     const P = L.applyPreferences(lib, { avoidTags: [L.BODY_AREAS[a].tag] });
     assert.ok(P.removed.length > 0, `${a}: leaves something out`);
-    for (const m of muscles) assert.ok(P.library.some(e => e.muscle_group === m), `${a}: ${m} still has an exercise`);
-    for (const e of P.library) if (!e.kept) assert.ok(!L.exerciseAreas(e).has(a), `${a}: ${e.name} should be out`);
+    // v1.15.1: nothing restricted comes back on its own; an emptied muscle is reported, with options
+    for (const e of P.library) assert.ok(!L.exerciseAreas(e).has(a), `${a}: ${e.name} should be out`);
+    for (const m of muscles) assert.ok(P.library.some(e => e.muscle_group === m) || P.blocked.some(b => b.muscle === m && b.options.length), `${a}: ${m} has an exercise or a choice`);
   }
-  // all seven at once still leaves every muscle something; favorites always win
+  // all areas at once: still no restricted exercise; every emptied muscle is in blocked, gentler options first
   const all = L.applyPreferences(lib, { avoidTags: Object.values(L.BODY_AREAS).map(x => x.tag) });
-  for (const m of muscles) assert.ok(all.library.some(e => e.muscle_group === m), `all areas: ${m} still has an exercise`);
+  const allAreas = Object.keys(L.BODY_AREAS);
+  for (const e of all.library) assert.ok(![...L.exerciseAreas(e)].some(a => allAreas.includes(a)) || e.kept, `all areas: ${e.name} restored without an OK`);
+  for (const b of all.blocked) { const g = b.options.findIndex(e => !/Machine|Cable/.test(e.equipment || '')); if (g > 0) assert.ok(b.options.slice(0, g).every(e => /Machine|Cable/.test(e.equipment || '')), `${b.muscle}: gentler first`); }
   const squat = lib.find(e => e.name === 'Back Squat');
-  assert.ok(L.applyPreferences(lib, { avoidTags: ['area:knees'], prefs: [{ exercise_id: squat.id, pref: 'favorite' }] }).library.some(e => e.id === squat.id), 'a starred exercise is kept');
+  assert.ok(!L.applyPreferences(lib, { avoidTags: ['area:knees'], prefs: [{ exercise_id: squat.id, pref: 'favorite' }] }).library.some(e => e.id === squat.id), 'a starred exercise no longer slips past Knees');
+  assert.ok(L.applyPreferences(lib, { avoidTags: ['area:knees', 'allow:' + squat.id] }).library.some(e => e.id === squat.id && e.kept), 'an OK does');
+  // equipment you don't have is never offered as an option
+  const eqOnly = L.applyPreferences(lib, { avoidTags: Object.values(L.BODY_AREAS).map(x => x.tag), equipment: ['Dumbbell'] });
+  for (const b of eqOnly.blocked) for (const e of b.options) assert.ok(!e.equipment || e.load_type === 'cardio' || ['Dumbbell', 'Bodyweight'].includes(e.equipment), 'no equipment mismatch in options');
   // the builder respects it end to end
   const P = L.applyPreferences(lib, { avoidTags: ['area:knees', 'axial'] });
   const r = L.fitPlan({ plan: Array.from({ length: 3 }, () => ({ label: 'D', slots: [] })), priorities: L.presetPriorities('balanced'), focus: 'whole', goal: 'hypertrophy', split: 'full_body_split', library: P.library, minutes: 75 });

@@ -1,8 +1,8 @@
 // v1.12.1: pinned to one reviewed release, so the code users get only changes with a commit here (outside audit, finding 4).
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.2/+esm';
-import * as L from './logic.js?v=44';
-import * as LEARN from './learn.js?v=44';
-import * as MD from './md.js?v=44';
+import * as L from './logic.js?v=45';
+import * as LEARN from './learn.js?v=45';
+import * as MD from './md.js?v=45';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -19,7 +19,7 @@ let authReturn = (() => {
   return null;
 })();
 let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
-export const APP_VERSION = '1.15.0'; // keep in sync with CHANGELOG.md
+export const APP_VERSION = '1.15.1'; // keep in sync with CHANGELOG.md
 const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
 // v1.11.4: the training rules are a page inside the app (#/logic), built from this repo's docs/training-logic.md.
 // The app never links to anyone's Google Drive.
@@ -158,13 +158,50 @@ function linkLabels(root) {
   });
 }
 new MutationObserver(() => { linkLabels(app); linkLabels(sheet); }).observe(document.body, { childList: true, subtree: true });
+// v1.15.1 (audit S4/S5): the sheet is a real modal dialog — labelled by its heading, the page behind it is inert,
+// focus moves into it, Tab stays inside it, Escape closes it (unless it's a required step), and focus returns to
+// whatever opened it.
+let sheetReturn = null;
+const FOCUSABLE = 'button:not([disabled]):not([hidden]), [href], input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 function openSheet(html, wire, locked = false) {
-  sheet.innerHTML = `<div class="panel">${html}</div>`; sheet.hidden = false;
+  const wasOpen = !sheet.hidden;
+  if (!wasOpen) sheetReturn = document.activeElement;
+  sheet.innerHTML = `<div class="panel" role="dialog" aria-modal="true">${html}</div>`; sheet.hidden = false;
+  const panel = sheet.querySelector('.panel'), h = panel.querySelector('h2, h3');
+  if (h) { h.id = h.id || 'sheetTitle'; panel.setAttribute('aria-labelledby', h.id); } else panel.setAttribute('aria-label', 'Dialog');
+  for (const id of ['app', 'tabs']) document.getElementById(id)?.setAttribute('inert', '');
+  document.querySelector('header')?.setAttribute('inert', '');
   if (locked) sheet.dataset.lock = '1'; else delete sheet.dataset.lock;
   sheet.onclick = e => { if (e.target === sheet && !sheet.dataset.lock) closeSheet(); };
-  wire?.(sheet.querySelector('.panel'));
+  wire?.(panel);
+  if (!panel.contains(document.activeElement)) {
+    if (h) { h.tabIndex = -1; h.focus({ preventScroll: true }); } else panel.querySelector(FOCUSABLE)?.focus({ preventScroll: true });
+  }
 }
-function closeSheet() { sheet.hidden = true; sheet.innerHTML = ''; delete sheet.dataset.lock; }
+function closeSheet() {
+  const wasOpen = !sheet.hidden;
+  sheet.hidden = true; sheet.innerHTML = ''; delete sheet.dataset.lock;
+  for (const id of ['app', 'tabs']) document.getElementById(id)?.removeAttribute('inert');
+  document.querySelector('header')?.removeAttribute('inert');
+  if (wasOpen && sheetReturn?.isConnected) sheetReturn.focus({ preventScroll: true });
+  sheetReturn = null;
+}
+// However the sheet gets hidden, the page behind it never stays inert.
+new MutationObserver(() => { if (sheet.hidden) { for (const id of ['app', 'tabs']) document.getElementById(id)?.removeAttribute('inert'); document.querySelector('header')?.removeAttribute('inert'); } })
+  .observe(sheet, { attributes: true, attributeFilter: ['hidden'] });
+document.addEventListener('keydown', e => {
+  if (sheet.hidden) return;
+  if (e.key === 'Escape') {
+    if (sheet.dataset.lock) { toast('Answer this first — it sets up today’s workout'); return; }
+    e.preventDefault(); return closeSheet();
+  }
+  if (e.key !== 'Tab') return;
+  const items = [...sheet.querySelectorAll(FOCUSABLE)].filter(x => x.offsetParent !== null);
+  if (!items.length) return e.preventDefault();
+  const first = items[0], last = items.at(-1);
+  if (e.shiftKey && (document.activeElement === first || !sheet.contains(document.activeElement))) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && (document.activeElement === last || !sheet.contains(document.activeElement))) { e.preventDefault(); first.focus(); }
+});
 function weekStart(d = new Date()) { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; }
 const isoDay = d => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 
@@ -188,14 +225,23 @@ const segHtml = (key, val, attrs = '') => `<div class="seg">${RATINGS[key].opts.
 // hold a duplicate set. If the network drops (gym basements), the save is kept on the phone and retried
 // automatically — when the connection returns, when the app comes back to the foreground, and every 20 s.
 // The queue is per account (review #2): switching accounts on the same phone can't send one person's sets as another's.
+// v1.15.1 (audit S1): if the phone refuses to store the offline copy (storage full, blocked, private mode), the copy
+// is kept in memory for this session instead and the app says plainly that closing it would lose those changes —
+// it never claims "saved on your phone" when it isn't.
+const memStore = new Map(); let storageAtRisk = false;
+const lsGet = k => memStore.has(k) ? memStore.get(k) : localStorage.getItem(k);
+function lsSet(k, v) {
+  try { localStorage.setItem(k, v); memStore.delete(k); return true; }
+  catch { memStore.set(k, v); if (!storageAtRisk) { storageAtRisk = true; setTimeout(syncBadge); } return false; }
+}
 const QKEY = 'wl_pending_sets_v1';
 const qKey = () => session?.user?.id ? `${QKEY}:${session.user.id}` : null;
-const qLoad = () => { const k = qKey(); if (!k) return {}; try { return JSON.parse(localStorage.getItem(k) || '{}'); } catch { return {}; } };
-const qStore = q => { const k = qKey(); if (!k) return; try { localStorage.setItem(k, JSON.stringify(q)); } catch { /* private mode: retry still works this session */ } };
+const qLoad = () => { const k = qKey(); if (!k) return {}; try { return JSON.parse(lsGet(k) || '{}'); } catch { return {}; } };
+const qStore = q => { const k = qKey(); if (!k) return; lsSet(k, JSON.stringify(q)); };
 // Sets the server rejected for good (not a network problem) are kept here instead of being thrown away.
 const qFailedKey = () => session?.user?.id ? `${QKEY}:failed:${session.user.id}` : null;
-const qFailed = () => { const k = qFailedKey(); try { return k ? JSON.parse(localStorage.getItem(k) || '[]') : []; } catch { return []; } };
-const qAddFailed = (p, msg) => { const k = qFailedKey(); if (!k) return; try { localStorage.setItem(k, JSON.stringify([...qFailed(), { ...p, _error: msg, _at: new Date().toISOString() }].slice(-50))); } catch {} };
+const qFailed = () => { const k = qFailedKey(); try { return k ? JSON.parse(lsGet(k) || '[]') : []; } catch { return []; } };
+const qAddFailed = (p, msg) => { const k = qFailedKey(); if (!k) return; lsSet(k, JSON.stringify([...qFailed(), { ...p, _error: msg, _at: new Date().toISOString() }].slice(-50))); };
 // One-time move of the old shared queue (before 1.8.0) into the signed-in account's queue; the database's row-level
 // security rejects anything that isn't this user's, and those land in the failed list rather than being lost.
 function qMigrateLegacy() {
@@ -221,8 +267,8 @@ let verSeq = 0;
 const newVer = () => `${Date.now().toString(36)}.${(++verSeq).toString(36)}.${Math.random().toString(36).slice(2, 6)}`;
 const stripLocal = p => { const { _v, _queued, ...row } = p; return row; };
 const sameVersion = (a, b) => !!a && !!b && (a._v ?? JSON.stringify(a)) === (b._v ?? JSON.stringify(b));
-const qLoadFor = k => { try { return k ? JSON.parse(localStorage.getItem(k) || '{}') : {}; } catch { return {}; } };
-const qStoreFor = (k, q) => { if (!k) return; try { localStorage.setItem(k, JSON.stringify(q)); } catch { /* private mode */ } };
+const qLoadFor = k => { try { return k ? JSON.parse(lsGet(k) || '{}') : {}; } catch { return {}; } };
+const qStoreFor = (k, q) => { if (!k) return true; return lsSet(k, JSON.stringify(q)); };
 const setChains = new Map();
 function inOrder(key, fn) {           // runs fn after every earlier write for this set has finished
   const next = (setChains.get(key) || Promise.resolve()).catch(() => {}).then(fn);
@@ -253,6 +299,7 @@ async function saveSet(payload) {
   const res = await sendQueued(k, qk, uid);
   syncBadge();
   if (String(res) === 'failed') { toast(`Couldn’t save that set: ${res.message}`, true); return 'failed'; }
+  if (res === 'queued' && storageAtRisk) warnAtRisk();
   return res === 'queued' ? 'queued' : 'saved';
 }
 let flushing = false;
@@ -278,7 +325,8 @@ function syncBadge() {
   document.body.classList.toggle('has-sync', !!n);   // v1.12.3: room at the bottom so the badge never covers a button
   if (!n) { b?.remove(); return; }
   if (!b) { b = document.createElement('button'); b.id = 'syncBadge'; b.className = 'sync-badge'; b.onclick = () => syncAll(); document.body.appendChild(b); }
-  b.textContent = `⟳ ${[sets ? `${sets} set${sets > 1 ? 's' : ''}` : '', ops ? `${ops} change${ops > 1 ? 's' : ''}` : ''].filter(Boolean).join(' + ')} waiting to sync — tap to retry`;
+  b.textContent = `⟳ ${[sets ? `${sets} set${sets > 1 ? 's' : ''}` : '', ops ? `${ops} change${ops > 1 ? 's' : ''}` : ''].filter(Boolean).join(' + ')} waiting to sync${storageAtRisk ? ' — NOT saved on this phone, keep the app open' : ''} — tap to retry`;
+  b.classList.toggle('risk', storageAtRisk);
   b.setAttribute('aria-live', 'polite');
 }
 // ---------- durable writes for ratings and finishing a workout (v1.12.3, outside audit finding 3) ----------
@@ -288,8 +336,8 @@ function syncBadge() {
 // syncs by itself when the connection is back. Refused changes are kept aside, never silently dropped.
 const OKEY = 'wl_pending_ops_v1';
 const oKey = () => session?.user?.id ? `${OKEY}:${session.user.id}` : null;
-const oLoad = (k = oKey()) => { try { return k ? JSON.parse(localStorage.getItem(k) || '[]') : []; } catch { return []; } };
-const oStore = (k, a) => { if (!k) return; try { localStorage.setItem(k, JSON.stringify(a)); } catch { /* private mode */ } };
+const oLoad = (k = oKey()) => { try { return k ? JSON.parse(lsGet(k) || '[]') : []; } catch { return []; } };
+const oStore = (k, a) => { if (!k) return true; return lsSet(k, JSON.stringify(a)); };
 const opFailed = new Set();
 function opQuery(op) {
   if (op.kind === 'upsert') return sb.from(op.table).upsert(op.values, { onConflict: op.onConflict });
@@ -316,6 +364,11 @@ function flushOps() {
   return opsFlushing;
 }
 async function syncAll() { await flushQueue(); return flushOps(); }
+let riskWarned = 0;
+function warnAtRisk() {   // at most once a minute
+  if (Date.now() - riskWarned < 60000) return; riskWarned = Date.now();
+  toast('No signal, and this phone won’t let the app keep an offline copy. Keep the app open until it syncs, or the unsynced changes are lost.', true, 8000);
+}
 // Returns 'saved' (on the server), 'queued' (kept on the phone, will sync) or 'failed' (refused; kept aside).
 async function durableWrite(op) {
   const k = oKey(); if (!k) return 'failed';
@@ -323,7 +376,9 @@ async function durableWrite(op) {
   oStore(k, [...oLoad(k), op]);
   if (!Object.keys(qLoad()).length || await flushQueue() === 0) await flushOps();
   if (opFailed.has(op.id)) return 'failed';
-  return oLoad(k).some(x => x.id === op.id) ? 'queued' : 'saved';
+  const left = oLoad(k).some(x => x.id === op.id);
+  if (left && storageAtRisk) warnAtRisk();
+  return left ? 'queued' : 'saved';
 }
 // Pending changes overlay what the server returned, so a page loaded before they sync still shows them.
 const pendingOps = (table, match) => oLoad().filter(o => o.table === table && match(o));
@@ -415,7 +470,7 @@ async function route() {
   catch (e) {
     console.error(e);
     app.innerHTML = `<div class="card warn" role="alert"><b>${isNetErr(e) ? 'No connection' : 'Something went wrong'}</b>
-      <p class="muted small">${isNetErr(e) ? 'Check your signal and try again. Sets you logged are kept on this phone and sync when you’re back online.' : esc(e.message)}</p>
+      <p class="muted small">${isNetErr(e) ? (storageAtRisk ? 'Check your signal and try again. Keep the app open: this phone isn’t keeping an offline copy of unsynced sets.' : 'Check your signal and try again. Sets you logged are kept on this phone and sync when you’re back online.') : esc(e.message)}</p>
       <button class="primary block" id="retry">Try again</button></div>`;
     $('#retry').onclick = () => route();
   } finally { clearTimeout(slow); app.removeAttribute('aria-busy'); }
@@ -761,7 +816,9 @@ async function renderBuilder() {
   setHeader('New mesocycle', '#/mesos', 'mesos');
   const lib = await loadExercises();
   // Personal preferences (favorites, exclusions + substitutes, equipment, avoided tags) shape what autofill picks.
-  const P = L.applyPreferences(lib, { prefs: await loadPrefs(), equipment: profile?.equipment, avoidTags: profile?.avoid_tags || [] });
+  const prefsB = await loadPrefs();
+  let P = L.applyPreferences(lib, { prefs: prefsB, equipment: profile?.equipment, avoidTags: profile?.avoid_tags || [] });
+  const recomputeP = () => { P = L.applyPreferences(lib, { prefs: prefsB, equipment: profile?.equipment, avoidTags: profile?.avoid_tags || [] }); };
   if (!builder) builder = freshBuilder();
   const S = builder;
   const syncPlan = () => {
@@ -920,6 +977,13 @@ async function renderBuilder() {
           <button class="sm" id="clear">Clear (manual)</button>
         </div>
         ${(() => { const ar = L.avoidedAreas(profile?.avoid_tags || []); return ar.length ? `<div class="card small mt10-only">${ic('alert')} Going easy on <b>${esc(ar.map(a => L.BODY_AREAS[a].name).join(', '))}</b>: exercises that load ${ar.length > 1 ? 'these areas' : 'it'} the most were left out. <a href="#/settings">Change in Settings</a>.</div>` : ''; })()}
+        ${(() => { const need = P.blocked.filter(b => targets[b.muscle] > 0 || S.plan.some(d => d.slots.some(x => x.muscle === b.muscle)));
+          return need.map(b => { const ar = [...new Set(b.options.flatMap(e => e.areas || []))].map(a => L.BODY_AREAS[a]?.name).filter(Boolean);
+            return `<div class="card warn small mt10-only" data-blocked="${esc(b.muscle)}"><b>${esc(b.muscle)}: every option loads ${esc(ar.join(' or ') || 'an area')}, which you’re going easy on.</b>
+              Nothing was put back on its own. OK one to use anyway, or leave ${esc(b.muscle)} out of this meso.
+              <div class="chips mt6">${b.options.slice(0, 4).map(e => `<button class="sm" data-allow="${e.id}">OK ${esc(e.name)}</button>`).join('')}</div>
+              <button class="sm ghost mt6" data-leaveout="${esc(b.muscle)}">Leave ${esc(b.muscle)} out</button>
+              <div class="muted tiny mt6">An OK is saved to your account and shown in Settings, where you can take it back.</div></div>`; }).join(''); })()}
         ${S.demoted?.length ? `<div class="card small mt10-only">To keep your bigger muscles growing in ~${S.minutes} min, <b>${esc(S.demoted.join(', '))}</b> ${S.demoted.length > 1 ? 'were' : 'was'} set to <b>Maintain</b> (still trained; ${S.demoted.length > 1 ? 'they also get' : 'it also gets'} work from the big lifts). Growing a few muscles properly beats spreading too little across all of them. Change it under “Adjust muscles”.</div>` : ''}
         ${S.under?.length ? `<div class="card warn small mt10-only"><b>Not enough time to grow ${esc(S.under.map(u => u.muscle).join(', '))}</b> — ${esc(S.under.map(u => `${u.muscle} ${u.sets} sets/week`).join(', '))}, which maintains rather than grows (about ${S.under[0].floor}+ a week is the growth range here). Allow more time per workout, add a day, or set fewer muscles to Grow.</div>` : ''}
         ${trimmedTxt ? `<div class="card warn small mt10-only">To fit ~${S.minutes} min a workout, these weekly sets were trimmed (lowest priority first): <b>${esc(trimmedTxt)}</b>. Want them back? Add a day, allow more time, or set fewer muscles to Emphasize/Grow.</div>` : ''}
@@ -957,6 +1021,12 @@ async function renderBuilder() {
       const m = L.MUSCLES.find(x => p[x] < t[x]) || 'Chest';
       S.plan[+b.dataset.add].slots.push({ muscle: m, exerciseId: null, sets: 3 }); step2();
     });
+    $$('[data-allow]').forEach(b => b.onclick = async () => { b.disabled = true;
+      if (!await setAllowed(b.dataset.allow, true)) { b.disabled = false; return; }
+      recomputeP(); S.plan = buildFit('fill'); step2(); });
+    $$('[data-leaveout]').forEach(b => b.onclick = () => { const m = b.dataset.leaveout;
+      S.priorities = { ...S.priorities, [m]: 'skip' }; S.plan = S.plan.map(d => ({ ...d, slots: d.slots.filter(x => x.muscle !== m) }));
+      toast(`${m} left out of this meso`); step2(); });
     $('#create').onclick = create;
     $('#saveTpl').onclick = async () => {
       if (S.plan.some(d => d.slots.some(s => !s.exerciseId))) return toast('Pick an exercise for every slot first', true);
@@ -1478,7 +1548,7 @@ async function renderWorkout(dayId, mode) {
           const r2 = await durableWrite({ kind: 'upsert', table: 'muscle_feedback', values: payload, onConflict: 'workout_day_id,muscle_group' });
           if (r2 === 'failed') return;
           feedback[m] = { ...(feedback[m] || {}), ...payload, _queued: r2 === 'queued' };
-          if (r1 === 'queued' || r2 === 'queued') toast('No signal — rating saved on your phone, it will sync automatically');
+          if ((r1 === 'queued' || r2 === 'queued') && !storageAtRisk) toast('No signal — rating saved on your phone, it will sync automatically');
           const ms = app.querySelector(`[data-rate="${CSS.escape(m)}"]`); if (ms) ms.innerHTML = rateLine(m, feedback[m]);
         }
         closeSheet();
@@ -1528,7 +1598,7 @@ async function renderWorkout(dayId, mode) {
         const res = await durableWrite({ kind: 'upsert', table: 'muscle_feedback', values: payload, onConflict: 'workout_day_id,muscle_group' });
         if (res === 'failed') return;
         const row = feedback[m] = { ...(feedback[m] || {}), ...payload, _queued: res === 'queued' }; closeSheet();
-        if (res === 'queued') toast('No signal — rating saved on your phone, it will sync automatically');
+        if (res === 'queued' && !storageAtRisk) toast('No signal — rating saved on your phone, it will sync automatically');
         const slot = app.querySelector(`[data-rate="${CSS.escape(m)}"]`); if (slot) slot.innerHTML = rateLine(m, row);
         wireRate();
         enforceRatings();
@@ -1603,7 +1673,7 @@ async function renderWorkout(dayId, mode) {
       const res = await saveSet(payload);
       delete row.dataset.busy; row.classList.remove('saving');
       if (res === 'failed') { row.classList.add('failed'); return; }
-      if (res === 'queued') { row.classList.add('queued'); if (markDone && done) toast('No signal — saved on your phone, will sync automatically'); }
+      if (res === 'queued') { row.classList.add('queued'); if (markDone && done && !storageAtRisk) toast('No signal — saved on your phone, will sync automatically'); }
       row.dataset.saved = sig;
       if (row.dataset.again) { delete row.dataset.again; save(false); }
       row.dataset.at = payload.completed_at || ''; wIn.classList.remove('sug');
@@ -2449,6 +2519,14 @@ async function toggleArea(key, btn) {
   toast(next.includes(tag) ? `${L.BODY_AREAS[key].name}: going easy — the exercises that load it most are left out` : `${L.BODY_AREAS[key].name}: back to normal`);
   return true;
 }
+// v1.15.1: OK (or take back) one exercise despite an area you're going easy on — saved as "allow:<id>".
+async function setAllowed(id, on) {
+  const tag = 'allow:' + id, cur = profile?.avoid_tags || [];
+  const next = on ? [...new Set([...cur, tag])] : cur.filter(t => t !== tag);
+  const r = await sb.from('profiles').update({ avoid_tags: next }).eq('id', session.user.id).select().single();
+  if (r.error) { toast(isNetErr(r.error) ? 'No signal — try again when you’re back online' : r.error.message, true); return false; }
+  profile = { ...profile, ...r.data, avoid_tags: next }; return true;
+}
 async function clearAreas() {
   const keep = (profile?.avoid_tags || []).filter(t => !Object.values(L.BODY_AREAS).some(a => a.tag === t));
   const r = await sb.from('profiles').update({ avoid_tags: keep }).eq('id', session.user.id).select().single();
@@ -2471,11 +2549,13 @@ async function renderSettings() {
       <div class="muted tiny mt6">Bodyweight lets pull-ups, dips and push-ups count toward strength trends. Switching units only changes how weights are shown — your history stays the same.</div>
       <div class="spacer"></div><button class="primary block" id="save">Save</button></div>
     <div class="card" id="areasCard"><h3>Injuries &amp; sore spots</h3>
-      <div class="muted small">Pick any area you want to go easy on. When the app builds a meso or suggests a swap, it leaves out the exercises that load that area the most and keeps gentler ones. Tap again to turn it off. This is your preference, not medical advice. You can still add any exercise by hand, and starred favorites are always kept.</div>
+      <div class="muted small">Pick any area you want to go easy on. When the app builds a meso or suggests a swap, it leaves out the exercises that load that area the most and keeps gentler ones. Tap again to turn it off. This is your preference, not medical advice, and the matching is by exercise name, so check anything new.</div>
       ${areaGrid(lib)}
+      ${(() => { const ok = [...L.allowedIds(profile?.avoid_tags || [])].map(id => lib.find(e => e.id === id)).filter(Boolean);
+        return ok.length ? `<div class="small mt8"><b>OK’d anyway</b> <span class="muted tiny">(you chose these when a muscle had nothing else)</span>${ok.map(e => `<div class="row mt6"><span class="grow">${esc(e.name)}</span><button class="sm ghost" data-unallow="${e.id}">Take back</button></div>`).join('')}</div>` : ''; })()}
       ${areas.length ? `<details class="small mt8"><summary class="muted">What's left out (${areas.map(a => L.BODY_AREAS[a].name).join(', ')})</summary>
         ${areas.map(a => `<div class="mt6"><b>${esc(L.BODY_AREAS[a].name)}</b> <span class="muted tiny">— ${esc(L.BODY_AREAS[a].blurb)}</span><div class="muted tiny">${lib.filter(e => L.exerciseAreas(e).has(a)).map(e => esc(e.name)).join(' · ') || 'none in your library'}</div></div>`).join('')}
-        <div class="muted tiny mt6">Want to keep one of these? Star it in the Exercise library. Favorites are always allowed.</div></details>` : ''}
+        <div class="muted tiny mt6">Starring one doesn’t bring it back. If a muscle has nothing left, the meso builder asks which one to OK.</div></details>` : ''}
       <div class="muted tiny mt6">Saved to your account as soon as you tap. New mesos and swap suggestions use it; meso days already built aren't changed.</div></div>
     <div class="card"><h3>Appearance</h3>
       <div class="seg c3 theme-seg" role="radiogroup" aria-label="Theme">${[['system', 'Match phone'], ['dark', 'Dark'], ['light', 'Normal']].map(([v, l]) =>
@@ -2523,6 +2603,7 @@ async function renderSettings() {
   $$('[data-theme-pick]').forEach(b => b.onclick = () => setTheme(b.dataset.themePick));
   // v1.14.0: tapping an area saves at once (no separate Save), keeping any other avoid tags the account has.
   $$('[data-area]').forEach(b => b.onclick = async () => { if (await toggleArea(b.dataset.area, b)) { const y = window.scrollY; await renderSettings(); window.scrollTo(0, y); } });
+  $$('[data-unallow]').forEach(b => b.onclick = async () => { b.disabled = true; if (await setAllowed(b.dataset.unallow, false)) { toast('Taken back'); const y = window.scrollY; await renderSettings(); window.scrollTo(0, y); } else b.disabled = false; });
   $('#pw').onclick = () => renderNewPassword(false);
 }
 

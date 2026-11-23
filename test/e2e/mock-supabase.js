@@ -42,6 +42,7 @@ function builder(table) {
     if (k === 'then') return (res, rej) => {
       let data = fixtures[table] || [];
       if (table === 'mesocycles' && window.__MESOS) data = window.__MESOS;   // test hook
+      if (table === 'profiles' && window.__PROFILE) data = data.map(x => ({ ...x, ...window.__PROFILE }));   // test hook
       if (table === 'mesocycles' && statusIn) data = data.filter(m => statusIn.includes(m.status));
       if (table === 'mesocycles' && lim) data = data.slice(0, lim);
       if (table === 'workout_exercises' && inIds && inIds.some(id => /s\d+$/.test(id))) data = inIds.map(id => ({ id, exercises: { load_type: 'weighted' }, workout_days: { week: +id.match(/s(\d+)$/)[1] + 1, mesocycle_id: 'm0', mesocycles: { name: 'Test Meso', weeks: 8 } } }));

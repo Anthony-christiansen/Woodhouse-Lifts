@@ -252,8 +252,9 @@ Settings, and the meso builder's "Any injuries or sore spots?" question (v1.14.1
 
 **Rules:**
 - **Gentler options stay.** For example, Knees keeps leg press and leg extension, because you set their range of motion.
-- **No muscle is ever left with nothing.** If the picked areas would remove every option for a muscle, the machine and cable options are kept and marked.
-- **Starred favorites always stay.** You can still add any exercise by hand.
+- **Nothing you've ruled out comes back on its own (v1.15.1).** If the picked areas remove every option for a muscle, the builder says so and asks: **OK** one of the options (machines and cables listed first), or **leave the muscle out** of this meso. An OK is saved as `allow:<exercise id>` in `profiles.avoid_tags` and listed in Settings under "OK'd anyway", where **Take back** removes it. Before 1.15.1 the app quietly kept the machine and cable options; the audit flagged that as a silent override.
+- **An area beats a favorite (v1.15.1).** Starring an exercise no longer slips it past an area you're going easy on; only an explicit OK does. You can still add any exercise by hand in the builder's own dropdowns once it's OK'd.
+- Matching is by exercise name (and the old `axial` tag), so a custom exercise with an unusual name may not be recognised. It's a filter for your preference, not a safety rating: "machine" isn't automatically safer.
 - Meso days that were already built aren't changed.
 - **Lower back is the old "Avoid heavy spinal loading" switch**, stored as the same `axial` tag, so an existing choice carries over. Other areas are stored as `area:<id>` in `profiles.avoid_tags`, so no database change was needed.
 

@@ -66,3 +66,5 @@ async def main():
     for r in R: print(*r)
     print('INJURIES 1.14.0 TESTS:', 'ALL PASSED' if all(r[0]=='PASS' for r in R) else 'FAILURES')
 asyncio.run(main())
+import sys as _sys
+_sys.exit(0 if R and all(r[0]=='PASS' for r in R) else 1)   # v1.15.1: CI goes by the exit code

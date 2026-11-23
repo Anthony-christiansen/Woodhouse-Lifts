@@ -18,10 +18,10 @@ jobs:
         with: { node-version: '22' }
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
-      - name: Install test tools
+      - name: Install test tools (exact versions from test/package-lock.json and test/requirements.txt)
         run: |
-          (cd test && npm install --no-save @electric-sql/pglite axe-core)
-          pip install playwright
+          (cd test && npm ci --ignore-scripts)
+          pip install -r test/requirements.txt
           python -m playwright install --with-deps chromium
       - name: Engine tests
         run: node test/logic.test.mjs
@@ -32,13 +32,22 @@ jobs:
       - name: Privacy check (no personal data in this public repo)
         run: node test/privacy.check.mjs
       - name: Browser tests
+        # v1.15.1 (audit S3): a test fails the build by its exit code, not by what its last line says.
         run: |
           python -m http.server 8765 >/dev/null 2>&1 &
           sleep 1
+          mkdir -p test-logs
           fail=0
           for f in test/e2e/*.py; do
-            out=$(timeout 300 python "$f" 2>&1 | tail -1)
-            echo "$(basename "$f"): $out"
-            case "$out" in *FAIL*|*Traceback*|*Error*|"]") fail=1;; esac
+            log="test-logs/$(basename "$f" .py).log"
+            if timeout 300 python "$f" >"$log" 2>&1; then
+              echo "ok   $(basename "$f"): $(tail -1 "$log")"
+            else
+              echo "FAIL $(basename "$f") (exit $?):"; tail -40 "$log"; fail=1
+            fi
           done
           exit $fail
+      - name: Keep the browser test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with: { name: browser-test-logs, path: test-logs, retention-days: 14 }
