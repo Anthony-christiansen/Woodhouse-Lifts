@@ -455,4 +455,27 @@ button:disabled { opacity: .55; }
 /* v1.13.1 accessibility: text for screen readers only */
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .md-table:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+/* v1.14.0: checkboxes and switches show their state (since 1.13.0 every input had appearance:none, so a checked box
+   looked exactly like an unchecked one — "can't click avoid heavy spinal loading"). */
+input[type=checkbox], input[type=radio] { -webkit-appearance: auto; appearance: auto; accent-color: var(--accent); width: 20px; height: 20px; min-height: 0;
+  padding: 0; margin: 0; border: 0; background: none; flex: none; }
+.switch input[type=checkbox] { -webkit-appearance: none; appearance: none; position: relative; width: 48px; height: 28px; border-radius: 999px;
+  background: var(--surface-3); border: 1px solid var(--border); cursor: pointer; }
+.switch input[type=checkbox]::before { content: ''; position: absolute; top: 2px; left: 2px; width: 22px; height: 22px; border-radius: 50%; background: #fff;
+  box-shadow: 0 1px 2px rgba(0,0,0,.35); }
+.switch input[type=checkbox]:checked { background: var(--accent); border-color: var(--accent); }
+.switch input[type=checkbox]:checked::before { transform: translateX(20px); }
+@media (prefers-reduced-motion: no-preference) { .switch input[type=checkbox], .switch input[type=checkbox]::before { transition: background-color var(--t-fast) var(--ease), transform var(--t-fast) var(--ease); } }
+.chip.check:has(input:checked) { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--surface-2)); }
+/* injuries & sore spots */
+.area-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.area { display: flex; flex-direction: column; align-items: stretch; gap: 2px; text-align: left; min-height: 64px; padding: 10px 12px;
+  background: var(--surface-2); border: 1.5px solid var(--border); border-radius: var(--r-md); color: var(--text); }
+.area .area-top { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.area .tick { width: 22px; height: 22px; border-radius: 99px; display: inline-flex; align-items: center; justify-content: center; }
+.area.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--surface-1)); }
+.area.on .tick { background: var(--accent); color: var(--accent-ink); } .area .tick .ic { width: 14px; height: 14px; stroke-width: 2.5; }
+/* v1.14.0: library Favorite / Never buttons carry a word under the icon (the ban icon alone read as an "x") */
+.exrow .pref { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 56px; padding: 6px 4px; }
+.exrow .pref .pref-lbl { font-size: var(--fs-xs); line-height: 1; }
 }

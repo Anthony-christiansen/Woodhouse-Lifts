@@ -1,8 +1,8 @@
 // v1.12.1: pinned to one reviewed release, so the code users get only changes with a commit here (outside audit, finding 4).
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.2/+esm';
-import * as L from './logic.js?v=41';
-import * as LEARN from './learn.js?v=41';
-import * as MD from './md.js?v=41';
+import * as L from './logic.js?v=42';
+import * as LEARN from './learn.js?v=42';
+import * as MD from './md.js?v=42';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -19,7 +19,7 @@ let authReturn = (() => {
   return null;
 })();
 let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
-export const APP_VERSION = '1.13.1'; // keep in sync with CHANGELOG.md
+export const APP_VERSION = '1.14.0'; // keep in sync with CHANGELOG.md
 const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
 // v1.11.4: the training rules are a page inside the app (#/logic), built from this repo's docs/training-logic.md.
 // The app never links to anyone's Google Drive.
@@ -148,6 +148,7 @@ function setHeader(title, back, tab) {
 // so screen readers announce each field's name and tapping the label focuses the field.
 let labelSeq = 0;
 function linkLabels(root) {
+  root?.querySelectorAll('.switch input[type=checkbox]:not([role])').forEach(i => i.setAttribute('role', 'switch'));   // announced as on/off
   root?.querySelectorAll('label:not([for])').forEach(l => {
     if (l.querySelector('input, select, textarea')) return;              // already wraps its field
     const c = l.nextElementSibling;
@@ -903,6 +904,7 @@ async function renderBuilder() {
           <button class="sm" id="fillLeft">Fill what's left</button>
           <button class="sm" id="clear">Clear (manual)</button>
         </div>
+        ${(() => { const ar = L.avoidedAreas(profile?.avoid_tags || []); return ar.length ? `<div class="card small mt10-only">${ic('alert')} Going easy on <b>${esc(ar.map(a => L.BODY_AREAS[a].name).join(', '))}</b>: exercises that load ${ar.length > 1 ? 'these areas' : 'it'} the most were left out. <a href="#/settings">Change in Settings</a>.</div>` : ''; })()}
         ${S.demoted?.length ? `<div class="card small mt10-only">To keep your bigger muscles growing in ~${S.minutes} min, <b>${esc(S.demoted.join(', '))}</b> ${S.demoted.length > 1 ? 'were' : 'was'} set to <b>Maintain</b> (still trained; ${S.demoted.length > 1 ? 'they also get' : 'it also gets'} work from the big lifts). Growing a few muscles properly beats spreading too little across all of them. Change it under “Adjust muscles”.</div>` : ''}
         ${S.under?.length ? `<div class="card warn small mt10-only"><b>Not enough time to grow ${esc(S.under.map(u => u.muscle).join(', '))}</b> — ${esc(S.under.map(u => `${u.muscle} ${u.sets} sets/week`).join(', '))}, which maintains rather than grows (about ${S.under[0].floor}+ a week is the growth range here). Allow more time per workout, add a day, or set fewer muscles to Grow.</div>` : ''}
         ${trimmedTxt ? `<div class="card warn small mt10-only">To fit ~${S.minutes} min a workout, these weekly sets were trimmed (lowest priority first): <b>${esc(trimmedTxt)}</b>. Want them back? Add a day, allow more time, or set fewer muscles to Emphasize/Grow.</div>` : ''}
@@ -2264,12 +2266,13 @@ async function renderExercises(filter = '', head = '', wireTabs = () => {}) {
       <input id="q" placeholder="Search ${list.length} exercises" value="${esc(q)}"><div class="spacer"></div>
       <div class="chips">${['', ...L.MUSCLES, 'Cardio'].map(m => `<button class="chip ${m === mf ? 'sel' : ''}" data-mf="${m}">${m || 'All'}</button>`).join('')}</div>
       <div class="spacer"></div>
-      <div class="muted tiny">${ic('star')} favorite = autofill picks it first · ${ic('ban')} exclude = autofill never picks it (choose what to use instead). Your choices only.</div>
-      <div class="card">${shown.map(e => { const pf = prefs.get(e.id); return `<div class="row exrow"><div class="grow">${esc(e.name)}${(e.tags || []).includes('axial') ? ' <span class="pill warn" title="Heavy spinal loading">spinal load</span>' : ''}
+      <div class="muted tiny">${ic('star')} <b>Favorite</b> = the builder picks it first · ${ic('ban')} <b>Never</b> = the builder and swaps never pick it (you choose what to use instead). Tap again to undo. Your choices only.</div>
+      <div class="card">${shown.map(e => { const pf = prefs.get(e.id); return `<div class="row exrow"><div class="grow">${esc(e.name)}${(() => { const mine = L.avoidedAreas(profile?.avoid_tags || []), hit = [...L.exerciseAreas(e)].filter(a => mine.includes(a));
+          return hit.length ? ` <span class="pill warn" title="Loads an area you're protecting (Settings → Injuries & sore spots)">${esc(hit.map(a => L.BODY_AREAS[a].name).join(', '))}</span>` : ''; })()}
         <div class="muted tiny">${esc(e.muscle_group)} · ${esc(e.equipment || '')} · ${e.kind} · ${e.load_type} · ${e.rep_min}–${e.rep_max} reps${e.secondary?.length ? ' · also ' + e.secondary.join(', ') : ''}</div>
         ${pf?.pref === 'exclude' ? `<div class="sub"><label for="sub-${e.id}" class="tiny">Use instead</label><select id="sub-${e.id}" data-sub="${e.id}"><option value="">— autofill decides —</option>${list.filter(x => x.muscle_group === e.muscle_group && x.id !== e.id).map(x => `<option value="${x.id}" ${pf.substitute_id === x.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></div>` : ''}</div>
-        <button class="ghost sm pref ${pf?.pref === 'favorite' ? 'on' : ''}" data-fav="${e.id}" aria-pressed="${pf?.pref === 'favorite'}" aria-label="${pf?.pref === 'favorite' ? 'Remove from favorites' : 'Mark as favorite'}: ${esc(e.name)}">${ic('star', pf?.pref === 'favorite' ? 'fill' : '')}</button>
-        <button class="ghost sm pref ${pf?.pref === 'exclude' ? 'bad' : ''}" data-excl="${e.id}" aria-pressed="${pf?.pref === 'exclude'}" aria-label="${pf?.pref === 'exclude' ? 'Stop excluding' : 'Exclude'}: ${esc(e.name)}">${ic('ban')}</button>
+        <button class="ghost sm pref ${pf?.pref === 'favorite' ? 'on' : ''}" data-fav="${e.id}" aria-pressed="${pf?.pref === 'favorite'}" aria-label="${pf?.pref === 'favorite' ? 'Remove from favorites' : 'Mark as favorite'}: ${esc(e.name)}">${ic('star', pf?.pref === 'favorite' ? 'fill' : '')}<span class="pref-lbl" aria-hidden="true">Favorite</span></button>
+        <button class="ghost sm pref ${pf?.pref === 'exclude' ? 'bad' : ''}" data-excl="${e.id}" aria-pressed="${pf?.pref === 'exclude'}" aria-label="${pf?.pref === 'exclude' ? 'Allow again' : 'Never pick'}: ${esc(e.name)}">${ic('ban')}<span class="pref-lbl" aria-hidden="true">Never</span></button>
         ${e.owner_id ? `<button class="ghost sm danger" data-del="${e.id}" aria-label="Delete ${esc(e.name)}">${ic('x')}</button>` : ''}</div>`; }).join('') || '<p class="muted">No matches.</p>'}</div>
       <div class="card"><h3>Add your own</h3><form id="f">
         <label>Name</label><input name="name" required>
@@ -2307,9 +2310,9 @@ const EQUIPMENT = ['Barbell', 'Dumbbell', 'Machine', 'Cable', 'Smith Machine', '
 async function renderSettings() {
   setHeader('Settings', '#/explore', 'explore');
   const lib = await loadExercises();
-  const axial = lib.filter(e => (e.tags || []).includes('axial'));
   const eq = profile?.equipment; // null = everything
-  const avoidAxial = (profile?.avoid_tags || []).includes('axial');
+  const areas = L.avoidedAreas(profile?.avoid_tags || []);
+  const areaCount = a => lib.filter(e => L.exerciseAreas(e).has(a)).length;
   app.innerHTML = `<div class="card">
       <div class="muted small">Signed in as</div><div>${esc(session.user.email)}</div>
       <label for="name">Name</label><input id="name" autocomplete="name" value="${esc(profile?.display_name || '')}">
@@ -2326,12 +2329,17 @@ async function renderSettings() {
       <fieldset class="plain"><legend class="small">Equipment I have</legend>
         <div class="chips">${EQUIPMENT.map(x => `<label class="chip check"><input type="checkbox" name="eq" value="${x}" ${!eq || eq.includes(x) ? 'checked' : ''}> ${x}</label>`).join('')}</div>
         <div class="muted tiny">Bodyweight moves are always included.</div></fieldset>
-      <label class="switch"><input type="checkbox" id="avoidAxial" ${avoidAxial ? 'checked' : ''}> <span>Avoid heavy spinal loading</span></label>
-      <details class="small"><summary class="muted">${axial.length} exercises are tagged (bar on the back, shoulder-pad machines, heavy barbell hinges/rows, standing overhead press)</summary>
-        <div class="muted tiny mt6">${axial.map(e => esc(e.name)).join(' · ')}</div>
-        <div class="muted tiny mt6">Want to keep one of these? Star it in the Exercise library — favorites are always allowed.</div></details>
       <div class="spacer"></div><button class="block" id="savePrefs">Save preferences</button>
       <button class="ghost block sm" data-go="#/exercises">Favorites &amp; exclusions → Exercise library</button></div>
+    <div class="card" id="areasCard"><h3>Injuries &amp; sore spots</h3>
+      <div class="muted small">Pick any area you want to go easy on. When the app builds a meso or suggests a swap, it leaves out the exercises that load that area the most and keeps gentler ones. Tap again to turn it off. This is your preference, not medical advice. You can still add any exercise by hand, and starred favorites are always kept.</div>
+      <div class="area-grid" role="group" aria-label="Areas to go easy on">${Object.entries(L.BODY_AREAS).map(([k, a]) => { const on = areas.includes(k);
+        return `<button type="button" class="area ${on ? 'on' : ''}" data-area="${k}" aria-pressed="${on}"><span class="area-top"><b>${esc(a.name)}</b><span class="tick" aria-hidden="true">${on ? ic('check') : ''}</span></span>
+          <span class="tiny muted">${on ? `Leaving out ${areaCount(k)} exercise${areaCount(k) === 1 ? '' : 's'}` : 'Off'}</span></button>`; }).join('')}</div>
+      ${areas.length ? `<details class="small mt8"><summary class="muted">What's left out (${areas.map(a => L.BODY_AREAS[a].name).join(', ')})</summary>
+        ${areas.map(a => `<div class="mt6"><b>${esc(L.BODY_AREAS[a].name)}</b> <span class="muted tiny">— ${esc(L.BODY_AREAS[a].blurb)}</span><div class="muted tiny">${lib.filter(e => L.exerciseAreas(e).has(a)).map(e => esc(e.name)).join(' · ') || 'none in your library'}</div></div>`).join('')}
+        <div class="muted tiny mt6">Want to keep one of these? Star it in the Exercise library. Favorites are always allowed.</div></details>` : ''}
+      <div class="muted tiny mt6">Saved to your account as soon as you tap. New mesos and swap suggestions use it; meso days already built aren't changed.</div></div>
     <div class="card"><h3>Smallest weight jumps</h3>
       <div class="muted small">What your gym can actually load (microplates, dumbbell pairs, pin stacks). Suggestions round to these and add about 2.5% at a time — never more than 5 lb / 2.5 kg in one step.</div>
       ${['Machine', 'Cable', 'Barbell', 'Dumbbell'].map(k => { const v = L.increment({ equipment: k }, unit()); const opts = unit() === 'kg' ? [0.5, 1, 1.25, 2, 2.5, 5] : [1, 2.5, 5, 10];
@@ -2347,15 +2355,14 @@ async function renderSettings() {
     const bw = $('#bw').value;
     // The bodyweight box is in the unit shown when the page opened; convert with that unit, then switch.
     const bwLb = bw === '' ? null : bw === $('#bw').defaultValue ? profile?.bodyweight : Math.round(toLb(bw) * 10) / 10; // unchanged → keep exact stored value
-    profile = check(await sb.from('profiles').update({ display_name: $('#name').value.trim(), unit: $('#unit').value, bodyweight: bwLb })
-      .eq('id', session.user.id).select().single());
+    profile = { ...profile, ...check(await sb.from('profiles').update({ display_name: $('#name').value.trim(), unit: $('#unit').value, bodyweight: bwLb })
+      .eq('id', session.user.id).select().single()) };
     toast('Saved'); renderSettings();
   };
   $('#savePrefs').onclick = async () => {
     const picked = $$('input[name=eq]:checked').map(i => i.value);
-    const tags = (profile?.avoid_tags || []).filter(t => t !== 'axial'); if ($('#avoidAxial').checked) tags.push('axial');
-    profile = check(await sb.from('profiles').update({ equipment: picked.length === EQUIPMENT.length ? null : picked, avoid_tags: tags })
-      .eq('id', session.user.id).select().single());
+    profile = { ...profile, ...check(await sb.from('profiles').update({ equipment: picked.length === EQUIPMENT.length ? null : picked })
+      .eq('id', session.user.id).select().single()) };
     toast('Preferences saved — new mesocycles will use them');
   };
   $('#saveInc').onclick = () => {
@@ -2366,6 +2373,16 @@ async function renderSettings() {
   $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
   $('#out').onclick = async () => { await sb.auth.signOut(); go('#/'); };
   $$('[data-theme-pick]').forEach(b => b.onclick = () => setTheme(b.dataset.themePick));
+  // v1.14.0: tapping an area saves at once (no separate Save), keeping any other avoid tags the account has.
+  $$('[data-area]').forEach(b => b.onclick = async () => {
+    const tag = L.BODY_AREAS[b.dataset.area].tag, cur = profile?.avoid_tags || [];
+    const next = cur.includes(tag) ? cur.filter(t => t !== tag) : [...cur, tag];
+    b.disabled = true;
+    const r = await sb.from('profiles').update({ avoid_tags: next }).eq('id', session.user.id).select().single();
+    if (r.error) { b.disabled = false; return toast(isNetErr(r.error) ? 'No signal — try again when you’re back online' : r.error.message, true); }
+    profile = { ...profile, ...r.data }; const y = window.scrollY; await renderSettings(); window.scrollTo(0, y);
+    toast(next.includes(tag) ? `${L.BODY_AREAS[b.dataset.area].name}: going easy — new mesos and swaps leave out the heaviest loading` : `${L.BODY_AREAS[b.dataset.area].name}: back to normal`);
+  });
   $('#pw').onclick = () => renderNewPassword(false);
 }
 

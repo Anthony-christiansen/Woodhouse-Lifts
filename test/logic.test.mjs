@@ -736,3 +736,38 @@ console.log('GUARDRAIL TESTS PASSED');
   assert.equal(L.lastMesoFor([]), null);
   console.log(`V1.12.0 TEMPLATE LIBRARY TESTS PASSED (${total} templates, ${runs} template/goal/time builds)`);
 }
+
+// ---------- v1.14.0: injuries & sore spots (7 general areas) ----------
+{
+  const { seedLibrary } = await import('./seedlib.mjs');
+  const lib = seedLibrary();
+  const has = (n, a) => L.exerciseAreas({ name: n }).has(a);
+  // examples per area, including imported "Name (Equipment)" formats with no tags
+  assert.ok(has('Back Squat', 'knees') && has('Squat (Barbell)', 'lower_back') && has('Bulgarian Split Squat', 'hips'));
+  assert.ok(!has('Leg Press', 'knees') && !has('Leg Extension', 'knees'), 'knees keeps leg press and leg extension');
+  assert.ok(has('Overhead Press', 'shoulders') && has('Dips', 'shoulders') && has('Bench Press (Medium Grip)', 'shoulders') && !has('Dumbbell Bench Press', 'shoulders'));
+  assert.ok(has('EZ Bar Skullcrusher', 'elbows_wrists') && has('Bench Press (Narrow Grip)', 'elbows_wrists') && !has('Triceps Pushdown', 'elbows_wrists'));
+  assert.ok(has('Bent Over Row (Barbell)', 'upper_back') && has('Barbell Shrug', 'neck') && !has('Lat Pulldown', 'upper_back'));
+  assert.ok(has('Back Raise (45 degree)', 'lower_back') && L.exerciseAreas({ name: 'Mystery', tags: ['axial'] }).has('lower_back'), 'axial tag = lower back');
+  // Lower back is stored as the old 'axial' tag, so pre-1.14 settings carry over unchanged.
+  assert.equal(L.BODY_AREAS.lower_back.tag, 'axial'); assert.deepEqual(L.avoidedAreas(['axial']), ['lower_back']);
+  assert.deepEqual(L.avoidedAreas(['area:knees', 'axial', 'something-else']).sort(), ['knees', 'lower_back']);
+  const muscles = [...new Set(lib.map(e => e.muscle_group))];
+  for (const a of Object.keys(L.BODY_AREAS)) {
+    const P = L.applyPreferences(lib, { avoidTags: [L.BODY_AREAS[a].tag] });
+    assert.ok(P.removed.length > 0, `${a}: leaves something out`);
+    for (const m of muscles) assert.ok(P.library.some(e => e.muscle_group === m), `${a}: ${m} still has an exercise`);
+    for (const e of P.library) if (!e.kept) assert.ok(!L.exerciseAreas(e).has(a), `${a}: ${e.name} should be out`);
+  }
+  // all seven at once still leaves every muscle something; favorites always win
+  const all = L.applyPreferences(lib, { avoidTags: Object.values(L.BODY_AREAS).map(x => x.tag) });
+  for (const m of muscles) assert.ok(all.library.some(e => e.muscle_group === m), `all areas: ${m} still has an exercise`);
+  const squat = lib.find(e => e.name === 'Back Squat');
+  assert.ok(L.applyPreferences(lib, { avoidTags: ['area:knees'], prefs: [{ exercise_id: squat.id, pref: 'favorite' }] }).library.some(e => e.id === squat.id), 'a starred exercise is kept');
+  // the builder respects it end to end
+  const P = L.applyPreferences(lib, { avoidTags: ['area:knees', 'axial'] });
+  const r = L.fitPlan({ plan: Array.from({ length: 3 }, () => ({ label: 'D', slots: [] })), priorities: L.presetPriorities('balanced'), focus: 'whole', goal: 'hypertrophy', split: 'full_body_split', library: P.library, minutes: 75 });
+  const byId = new Map(lib.map(e => [e.id, e]));
+  for (const d of r.days) for (const s of d.slots) { const e = byId.get(s.exerciseId); if (e) assert.ok(!['knees', 'lower_back'].some(a => L.exerciseAreas(e).has(a)), `built plan avoids ${e.name}`); }
+  console.log('V1.14.0 BODY AREA TESTS PASSED (7 areas × 13 muscles on the shared library)');
+}

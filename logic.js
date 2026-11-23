@@ -220,18 +220,70 @@ export function candidatesFor(muscle, library, favorites = null) {
  * chosen substitutes are always kept and ranked first. Cardio is never filtered by equipment.
  * Returns { library, favorites:Set, removed:[exercise] } — removed lets the UI say what was skipped and why.
  */
+// v1.14.0 — injuries & sore spots: 7 general body areas (not a long list of conditions). Picking an area leaves out
+// the exercises that load it the MOST when the app builds or suggests (a preference, never a medical rule). Gentler
+// options stay, e.g. Knees drops squats/lunges/jumps but keeps leg press and leg extension, whose range you control.
+// Matching is by exercise name, so it also covers your own and imported exercises with no tags. Lower back is the
+// old "avoid heavy spinal loading" switch (stored as the 'axial' tag, so earlier versions read it the same way).
+export const BODY_AREAS = {
+  neck:          { name: 'Neck', tag: 'area:neck', blurb: 'Shrugs, upright rows, behind-the-neck work, heavy carries.' },
+  shoulders:     { name: 'Shoulders', tag: 'area:shoulders', blurb: 'Overhead pressing, dips, upright rows, pullovers, barbell bench.' },
+  elbows_wrists: { name: 'Elbows & wrists', tag: 'area:elbows_wrists', blurb: 'Skull crushers and overhead extensions, dips, close-grip bench, straight-bar and preacher curls, wrist work.' },
+  upper_back:    { name: 'Upper back', tag: 'area:upper_back', blurb: 'Heavy barbell rows, barbell shrugs, deadlifts and rack pulls.' },
+  lower_back:    { name: 'Lower back', tag: 'axial', blurb: 'Heavy spinal loading: bar-on-back squats, deadlifts, good mornings, barbell rows, standing overhead press, back extensions, sit-ups.' },
+  hips:          { name: 'Hips', tag: 'area:hips', blurb: 'Lunges and split squats, step-ups, sumo stance, adductor work, deep single-leg squats.' },
+  knees:         { name: 'Knees', tag: 'area:knees', blurb: 'Squats, lunges and split squats, step-ups, sissy squats, jumping and running.' },
+};
+const AREA_RULES = {
+  neck: [/shrug/, /\bneck\b/, /upright row/, /behind.?the.?neck/, /farmer/],
+  shoulders: [/overhead press/, /shoulder press/, /military/, /push press/, /arnold/, /\bdips?\b/, /upright row/, /behind.?the.?neck/, /pike push/, /handstand/, /pullover/,
+    /snatch/, /\bjerk\b/, n => /bench press/.test(n) && !/dumbbell|machine|smith|close/.test(n)],
+  elbows_wrists: [/skull ?crusher/, n => /bench press/.test(n) && /narrow|close/.test(n), /lying .*extension/, /french press/, /overhead .*extension/, /close.?grip bench/, /\bdips?\b/, /diamond push/, /preacher/,
+    /barbell curl/, /straight.?bar/, /wrist curl/, /reverse curl/, /front squat/],
+  upper_back: [/barbell row/, /pendlay/, /t.?bar/, /bent.?over/, /barbell shrug/, /rack pull/, n => /deadlift/.test(n) && !/dumbbell/.test(n),
+    n => /barbell/.test(n) && /row\b|shrug/.test(n)],
+  lower_back: [/deadlift/, /good ?morning/, /back extension/, /back raise/, /hyperextension/, /romanian/, /\brdl\b/, /stiff.?leg/, /bent.?over/, /barbell row/, /pendlay/, /t.?bar/,
+    /rack pull/, /\bclean\b/, /snatch/, /back squat/, /front squat/, /barbell squat/, /smith machine squat/, /hack squat/, /pendulum/, /reverse hyper/,
+    /superman/, /sit.?up/, /ab wheel/, /overhead press/, /military/, /push press/,
+    // imported names like "Squat (Barbell)", "Bent Over Row (Barbell)", "Shoulder Press (Barbell)"
+    n => /barbell/.test(n) && /squat|row\b|shoulder press|overhead|standing press/.test(n)],
+  hips: [/lunge/, /split squat/, /bulgarian/, /step.?up/, /sumo/, /adduct/, /cossack/, /pistol/, /curtsy/],
+  knees: [/squat/, /lunge/, /split squat/, /bulgarian/, /step.?up/, /sissy/, /pistol/, /jump/, /sprint/, /treadmill run/, /\brun\b/, /plyo/, /box jump/, /burpee/],
+};
+/** The body areas an exercise loads the most (by its tags and name). */
+export function exerciseAreas(e) {
+  const n = String(e?.name || '').toLowerCase(), out = new Set();
+  if ((e?.tags || []).includes('axial')) out.add('lower_back');
+  for (const [area, rules] of Object.entries(AREA_RULES)) if (rules.some(r => typeof r === 'function' ? r(n) : r.test(n))) out.add(area);
+  return out;
+}
+/** Areas picked in Settings, from the profile's avoid_tags. */
+export const avoidedAreas = (avoidTags = []) => Object.keys(BODY_AREAS).filter(a => avoidTags.includes(BODY_AREAS[a].tag));
+export function areaTags(areas) { return areas.map(a => BODY_AREAS[a]?.tag).filter(Boolean); }
+
 export function applyPreferences(library, { prefs = [], equipment = null, avoidTags = [] } = {}) {
   const favorites = new Set(prefs.filter(p => p.pref === 'favorite').map(p => p.exercise_id));
   for (const p of prefs) if (p.pref === 'exclude' && p.substitute_id) favorites.add(p.substitute_id);
   const excluded = new Set(prefs.filter(p => p.pref === 'exclude').map(p => p.exercise_id));
   const eq = equipment?.length ? new Set([...equipment, 'Bodyweight']) : null;
+  const areas = avoidedAreas(avoidTags);
   const keep = [], removed = [];
   for (const e of library) {
+    const hit = areas.length ? [...exerciseAreas(e)].filter(a => areas.includes(a)) : [];
     const why = favorites.has(e.id) ? null
       : excluded.has(e.id) ? 'excluded'
-      : (e.tags || []).some(t => avoidTags.includes(t)) ? 'avoided'
+      : (e.tags || []).some(t => avoidTags.includes(t)) || hit.length ? 'avoided'
       : eq && e.load_type !== 'cardio' && e.equipment && !eq.has(e.equipment) ? 'equipment' : null;
-    (why ? removed : keep).push(why ? { ...e, why } : e);
+    (why ? removed : keep).push(why ? { ...e, why, areas: hit } : e);
+  }
+  // Never leave a muscle with nothing: if the areas you're protecting took every option for a muscle, keep the ones
+  // you have equipment for (machines and cables first) and say so, rather than silently dropping the muscle.
+  for (const m of new Set(library.map(e => e.muscle_group))) {
+    if (keep.some(e => e.muscle_group === m)) continue;
+    const back = removed.filter(e => e.muscle_group === m && e.why === 'avoided' && !excluded.has(e.id)
+      && !(eq && e.load_type !== 'cardio' && e.equipment && !eq.has(e.equipment)));
+    const gentle = back.filter(e => /Machine|Cable/.test(e.equipment || '')); const restore = gentle.length ? gentle : back;
+    for (const e of restore) { removed.splice(removed.indexOf(e), 1); keep.push({ ...e, kept: 'no gentler option' }); }
   }
   return { library: keep, favorites, removed };
 }
