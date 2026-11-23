@@ -43,7 +43,10 @@ function builder(table) {
       let data = fixtures[table] || [];
       if (table === 'workout_exercises' && inIds && inIds.some(id => /s\d+$/.test(id))) data = inIds.map(id => ({ id, exercises: { load_type: 'weighted' }, workout_days: { week: +id.match(/s(\d+)$/)[1] + 1, mesocycle_id: 'm0', mesocycles: { name: 'Test Meso', weeks: 8 } } }));
       if (payload && window.__FAIL_NET) return Promise.resolve({ data: null, error: { message: 'TypeError: Failed to fetch' } }).then(res, rej);
-      if (payload) { (window.__writes = window.__writes || []).push([table, payload]); return Promise.resolve({ data: payload, error: null }).then(res, rej); }
+      if (payload) { (window.__writes = window.__writes || []).push([table, payload]);
+        const ms = window.__DELAY ? window.__DELAY(table, payload) : 0;   // test hook: slow / out-of-order responses
+        const land = () => { (window.__landed = window.__landed || []).push([table, payload]); return { data: payload, error: null }; };
+        return (ms ? new Promise(r => setTimeout(r, ms)).then(land) : Promise.resolve().then(land)).then(res, rej); }
       if (table === 'workout_days' && single) data = data.find(d => d.id === (location.hash.split('/')[2] || 'd21')) || data[4];
       else if (single || maybe) data = data[0] ?? null;
       return Promise.resolve({ data, error: null }).then(res, rej);

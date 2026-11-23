@@ -12,6 +12,43 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.12.1 — 2026-11-23 · "Harder to break" (security fixes from the outside audit)
+
+**Set saving can't go stale** (audit finding 2)
+- **The bug:** if an old offline copy of a set was being retried while you edited the same set, the old value could reach the server last and overwrite your edit. A browser test reproduces it on 1.12.0: the server ended with 70 lb after an edit to 75.
+- **Now:**
+  - every edit is stored on the phone, with a version, before it is sent;
+  - saves for the same set go out one at a time, in order;
+  - a save only clears the phone copy if no newer edit came in meanwhile.
+- Switching accounts mid-save never touches the other account's queue.
+- A set the server refuses for good is kept aside instead of being dropped.
+- The "waiting to sync" badge no longer flashes during normal saves.
+
+**Feedback adjustments only change what they're allowed to** (audit finding 1; database migration `20261123050000_feedback_adjustment_scope`)
+- `apply_feedback_adjustment` now checks every row it is asked to change:
+  - only the same muscle's exercises, on next week's same day, while that day is open;
+  - the deload day only right after the last hard week;
+  - known fields only, within the table's limits.
+- Anything else rejects the whole call and changes nothing. It could never reach another account before; now it can't touch unrelated workouts in your own account either.
+- The app no longer asks to adjust a next-week day you skipped.
+
+**Browser security** (audit findings 4 and 6)
+- The Supabase library is pinned to one reviewed release (2.119.2) instead of "latest 2.x".
+- A Content-Security-Policy allows only:
+  - this site;
+  - jsDelivr (for that library);
+  - this app's Supabase project.
+- A focused check of every HTML template found no unescaped user text.
+
+**Tests**
+- `sync121.py`: slow and out-of-order responses, offline then online, two quick offline edits. It fails on 1.12.0 and passes now.
+- Database: 9 refused-change cases plus the deload, finished-day and skipped-day cases; refused calls change nothing.
+- Builder and workout browser tests fail on any security-policy violation.
+
+**Rollback:** app → `release/v1.12.0` (Playbook §6). Database: re-run the previous function definition from `20261121070000_atomic_feedback_adjustment.sql`. Its signature is unchanged and no data is migrated.
+
+---
+
 ## 1.12.0 — 2026-11-23 · "Building a meso, made clear"
 
 **New mesocycle screen**

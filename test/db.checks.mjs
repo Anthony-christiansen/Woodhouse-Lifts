@@ -108,22 +108,61 @@ export async function runChecks(db) {
   assert.equal((await as(db, B, `select * from public.lift_recent($1, 12)`, [[ex.press.id]])).length, 0, 'B sees none of A\'s sessions');
   console.log('LIFT_RECENT OK');
   // ---- apply_feedback_adjustment: one transaction, at most once per feedback entry (retries can't double it)
-  const [{ id: dF }] = await as(db, A, `select id from public.workout_days where mesocycle_id = $1 and week = 1 limit 1`, [m1]);
-  const [{ id: we2, target_sets: ts0 }] = await as(db, A, `select we.id, we.target_sets from public.workout_exercises we join public.workout_days d on d.id = we.workout_day_id where d.mesocycle_id = $1 and d.week = 2 limit 1`, [m1]);
-  const [{ id: fb }] = await as(db, A, `insert into public.muscle_feedback (workout_day_id, muscle_group, pump, workload, joint_pain) values ($1, 'Chest', 1, 1, 0) returning id`, [dF]);
-  const ch = JSON.stringify([{ id: we2, target_sets: ts0 + 1, flag: '' }]);
-  const r1 = await as(db, A, `select public.apply_feedback_adjustment($1, 1, $2::jsonb) ok`, [fb, ch]);
-  const r2 = await as(db, A, `select public.apply_feedback_adjustment($1, 1, $2::jsonb) ok`, [fb, JSON.stringify([{ id: we2, target_sets: ts0 + 2 }])]);
-  const r3 = await as(db, A, `select public.apply_feedback_adjustment($1, 1, $2::jsonb) ok`, [fb, JSON.stringify([{ id: we2, target_sets: ts0 + 3 }])]);
+  // v1.12.1: and only the rows that feedback entry may change (next week's same day, same muscle; the deload day).
+  const plan4 = key => ({ client_key: key, name: 'RPC meso', weeks: 4, days_per_week: 1, focus: 'whole', priorities: {}, started_on: '2026-11-20',
+    days: [1, 2, 3, 4].map(w => ({ week: w, day_index: 1, label: 'Day 1',
+      exercises: [{ exercise_id: ex.press.id, target_sets: 3, target_rir: 2 }, { exercise_id: ex.pull.id, target_sets: 2, target_rir: 2 }] })) });
+  const [{ create_mesocycle: mR }] = await as(db, A, 'select public.create_mesocycle($1)', [plan4(uuid())]);
+  const dayOf = async w => (await as(db, A, `select id from public.workout_days where mesocycle_id = $1 and week = $2`, [mR, w]))[0].id;
+  const weOf = async (w, exId) => (await as(db, A, `select we.id, we.target_sets from public.workout_exercises we join public.workout_days d on d.id = we.workout_day_id
+    where d.mesocycle_id = $1 and d.week = $2 and we.exercise_id = $3`, [mR, w, exId]))[0];
+  const newFb = async (w, muscle) => (await as(db, A, `insert into public.muscle_feedback (workout_day_id, muscle_group, pump, workload, joint_pain) values ($1, $2, 1, 1, 0) returning id`, [await dayOf(w), muscle]))[0].id;
+  const rpc = (uid, fbId, changes, deload = []) => as(db, uid, `select public.apply_feedback_adjustment($1, 1, $2::jsonb, $3::jsonb) ok`, [fbId, JSON.stringify(changes), JSON.stringify(deload)]);
+  const isAdjusted = async fbId => (await as(db, A, `select adjusted from public.muscle_feedback where id = $1`, [fbId]))[0].adjusted;
+  const { id: we2 } = await weOf(2, ex.press.id), { id: wePull2, target_sets: ts0 } = await weOf(2, ex.pull.id);
+  const fb = await newFb(1, 'Back');
+  const r1 = await rpc(A, fb, [{ id: wePull2, target_sets: ts0 + 1, flag: '' }]);
+  const r2 = await rpc(A, fb, [{ id: wePull2, target_sets: ts0 + 2 }]);
+  const r3 = await rpc(A, fb, [{ id: wePull2, target_sets: ts0 + 3 }]);
   assert.deepEqual([r1[0].ok, r2[0].ok, r3[0].ok], [true, false, false], 'applies once, retries are no-ops');
-  assert.equal((await as(db, A, `select target_sets from public.workout_exercises where id = $1`, [we2]))[0].target_sets, ts0 + 1, 'set added exactly once');
+  assert.equal((await weOf(2, ex.pull.id)).target_sets, ts0 + 1, 'set added exactly once');
   const [{ adjusted, soreness }] = await as(db, A, `select adjusted, soreness from public.muscle_feedback where id = $1`, [fb]);
   assert.equal(adjusted, true); assert.equal(soreness, 1);
-  await assert.rejects(as(db, B, `select public.apply_feedback_adjustment($1, 1, $2::jsonb)`, [fb, ch]), /not found/i, 'other users cannot touch it');
-  // a failure part-way rolls back everything (bad target_sets violates the check constraint)
-  const [{ id: fb2 }] = await as(db, A, `insert into public.muscle_feedback (workout_day_id, muscle_group) values ($1, 'Back') returning id`, [dF]);
-  await assert.rejects(as(db, A, `select public.apply_feedback_adjustment($1, 1, $2::jsonb)`, [fb2, JSON.stringify([{ id: we2, target_sets: 99 }])]), /check/i);
-  assert.equal((await as(db, A, `select adjusted from public.muscle_feedback where id = $1`, [fb2]))[0].adjusted, false, 'rolled back: not marked adjusted');
+  await assert.rejects(rpc(B, fb, [{ id: wePull2, target_sets: ts0 }]), /not found/i, 'other users cannot touch it');
+  // Each of these is refused as a whole: nothing changes and the feedback stays un-applied.
+  const before = JSON.stringify(await as(db, A, `select id, target_sets, target_rir, flag from public.workout_exercises order by id`));
+  const fbBad = await newFb(1, 'Chest');
+  const { id: wePress3 } = await weOf(3, ex.press.id), { id: wePress1 } = await weOf(1, ex.press.id);
+  const refused = [
+    ['another muscle (Back) on the right day', [{ id: wePull2, target_sets: 5 }]],
+    ['the right muscle in a later week', [{ id: wePress3, target_sets: 5 }]],
+    ['the right muscle in an earlier week', [{ id: wePress1, target_sets: 5 }]],
+    ['an unexpected field', [{ id: we2, target_sets: 4, user_id: B }]],
+    ['too many sets', [{ id: we2, target_sets: 99 }]],
+    ['a fraction', [{ id: we2, target_sets: 3.5 }]],
+    ['RIR out of range', [{ id: we2, target_rir: 11 }]],
+    ['a non-text flag', [{ id: we2, flag: { x: 1 } }]],
+    ['a row that does not exist', [{ id: uuid(), target_sets: 3 }]],
+  ];
+  for (const [why, ch] of refused) await assert.rejects(rpc(A, fbBad, ch), /adjustment|Unexpected field|out of range|Bad change/i, `refused: ${why}`);
+  await assert.rejects(rpc(A, fbBad, [], [{ workout_day_id: await dayOf(4), exercise_id: ex.press.id, target_sets: 1 }]), /Deload only/i, 'deload only after the last hard week');
+  assert.equal(JSON.stringify(await as(db, A, `select id, target_sets, target_rir, flag from public.workout_exercises order by id`)), before, 'refused calls changed nothing');
+  assert.equal(await isAdjusted(fbBad), false, 'refused calls leave the feedback un-applied');
+  // Feedback from week 2 → week 3 is the last hard week, so the deload day (week 4) may follow — same muscle only.
+  const fb2 = await newFb(2, 'Chest'), { id: we3 } = await weOf(3, ex.press.id), dl = await dayOf(4);
+  await assert.rejects(rpc(A, fb2, [{ id: we3, target_sets: 4 }], [{ workout_day_id: dl, exercise_id: ex.pull.id, target_sets: 1 }]), /adjustment/i, 'deload: other muscle refused');
+  await assert.rejects(rpc(A, fb2, [{ id: we3, target_sets: 4 }], [{ workout_day_id: await dayOf(3), exercise_id: ex.press.id, target_sets: 1 }]), /adjustment/i, 'deload: wrong day refused');
+  assert.equal(await isAdjusted(fb2), false);
+  assert.equal((await rpc(A, fb2, [{ id: we3, target_sets: 4 }], [{ workout_day_id: dl, exercise_id: ex.press.id, target_sets: 2 }]))[0].ok, true, 'a correct adjustment with deload works');
+  assert.deepEqual([(await weOf(3, ex.press.id)).target_sets, (await weOf(4, ex.press.id)).target_sets, (await weOf(4, ex.pull.id)).target_sets], [4, 2, 2]);
+  // Feedback from the last hard week has nothing to adjust (next week is the deload).
+  await assert.rejects(rpc(A, await newFb(3, 'Chest'), [{ id: (await weOf(4, ex.press.id)).id, target_sets: 3 }]), /No open workout/i, 'never adjusts the deload week');
+  // A finished (or skipped) next-week workout is never changed.
+  await as(db, A, `update public.workout_days set completed_at = now() where id = $1`, [await dayOf(2)]);
+  await assert.rejects(rpc(A, await newFb(1, 'Triceps'), [{ id: wePull2, target_sets: 3 }]), /No open workout/i, 'completed day refused');
+  // Soreness-only calls (no changes) still work, and bad soreness is refused.
+  assert.equal((await rpc(A, await newFb(1, 'Shoulders'), []))[0].ok, true, 'no changes: just records recovery');
+  await assert.rejects(as(db, A, `select public.apply_feedback_adjustment($1, 7, '[]'::jsonb)`, [await newFb(1, 'Biceps')]), /soreness/i);
   console.log('FEEDBACK ADJUSTMENT: atomic + once only OK');
   // ---- exercise_feedback (v1.10): one rating per exercise per session, own rows only, cleaned up with the exercise
   await as(db, A, `insert into public.exercise_feedback (workout_exercise_id, workload, joint_pain) values ($1, 1, 0)`, [we2]);

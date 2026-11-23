@@ -13,6 +13,7 @@ async def shot(pg,name):
     if SHOTS: await pg.screenshot(path=os.path.join(SHOTS,name), full_page=True)
 async def fresh(ctx, errs, url='#/new'):
     pg=await ctx.new_page(); pg.on('pageerror', lambda e: errs.append(str(e)))
+    pg.on('console', lambda m: errs.append('CSP: '+m.text) if 'Content Security Policy' in m.text else None)
     await pg.goto(B+url); await pg.wait_for_timeout(900); return pg
 pressed = "[...document.querySelectorAll('[data-start]')].filter(b=>b.getAttribute('aria-checked')=='true').map(b=>b.dataset.start)"
 async def main():
