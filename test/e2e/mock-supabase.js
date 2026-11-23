@@ -45,6 +45,7 @@ function builder(table) {
       if (table === 'mesocycles' && statusIn) data = data.filter(m => statusIn.includes(m.status));
       if (table === 'mesocycles' && lim) data = data.slice(0, lim);
       if (table === 'workout_exercises' && inIds && inIds.some(id => /s\d+$/.test(id))) data = inIds.map(id => ({ id, exercises: { load_type: 'weighted' }, workout_days: { week: +id.match(/s(\d+)$/)[1] + 1, mesocycle_id: 'm0', mesocycles: { name: 'Test Meso', weeks: 8 } } }));
+      if (window.__OFFLINE) return Promise.resolve({ data: null, error: { message: 'TypeError: Failed to fetch' } }).then(res, rej);   // test hook: no signal at all
       if (payload && window.__FAIL_NET) return Promise.resolve({ data: null, error: { message: 'TypeError: Failed to fetch' } }).then(res, rej);
       if (payload) { (window.__writes = window.__writes || []).push([table, payload]);
         const ms = window.__DELAY ? window.__DELAY(table, payload) : 0;   // test hook: slow / out-of-order responses
