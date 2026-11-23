@@ -1,5 +1,5 @@
 // Woodhouse Lifts training logic. Every rule here is documented, with its
-// evidence, in "Woodhouse Lifts — Training Logic & Evidence" (Google Drive).
+// evidence, in docs/training-logic.md (shown in the app under Learn → How it works).
 // Pure functions only, so they can be tested without a browser.
 
 export const MUSCLES = ['Chest', 'Back', 'Quads', 'Hamstrings', 'Glutes', 'Shoulders', 'Biceps', 'Triceps', 'Calves', 'Traps', 'Abs', 'Forearms'];
@@ -54,6 +54,7 @@ export const splitsFor = days => Object.entries(SPLITS).filter(([, x]) => x.days
 export const defaultSplit = days => splitsFor(days).find(x => x.recommended)?.id || 'full_body_split';
 export const splitLayout = (split, days) => (SPLITS[split] && SPLITS[split].days.includes(days) ? SPLITS[split] : SPLITS.full_body_split).layout(days);
 
+// Labels for the value saved in mesocycles.focus / templates.focus (the DB only allows these four).
 export const TEMPLATES = {
   upper:  { name: 'Upper focus', blurb: 'Emphasize chest, back and shoulders, grow arms; hold legs.' },
   lower:  { name: 'Lower focus', blurb: 'Emphasize quads, hamstrings and glutes, grow calves; hold upper body.' },
@@ -61,18 +62,103 @@ export const TEMPLATES = {
   custom: { name: 'Custom', blurb: 'Start from whole body and set each muscle yourself.' },
 };
 
-// v1.11.1 (audit B): a template never emphasizes more than MAX_EMPHASIZE muscles — the three biggest of the focus
-// area are emphasized, the rest of it grows (arms and calves also get indirect work from the big lifts).
-export const TEMPLATE_EMPHASIS = { upper: ['Chest', 'Back', 'Shoulders'], lower: ['Quads', 'Hamstrings', 'Glutes'] };
-export function templatePriorities(focus) {
-  const p = {};
-  for (const m of MUSCLES) {
-    const area = focus === 'upper' ? UPPER : focus === 'lower' ? LOWER : null;
-    if (MINOR.includes(m)) p[m] = 'maintain';
-    else if (area) p[m] = !area.includes(m) ? 'maintain' : TEMPLATE_EMPHASIS[focus].includes(m) ? 'emphasize' : 'grow';
-    else p[m] = 'grow';
-  }
+// v1.12.0 — focus presets: which muscles get extra volume (Emphasize), which are held (Maintain); every other
+// muscle Grows, and the minor muscles (traps, abs, forearms) are held unless a preset says otherwise.
+// Never more than MAX_EMPHASIZE emphasized (v1.11.1, audit B). `db` is the value saved as the meso's focus.
+// These are the app's own set-ups (not copied from any other program).
+export const FOCI = {
+  balanced:   { name: 'Balanced', blurb: 'Grow every muscle evenly. The safe default.', emphasize: [], maintain: [], db: 'whole' },
+  upper:      { name: 'Upper body', blurb: 'Bigger chest, back and shoulders; arms grow; legs held.', emphasize: ['Chest', 'Back', 'Shoulders'], maintain: LOWER, db: 'upper' },
+  lower:      { name: 'Lower body', blurb: 'Bigger quads, hamstrings and glutes; calves grow; upper body held.', emphasize: ['Quads', 'Hamstrings', 'Glutes'], maintain: UPPER, db: 'lower' },
+  glutes:     { name: 'Glutes & hamstrings', blurb: 'Glutes and hamstrings first; the rest keeps growing, arms and calves held.', emphasize: ['Glutes', 'Hamstrings'], maintain: ['Biceps', 'Triceps', 'Calves'], db: 'custom' },
+  chest_back: { name: 'Chest & back', blurb: 'Chest and back first; legs and shoulders keep growing, arms and calves held.', emphasize: ['Chest', 'Back'], maintain: ['Biceps', 'Triceps', 'Calves'], db: 'custom' },
+  shoulders:  { name: 'Shoulders', blurb: 'Shoulders first (side and rear delts); the rest keeps growing, biceps and calves held.', emphasize: ['Shoulders'], maintain: ['Biceps', 'Calves'], db: 'custom' },
+  arms:       { name: 'Arms', blurb: 'Biceps and triceps first; chest, back and shoulders grow; legs held.', emphasize: ['Biceps', 'Triceps'], maintain: LOWER, db: 'custom' },
+};
+const DB_TO_PRESET = { whole: 'balanced', upper: 'upper', lower: 'lower' };
+export const presetOfFocus = focus => DB_TO_PRESET[focus] || null;
+export function presetPriorities(id) {
+  const f = FOCI[id] || FOCI.balanced, p = {};
+  for (const m of MUSCLES) p[m] = f.emphasize.includes(m) ? 'emphasize' : f.maintain.includes(m) || MINOR.includes(m) ? 'maintain' : 'grow';
   return p;
+}
+// Old template ids ('whole', 'upper', 'lower', 'custom') still work; they map onto the presets above.
+export const TEMPLATE_EMPHASIS = { upper: FOCI.upper.emphasize, lower: FOCI.lower.emphasize };
+export function templatePriorities(focus) { return presetPriorities(DB_TO_PRESET[focus] || focus); }
+/** Which preset a set of priorities is exactly, or null if it was adjusted. */
+export function matchPreset(priorities) {
+  return Object.keys(FOCI).find(id => { const p = presetPriorities(id); return MUSCLES.every(m => (priorities?.[m] || 'skip') === p[m]); }) || null;
+}
+
+// How many training days a week a split lets a muscle be trained on.
+export function daysForMuscle(split, days, muscle) {
+  return splitLayout(split, days).filter(d => !d.m || d.m.includes(muscle)).length;
+}
+
+// v1.12.0 — template library: every focus preset × every split that fits the chosen number of days, as long as
+// each muscle the preset grows or emphasizes can be trained on 2+ days a week (twice a week grows more than once:
+// Schoenfeld 2016, doc §2.1). So the list only shows set-ups that make sense for your week.
+export function templateCatalog(days) {
+  const out = [];
+  for (const [fid, f] of Object.entries(FOCI)) {
+    const pr = presetPriorities(fid);
+    for (const s of splitsFor(days)) {
+      const growing = MUSCLES.filter(m => pr[m] === 'emphasize' || pr[m] === 'grow');
+      if (days >= 2 && growing.some(m => daysForMuscle(s.id, days, m) < 2)) continue;
+      out.push({ id: `${fid}.${s.id}.${days}`, preset: fid, focus: f.db, split: s.id, days, name: f.name, splitName: s.name,
+        blurb: f.blurb, emphasize: f.emphasize, held: MUSCLES.filter(m => pr[m] === 'maintain' && !MINOR.includes(m)),
+        week: splitLayout(s.id, days).map(d => d.label), recommended: s.id === defaultSplit(days) });
+    }
+  }
+  // Recommended split first inside each focus.
+  const order = Object.keys(FOCI);
+  return out.sort((a, b) => order.indexOf(a.preset) - order.indexOf(b.preset) || (b.recommended - a.recommended));
+}
+export const templateById = id => { const days = +String(id).split('.').pop(); return templateCatalog(days).find(t => t.id === id) || null; };
+
+/**
+ * v1.12.0 — the one-tap "Suggested" plan. Uses the recommended split for your days, and either your last meso's
+ * muscle choices (so a running plan carries on; an older or imported meso with only a focus carries that focus),
+ * or, with no usable last meso or fresh = true, Balanced.
+ * Time per workout is applied afterwards by fitPlan, which says on the next screen if anything had to change.
+ * Returns { split, preset, focus, priorities, weeks, from, reasons[] }.
+ */
+export function suggestPlan({ days, last = null, fresh = false }) {
+  const split = defaultSplit(days), sp = SPLITS[split], reasons = [];
+  const lastPr = last?.priorities && Object.keys(last.priorities).length ? last.priorities : null;
+  let priorities, preset, focus, from, weeks = 5;
+  if (lastPr && !fresh) {
+    priorities = {};
+    for (const m of MUSCLES) priorities[m] = lastPr[m] != null ? normPriority(lastPr[m], last.focus) : presetPriorities('balanced')[m];
+    // Never more than MAX_EMPHASIZE emphasized; extra ones (smallest first) become Grow.
+    const emph = MUSCLES.filter(m => priorities[m] === 'emphasize');
+    const keep = [...emph].sort((a, b) => SIZE_ORDER.indexOf(sizeOf(a)) - SIZE_ORDER.indexOf(sizeOf(b))).slice(0, MAX_EMPHASIZE);
+    const extra = emph.filter(m => !keep.includes(m)); extra.forEach(m => { priorities[m] = 'grow'; });
+    preset = matchPreset(priorities); focus = ['upper', 'lower', 'whole', 'custom'].includes(last.focus) ? last.focus : 'custom';
+    if (preset) focus = FOCI[preset].db;
+    from = 'last';
+    if (last.weeks >= 3 && last.weeks <= 8) weeks = last.weeks;
+    const e = MUSCLES.filter(m => priorities[m] === 'emphasize');
+    reasons.push(`Carries on from your last meso${last.name ? ` (${last.name})` : ''}: ${e.length ? e.join(', ') + ' emphasized' : 'every muscle growing evenly'}.`);
+    if (extra.length) reasons.push(`${extra.join(', ')} moved to Grow: emphasizing ${MAX_EMPHASIZE} or fewer at a time grows them faster.`);
+  } else if (last && !fresh && DB_TO_PRESET[last.focus]) {
+    // Older and imported mesos store only a focus (upper / lower / whole): carry that on.
+    preset = DB_TO_PRESET[last.focus]; priorities = presetPriorities(preset); focus = last.focus; from = 'last';
+    if (last.weeks >= 3 && last.weeks <= 8) weeks = last.weeks;
+    reasons.push(`Carries on from your last meso${last.name ? ` (${last.name})` : ''}: ${FOCI[preset].name}. ${FOCI[preset].blurb}`);
+  } else {
+    preset = 'balanced'; priorities = presetPriorities('balanced'); focus = 'whole'; from = 'new';
+    reasons.push('Balanced: every muscle grows evenly. A good default when you are not chasing one area.');
+  }
+  reasons.push(`${sp.name} for ${days} days: ${sp.blurb}`);
+  reasons.push(`${weeks} weeks, the last one light so you recover.`);
+  return { split, preset, focus, priorities, weeks, from, reasons };
+}
+const SIZE_ORDER = ['large', 'small', 'minor'];
+/** The meso a suggestion carries on from: the active or planned one, else the most recent one not abandoned. */
+export function lastMesoFor(mesos = []) {
+  const ok = mesos.filter(m => m && m.status !== 'abandoned');
+  return ok.find(m => m.status === 'active' || m.status === 'planned') || ok[0] || null;
 }
 
 export function weeklyTarget(muscle, priority, focus, goal) {

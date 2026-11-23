@@ -1,12 +1,12 @@
 # Woodhouse Lifts — Start Here (handoff for a new chat)
 
-**Current version: 1.11.5 (2026-11-23).** If you are a new chat picking this up: read this page first, then *Woodhouse Lifts — Release & Rollback Playbook* (how every change ships and how to undo it), *Woodhouse Lifts — Training Logic* (the full rules and evidence) and *Woodhouse Lifts — Changelog* (what changed, version by version). All three live in the Google Drive folder **Woodhouse Lifts**; older copies are in its **Archive — earlier versions** subfolder. The repo holds the same files under `docs/` and `CHANGELOG.md`, and the repo copy is the one that changes first.
+**Current version: 1.12.0 (2026-11-23).** If you are a new chat picking this up: read this page first, then *Woodhouse Lifts — Release & Rollback Playbook* (how every change ships and how to undo it), *Woodhouse Lifts — Training Logic* (the full rules and evidence) and *Woodhouse Lifts — Changelog* (what changed, version by version). All three live in the Google Drive folder **Woodhouse Lifts**; older copies are in its **Archive — earlier versions** subfolder. The repo holds the same files under `docs/` and `CHANGELOG.md`, and the repo copy is the one that changes first.
 
 ---
 
 ## 0. Status (2026-11-23)
 
-Live: **1.11.5** after this release (rollback points `release/v1.11.0` … `release/v1.11.4`). The app has no links to Google Drive; the training rules are the in-app page `#/logic` (from `docs/training-logic.md`). Next: **PR #1** (1.12.0, design foundations; rebase on 1.11.5, `?v=36`, and clean its screenshots/test data per Playbook §1.8), then body-area protection (uses `profiles.avoid_tags`, no migration) → workout screen → home/library/mesos → install/offline/service worker (rehearse the kill switch first) → onboarding → code quality (module split, CI, linter, one version number, pinned supabase-js). Every release follows `docs/PLAYBOOK.md`; the release log is its §10. User-specific status (accounts, pending data fixes) lives only in the private Drive copy of this page, never in this public repo.
+Live: **1.12.0** after this release (rollback points `release/v1.11.0` … `release/v1.11.5`). The app has no links to Google Drive; the training rules are the in-app page `#/logic` (from `docs/training-logic.md`). Next: **PR #1** (now 1.13.0, design foundations; rebase on 1.12.0, `?v=37`, and clean its screenshots/test data per Playbook §1.8), then body-area protection (uses `profiles.avoid_tags`, no migration) → workout screen → home/library/mesos → install/offline/service worker (rehearse the kill switch first) → onboarding → code quality (module split, CI, linter, one version number, pinned supabase-js). Every release follows `docs/PLAYBOOK.md`; the release log is its §10. User-specific status (accounts, pending data fixes) lives only in the private Drive copy of this page, never in this public repo.
 
 ## 1. What it is
 
@@ -39,7 +39,7 @@ No build step. Plain ES modules served by GitHub Pages.
 | File | What's in it |
 |---|---|
 | `index.html` | Shell. Loads `styles.css?v=N` and `app.js?v=N` — **bump `?v=` on every release** (now `v=35`; one number for every file). |
-| `app.js` (~1,900 lines) | UI + data access. Hash router (`#/`, `#/workout/<dayId>`, `#/workout/<id>/view`, `#/meso/<id>`, `#/new`, `#/templates`, `#/cardio`, settings…). Supabase client, offline save queue, workout logger, recovery gate, builder, home dashboard and drill-downs. `APP_VERSION` constant at the top (now `'1.11.5'`) must match the changelog. |
+| `app.js` (~1,900 lines) | UI + data access. Hash router (`#/`, `#/workout/<dayId>`, `#/workout/<id>/view`, `#/meso/<id>`, `#/new`, `#/templates`, `#/cardio`, settings…). Supabase client, offline save queue, workout logger, recovery gate, builder, home dashboard and drill-downs. `APP_VERSION` constant at the top (now `'1.12.0'`) must match the changelog. |
 | `logic.js` (~850 lines) | **Pure training engine, no I/O.** Everything testable lives here (see §5). |
 | `learn.js` | In-app "Learn" explanations and app defaults. |
 | `md.js` | Safe Markdown → HTML for the "How it works" page (escapes everything first; only http(s), `#/` and `#section` links). |
@@ -93,7 +93,7 @@ Full rules, examples and sources: *Training Logic* doc. Quick map of `logic.js`:
 | Area | Current rule | Key functions / constants |
 |---|---|---|
 | RIR by week | Ramps toward 0 RIR across the meso; last week is a deload. | `rirForWeek`, `targetRir` |
-| Plan building | Split by days (2–6), muscle priorities **Emphasize / Grow / Maintain / Skip** (max 3 emphasized), equipment and preferences, then **fit to time** (trims lowest priority first, fairly; ≤10 sets per muscle per session). Short time → concentrates (small Grow muscles → Maintain) so grown muscles keep a growth level; Maintain ≥ 1 set/week (v1.11.5). | `fitPlan`, `autofill`, `applyPreferences`, `fitToTime`, `GROW_FLOOR`, `MAINTAIN_WEEK_MIN` |
+| Plan building | Split by days (2–6), muscle priorities **Emphasize / Grow / Maintain / Skip** (max 3 emphasized), equipment and preferences, then **fit to time** (trims lowest priority first, fairly; ≤10 sets per muscle per session). Short time → concentrates (small Grow muscles → Maintain) so grown muscles keep a growth level; Maintain ≥ 1 set/week (v1.11.5). Start from Suggested (carries on from the last meso), a template library (focus preset × split, 2×/week rule) or scratch (v1.12.0). | `suggestPlan`, `templateCatalog`, `FOCI`, `fitPlan`, `autofill`, `applyPreferences`, `fitToTime`, `GROW_FLOOR`, `MAINTAIN_WEEK_MIN` |
 | Load vs reps | Each lift progresses either by weight or by reps, decided from the meso's own pattern, room in the rep range, and load size (light loads where one step >5% go by reps). | `progressionMode` |
 | Step size | ≈2.5% of the load, rounded down to the gym increment, ≥1 increment, **≤5 lb / 2.5 kg**, ≤ your usual jump. Increments default 2.5 lb (dumbbells 5 lb), settable. | `loadStep`, `STEP_MAX`, `setIncrements`, `increment` |
 | Speed from feedback | Each lift: its **own exercise rating** (workload, joint pain) capped by the **muscle rating**. Hold (Too much or joint pain ≥2 on the exercise; muscle Too much) · Slow (Pushed my limit; muscle joint pain from another lift) · Normal · **Fast only if exercise and muscle were Easy + never got sore + no joint pain**, never at 0 RIR or on axial lifts. Older sessions without exercise ratings use the muscle rating alone. | `liftSpeed`, `progressionSpeed` |

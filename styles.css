@@ -314,3 +314,21 @@ nav#tabs a span svg { display: block; }
 .md-table { overflow-x: auto; margin: .8em 0; } .md-table table { border-collapse: collapse; min-width: 100%; font-size: .92em; }
 .md-table th, .md-table td { border: 1px solid rgba(127,127,127,.3); padding: 6px 8px; text-align: left; vertical-align: top; }
 .md a { word-break: break-word; }
+
+/* v1.12.0 builder: obvious selections. A chosen tile is filled and carries a ✓; unchosen ones stay plain. */
+.seg.c5 { grid-template-columns: repeat(5, 1fr); }
+.seg.mini button { min-height: 40px; font-size: 13px; }
+.choice { position: relative; width: 100%; display: flex; align-items: center; gap: 10px; text-align: left; justify-content: flex-start;
+  background: var(--card); border: 1.5px solid var(--line); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 8px; color: var(--text); }
+.choice.on { background: rgba(155, 227, 60, .12); border-color: var(--accent); }
+.choice .tick { flex: none; width: 26px; height: 26px; border-radius: 99px; background: var(--accent); color: var(--accent-ink);
+  display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; }
+.start-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.choice.start b, .choice.start .tiny { overflow-wrap: anywhere; }
+@media (max-width: 359px) { .choice.start { padding: 10px 8px; } .start-tiles { gap: 6px; } }
+.choice.start { flex-direction: column; align-items: flex-start; gap: 2px; margin: 0; padding: 12px 10px; min-height: 92px; }
+.choice.start .ico { font-size: 20px; color: var(--accent); }
+.choice.start .tick { position: absolute; top: 8px; right: 8px; width: 22px; height: 22px; font-size: 12px; }
+.sugg { background: var(--card2); border-radius: 10px; padding: 12px; }
+.sugg ul { margin: 8px 0; }
+button:disabled { opacity: .55; }
