@@ -121,7 +121,8 @@ Snapshots: `backup.snapshot` (all 11 user tables as JSON). Weekly automatic (Sun
 
 In-database snapshots don't survive losing the whole Supabase project. So a copy also goes to the owner's private Google Drive, in a **Backups** folder inside the private *Woodhouse Lifts* folder:
 - It's shared with nobody. The app has no link to it and never reads it.
-- Weekly, by a scheduled task: take a snapshot, export it, check every table's row count, gzip it, upload it as `woodhouse-lifts-backup-<UTC time>.json.gz` (about 1 MB), and keep every copy.
+- Each copy is a snapshot, exported, with every table's row count checked, then gzipped and uploaded as `woodhouse-lifts-backup-<UTC time>.json.gz` (about 1 MB). Every copy is kept.
+- **Schedule:** before risky data operations, plus weekly once the owner approves a scheduled task for it (pending as of 2026-11-23). The first copy was taken 2026-11-23.
 - Also taken by hand before risky data operations.
 - **Never commit a backup file to this repo.**
 
