@@ -69,7 +69,7 @@ async def main():
         pg=await fresh(ctx, errs, '#/templates')
         ok('Templates page lists the library', await pg.locator('[data-tpl]').count()==21)
         await pg.click('[data-td="3"]'); await pg.wait_for_timeout(150)
-        ok('days filter on the page', await pg.locator('[data-tpl]').count()==14)
+        ok('days filter on the page (v1.16: 1× templates now listed, marked)', await pg.locator('[data-tpl]').count()==21 and 'Once a week:' in await pg.inner_text('main'))
         await shot(pg,'after_templates_page.png')
         await pg.click('[data-tpl="lower.full_body_split.3"]'); await pg.wait_for_timeout(900)
         ok('opens the builder on that template', await pg.evaluate(pressed)==['template'] and await pg.locator('[data-tpl="lower.full_body_split.3"].on').count()==1

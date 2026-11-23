@@ -104,15 +104,17 @@ export function templateCatalog(days) {
     const pr = presetPriorities(fid);
     for (const s of splitsFor(days)) {
       const growing = MUSCLES.filter(m => pr[m] === 'emphasize' || pr[m] === 'grow');
-      if (days >= 2 && growing.some(m => daysForMuscle(s.id, days, m) < 2)) continue;
+      // v1.16.0 (audit T1): twice a week is the practical default, not a rule. At the same weekly sets the evidence
+      // for 2× beating 1× is weak and mixed, so 1× templates stay — ranked after, and they say which muscles get one day.
+      const once = days >= 2 ? growing.filter(m => daysForMuscle(s.id, days, m) < 2) : [];
       out.push({ id: `${fid}.${s.id}.${days}`, preset: fid, focus: f.db, split: s.id, days, name: f.name, splitName: s.name,
         blurb: f.blurb, emphasize: f.emphasize, held: MUSCLES.filter(m => pr[m] === 'maintain' && !MINOR.includes(m)),
-        week: splitLayout(s.id, days).map(d => d.label), recommended: s.id === defaultSplit(days) });
+        week: splitLayout(s.id, days).map(d => d.label), recommended: s.id === defaultSplit(days) && !once.length, once });
     }
   }
   // Recommended split first inside each focus.
   const order = Object.keys(FOCI);
-  return out.sort((a, b) => order.indexOf(a.preset) - order.indexOf(b.preset) || (b.recommended - a.recommended));
+  return out.sort((a, b) => order.indexOf(a.preset) - order.indexOf(b.preset) || (a.once.length > 0) - (b.once.length > 0) || (b.recommended - a.recommended));
 }
 export const templateById = id => { const days = +String(id).split('.').pop(); return templateCatalog(days).find(t => t.id === id) || null; };
 
@@ -459,7 +461,7 @@ export const MAINTAIN_WEEK_MIN = 1;
  */
 export const GROW_FLOOR = { large: 6, small: 4, minor: 3 };
 const DEMOTE_ORDER = ['Calves', 'Biceps', 'Triceps', 'Shoulders'];
-export function fitPlan({ plan, priorities, focus, goal, split, library, favorites = null, mode = 'all', minutes = null }) {
+export function fitPlan({ plan, priorities, focus, goal, split, library, favorites = null, mode = 'all', minutes = null, demote = true }) {
   let pr = { ...priorities }; const demoted = [];
   const once = () => {
     const raw = autofill({ plan, priorities: pr, focus, goal, split, library, favorites, mode });
@@ -472,7 +474,7 @@ export function fitPlan({ plan, priorities, focus, goal, split, library, favorit
       if (got[m] < floor) out.push({ muscle: m, sets: got[m], floor }); }
     return out; };
   let f = once(), under = short(f);
-  while (mode === 'all' && minutes && under.length) {
+  while (demote && mode === 'all' && minutes && under.length) {
     const next = DEMOTE_ORDER.find(m => normPriority(pr[m], focus) === 'grow');
     if (!next) break;
     pr = { ...pr, [next]: 'maintain' }; demoted.push(next);
@@ -518,6 +520,24 @@ export function targetRir(week, weeks, goal, kind) {
   const k = kind === 'compound' ? 'compound' : 'isolation';
   if (G.rirFixed?.[k] != null) return { rir: G.rirFixed[k], deload: false };
   return { rir: Math.max(base.rir, G.rirFloor?.[k] ?? 0), deload: false };
+}
+
+/**
+ * v1.16.0 (audit T4): how close to failure the meso goes. "Standard" is the RP-style ramp to 0 reps left in the last
+ * hard week — a programming choice, not a research requirement (ACSM 2026: always training to failure adds nothing
+ * consistent). The other two keep a floor. Light (deload) weeks are unchanged.
+ */
+export const EFFORT_MODES = {
+  standard: { name: 'Standard', blurb: 'Ramps to 0–1 reps left by the last hard week (RP-style).', floor: { compound: 0, isolation: 0 } },
+  main1: { name: 'Main lifts ≥1', blurb: 'Same ramp, but main (compound) lifts stop at least 1 rep short.', floor: { compound: 1, isolation: 0 } },
+  conservative: { name: 'Conservative', blurb: 'Main lifts stop ≥2 reps short, everything else ≥1. Good for beginners or lower-fatigue training.', floor: { compound: 2, isolation: 1 } },
+};
+export const effortOf = m => (EFFORT_MODES[m] ? m : 'standard');
+export function effortRir(week, weeks, goal, kind, mode = 'standard') {
+  const r = targetRir(week, weeks, goal, kind);
+  if (r.deload) return r;
+  const f = EFFORT_MODES[effortOf(mode)].floor[kind === 'compound' ? 'compound' : 'isolation'];
+  return { rir: Math.max(f, r.rir), deload: false };
 }
 
 /** Rep range for an exercise under a goal. Hypertrophy (and cardio) keep the exercise's own range. */
@@ -1016,7 +1036,7 @@ export function weightRange({ prev, ex, targetRir, prevTargetRir, bodyweight, un
  * R recovery, L workload, J joint pain, P pump (0–3), F performance (−1/0/1). Missing → neutral, and never counted as
  * evidence for adding volume (v1.11.1): Grow holds without a performance comparison; +2 needs a rated pump.
  */
-export function setAdjustment({ R, L, J, P, F, priority = 'emphasize' }) {
+export function setAdjustment({ R, L, J, P, F, priority = 'emphasize', stalls = 1, justAdded = false }) {
   const n = v => (v == null ? null : Number(v));
   R = n(R); L = n(L); J = n(J); P = n(P); F = n(F);
   // holdRir: next week keeps this week's RIR for this muscle instead of stepping closer to failure (doc §5.1).
@@ -1028,17 +1048,17 @@ export function setAdjustment({ R, L, J, P, F, priority = 'emphasize' }) {
   if (R != null && R <= 1 && L != null && L <= 1 && (F == null || F >= 0)) {
     // Doc §5.5 — what a "ready for more" signal means depends on the muscle's priority.
     if (priority === 'maintain' || priority === 'skip') return { delta: 0, rule: 8, why: 'maintain muscle — volume stays low on purpose' };
-    if (priority === 'grow') {
-      if (F === 1) return { delta: 0, rule: 9, why: 'performance improved and recovery was good, so no extra volume is needed yet' };
-      // v1.11.1 (audit A): no performance comparison yet is NOT a plateau — hold until there's evidence.
-      if (F == null) return { delta: 0, rule: 11, why: 'no earlier session to compare performance with yet — sets held until there is' };
-      return { delta: 1, rule: 10, why: 'recovery was good but performance didn\'t move — one set added' };
-    }
-    // +2 only with no joint discomfort at all; any joint pain (even "Low") limits the increase to +1 (review #2).
-    // v1.11.1: +2 also needs a pump that was actually rated low and a performance comparison — a skipped pump or
-    // missing performance is never read as "low stimulus".
-    const two = R === 0 && L === 0 && P != null && P <= 1 && F != null && !(J >= 1);
-    return { delta: two ? 2 : 1, rule: 6, why: two ? 'recovered fully with an easy workload and low pump — two sets added' : 'recovery and workload were good — one set added' };
+    // v1.16.0 (audit T3): one session is weak evidence. Sets are added only after a repeated, comparable stall with
+    // good recovery — never because soreness was zero or the pump was low on their own, never while performance is
+    // still improving, and not the week right after sets were added (let that change show first).
+    if (F === 1) return { delta: 0, rule: 9, why: 'performance improved and recovery was good, so no extra volume is needed yet' };
+    if (F == null) return { delta: 0, rule: 11, why: 'no earlier session to compare performance with yet — sets held until there is' };
+    if (justAdded) return { delta: 0, rule: 12, why: 'sets were just added — holding a week to see what that does first' };
+    if (stalls == null || stalls < 2) return { delta: 0, rule: 13, why: 'performance was flat once — that isn’t a plateau yet; one set is added if it happens again' };
+    if (priority === 'grow') return { delta: 1, rule: 10, why: 'recovery was good but performance stalled twice in a row — one set added' };
+    // Emphasize: +2 only after a longer stall (3+), full recovery, an easy workload, a pump actually rated low, and no joint discomfort.
+    const two = stalls != null && stalls >= 3 && R === 0 && L === 0 && P != null && P <= 1 && !(J >= 1);
+    return { delta: two ? 2 : 1, rule: 6, why: two ? 'performance stalled 3 sessions running with full recovery, an easy workload and low pump — two sets added' : 'recovery was good but performance stalled again — one set added' };
   }
   return { delta: 0, rule: 7, why: 'recovery and workload were in the normal range — sets held' };
 }
