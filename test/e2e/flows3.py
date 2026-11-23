@@ -73,11 +73,15 @@ async def main():
         # --- settings prefs + library
         ctx,pg,errs=await mk(br)
         await pg.goto(BASE+'#/settings'); await pg.wait_for_timeout(500)
-        await pg.check('#avoidAxial'); await pg.uncheck('input[name=eq][value="Barbell"]'); await pg.click('#savePrefs'); await pg.wait_for_timeout(300)
+        # v1.14.0: the spinal-loading switch is now the Lower back area (saved on tap, as the same 'axial' tag)
+        await pg.click('[data-area="lower_back"]'); await pg.wait_for_timeout(400)
+        lw=[x for x in await pg.evaluate('window.__writes||[]') if x[0]=='profiles']
+        ok('Lower back saves the axial tag', lw and lw[-1][1].get('avoid_tags')==['axial'], lw[-1] if lw else None)
+        await pg.uncheck('input[name=eq][value="Barbell"]'); await pg.click('#savePrefs'); await pg.wait_for_timeout(300)
         pw=[x for x in await pg.evaluate('window.__writes||[]') if x[0]=='profiles']
-        ok('prefs saved', pw and pw[-1][1]['avoid_tags']==['axial'] and 'Barbell' not in pw[-1][1]['equipment'], pw[-1] if pw else None)
+        ok('prefs saved', pw and 'Barbell' not in pw[-1][1]['equipment'] and 'avoid_tags' not in pw[-1][1], pw[-1] if pw else None)
         await pg.goto(BASE+'#/exercises'); await pg.wait_for_timeout(500)
-        ok('library: spinal-load tag visible', 'spinal load' in await pg.inner_text('main'))
+        ok('library: protected-area tag visible', await pg.locator('.exrow .pill.warn:has-text("Lower back")').count() >= 1)
         await pg.locator('[data-fav]').first.click(); await pg.wait_for_timeout(300)
         pw=[x for x in await pg.evaluate('window.__writes||[]') if x[0]=='exercise_prefs']
         ok('library: favorite saved', pw and pw[-1][1]['pref']=='favorite', pw[-1] if pw else None)

@@ -230,6 +230,31 @@ This is a product choice, not a research finding: continuing what you were doing
 
 In every mode, changing a muscle by hand labels the plan "(adjusted)".
 
+### 2.2a Injuries & sore spots (v1.14.0)
+
+Settings has **7 general body areas**: neck, shoulders, elbows & wrists, upper back, lower back, hips and knees. This is deliberately not a list of conditions.
+
+**What picking an area does:** when the app builds a meso or suggests a swap, it leaves out the exercises that load that area the **most** and keeps gentler ones.
+
+| Area | Left out (by exercise name; covers imported names too) |
+|---|---|
+| Neck | shrugs, upright rows, behind-the-neck work, heavy carries |
+| Shoulders | overhead/shoulder presses, dips, upright rows, pullovers, barbell bench |
+| Elbows & wrists | skull crushers, overhead/lying extensions, dips, close/narrow-grip bench, barbell and preacher curls, wrist curls, front squats |
+| Upper back | barbell rows, barbell shrugs, rack pulls, barbell deadlifts |
+| Lower back | everything tagged *axial* (heavy spinal loading), plus deadlifts, good mornings, back extensions/raises, barbell rows and squats, standing barbell presses, sit-ups, ab wheel |
+| Hips | lunges, split squats, step-ups, sumo stance, adductor work, deep single-leg squats |
+| Knees | squats of every kind, lunges and split squats, step-ups, sissy squats, jumping, sprinting, running |
+
+**Rules:**
+- **Gentler options stay.** For example, Knees keeps leg press and leg extension, because you set their range of motion.
+- **No muscle is ever left with nothing.** If the picked areas would remove every option for a muscle, the machine and cable options are kept and marked.
+- **Starred favorites always stay.** You can still add any exercise by hand.
+- Meso days that were already built aren't changed.
+- **Lower back is the old "Avoid heavy spinal loading" switch**, stored as the same `axial` tag, so an existing choice carries over. Other areas are stored as `area:<id>` in `profiles.avoid_tags`, so no database change was needed.
+
+**Evidence and judgement:** which movements load an area most is general exercise-science knowledge (joint angles, load position, spinal compression), not a diagnosis. The lists are a judgement call, kept conservative on purpose. This is a preference, never medical advice. With joint pain, the existing joint-pain rating still slows progression for that lift (§4).
+
 ### 2.2 Personal exercise preferences
 
 Before autofill picks anything, it applies the person's own preferences (Settings → Training preferences, and the ★ / ⦸ buttons in the Exercise library):

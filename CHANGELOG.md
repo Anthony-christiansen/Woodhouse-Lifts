@@ -12,6 +12,27 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.14.0 — 2026-11-23 · Injuries & sore spots
+
+**Settings → Injuries & sore spots**
+- **7 general areas, saved the moment you tap:** neck, shoulders, elbows & wrists, upper back, lower back, hips and knees.
+- New mesos and swap suggestions **leave out the exercises that load a picked area the most** and keep gentler ones. For example, Knees drops squats, lunges and jumps but keeps leg press and leg extension.
+- A muscle is never left with nothing; machine and cable options are kept if needed.
+- Favorites always stay, and you can still add anything by hand.
+- Each area shows how many exercises it leaves out, with a list. The builder says which areas it's going easy on, and the library marks exercises that load an area you picked.
+- **"Avoid heavy spinal loading" is now Lower back.** It's stored the same way, so the old setting carries over.
+
+**Fixes**
+- **"Can't click Avoid heavy spinal loading":** it did change, but since 1.13.0 every checkbox and switch looked the same on and off. Switches now look like switches (green when on), checkboxes show their tick, and equipment chips highlight when picked. Screen readers announce switches as on/off.
+- Library: the ⊘ button now says **Never** and the star says **Favorite**. The icon alone read as an "x".
+- Saving profile details or equipment kept the rest of your profile in the app (before, a save could briefly drop other settings until the next reload).
+
+**Underneath:** `BODY_AREAS`, `exerciseAreas`, `avoidedAreas` and area-aware `applyPreferences` in logic.js. Engine tests cover 7 areas × 13 muscles on the shared library, plus favorites, the "never empty" rule and a full build. New browser test `injuries140.py`. No database change.
+
+**Rollback:** app → `release/v1.13.1`. Area tags left in `avoid_tags` are ignored by older versions, except `axial`, which they already understood.
+
+---
+
 ## 1.13.1 — 2026-11-23 · Dark ↔ Normal in one tap, accessibility pass
 
 **Dark / Normal switch**
