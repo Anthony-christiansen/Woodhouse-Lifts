@@ -36,7 +36,7 @@ Haylee's week 3 (her current meso) run through our engine and compared set by se
 - No database changes. `?v=31`.
 - New: `docs/PLAYBOOK.md` (release & rollback playbook), `supabase/ops/restore_user_from_snapshot.sql`, `test/restore.drill.mjs` (rollback drill, passes).
 
-**Rollback:** tier A — `git revert -m 1` the merge, bump `?v=`. No database changes. Ratings saved by 1.11.1 with pump *not rated* stay valid; 1.11.0 would simply ask for pump again on those muscles (it treats a missing pump as unrated, not an error).
+**Rollback:** tier B (writes pump as *not rated*; pre-release snapshot taken) — `git revert -m 1` the merge, bump `?v=`. No database changes. Ratings saved by 1.11.1 with pump *not rated* stay valid; 1.11.0 would simply ask for pump again on those muscles (it treats a missing pump as unrated, not an error).
 
 ---
 
