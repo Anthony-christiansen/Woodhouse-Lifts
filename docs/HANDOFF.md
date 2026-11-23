@@ -1,12 +1,12 @@
 # Woodhouse Lifts — Start Here (handoff for a new chat)
 
-**Current version: 1.12.2 (2026-11-23).** If you are a new chat picking this up: read this page first, then *Woodhouse Lifts — Release & Rollback Playbook* (how every change ships and how to undo it), *Woodhouse Lifts — Training Logic* (the full rules and evidence) and *Woodhouse Lifts — Changelog* (what changed, version by version). All three live in the Google Drive folder **Woodhouse Lifts**; older copies are in its **Archive — earlier versions** subfolder. The repo holds the same files under `docs/` and `CHANGELOG.md`, and the repo copy is the one that changes first.
+**Current version: 1.13.0 (2026-11-23).** If you are a new chat picking this up: read this page first, then *Woodhouse Lifts — Release & Rollback Playbook* (how every change ships and how to undo it), *Woodhouse Lifts — Training Logic* (the full rules and evidence) and *Woodhouse Lifts — Changelog* (what changed, version by version). All three live in the Google Drive folder **Woodhouse Lifts**; older copies are in its **Archive — earlier versions** subfolder. The repo holds the same files under `docs/` and `CHANGELOG.md`, and the repo copy is the one that changes first.
 
 ---
 
 ## 0. Status (2026-11-23)
 
-Live: **1.12.2** after this release (rollback points `release/v1.11.0` … `release/v1.12.1`). The app has no links to Google Drive; the training rules are the in-app page `#/logic` (from `docs/training-logic.md`). Next: **PR #1** (now 1.13.0, design foundations; rebase on 1.12.0, `?v=37`, and clean its screenshots/test data per Playbook §1.8), then body-area protection (uses `profiles.avoid_tags`, no migration) → workout screen → home/library/mesos → install/offline/service worker (rehearse the kill switch first) → onboarding → code quality (module split, CI, linter, one version number, pinned supabase-js). Every release follows `docs/PLAYBOOK.md`; the release log is its §10. User-specific status (accounts, pending data fixes) lives only in the private Drive copy of this page, never in this public repo.
+Live: **1.13.0** after this release (rollback points `release/v1.11.0` … `release/v1.12.3`). The app has no links to Google Drive; the training rules are the in-app page `#/logic` (from `docs/training-logic.md`). Next: body-area protection (uses `profiles.avoid_tags`, no migration) → workout screen → home/library/mesos → install/offline/service worker (rehearse the kill switch first) → onboarding → code quality (module split, CI, linter, one version number, pinned supabase-js). Every release follows `docs/PLAYBOOK.md`; the release log is its §10. User-specific status (accounts, pending data fixes) lives only in the private Drive copy of this page, never in this public repo.
 
 ## 1. What it is
 
@@ -38,8 +38,8 @@ No build step. Plain ES modules served by GitHub Pages.
 
 | File | What's in it |
 |---|---|
-| `index.html` | Shell. Loads `styles.css?v=N` and `app.js?v=N` — **bump `?v=` on every release** (now `v=35`; one number for every file). |
-| `app.js` (~1,900 lines) | UI + data access. Hash router (`#/`, `#/workout/<dayId>`, `#/workout/<id>/view`, `#/meso/<id>`, `#/new`, `#/templates`, `#/cardio`, settings…). Supabase client, offline save queue, workout logger, recovery gate, builder, home dashboard and drill-downs. `APP_VERSION` constant at the top (now `'1.12.2'`) must match the changelog. |
+| `index.html` | Shell. Loads `styles.css?v=N` and `app.js?v=N` — **bump `?v=` on every release** (now `v=40`; one number for every file, including `theme.js`). |
+| `app.js` (~1,900 lines) | UI + data access. Hash router (`#/`, `#/workout/<dayId>`, `#/workout/<id>/view`, `#/meso/<id>`, `#/new`, `#/templates`, `#/cardio`, settings…). Supabase client, offline save queue, workout logger, recovery gate, builder, home dashboard and drill-downs. `APP_VERSION` constant at the top (now `'1.13.0'`) must match the changelog. |
 | `logic.js` (~850 lines) | **Pure training engine, no I/O.** Everything testable lives here (see §5). |
 | `learn.js` | In-app "Learn" explanations and app defaults. |
 | `md.js` | Safe Markdown → HTML for the "How it works" page (escapes everything first; only http(s), `#/` and `#section` links). |
@@ -84,7 +84,7 @@ Row Level Security is on for every table ("own rows" policies keyed on `user_id`
 
 **Migrations applied to prod, in order:** initial_schema → lock_rls_auto_enable → training_logic_v2 → workout_day_skip → cardio_exercises_and_import → templates → cardio_breathing_rating → dashboard_rpc → strength_summary_rpc → weekly_snapshots → p1_reliability → exercise_preferences → lift_recent → lift_recent_horizon → carry_from_week → atomic_feedback_adjustment → exercise_feedback → feedback_adjustment_scope (latest; v1.12.1).
 
-**Offline queue:** every set edit is written to localStorage `wl_pending_sets_v1:<user id>` first (with a version `_v`, never sent), then sent; writes for one set run one at a time in order, and a save only clears the entry if its version is still the newest (v1.12.1). Entries left by a dropped connection are retried; saves the database permanently refuses (SQLSTATE classes 22/23/42) move to a "failed" list instead of retrying forever. Other phone-only settings: `wl_increments` (smallest weight jumps), `wl_session_minutes`.
+**Offline queue:** every set edit is written to localStorage `wl_pending_sets_v1:<user id>` first (with a version `_v`, never sent), then sent; writes for one set run one at a time in order, and a save only clears the entry if its version is still the newest (v1.12.1). Ratings and finishing a workout go through a second ordered queue `wl_pending_ops_v1:<user id>` (idempotent upserts/updates, sent after sets; v1.12.3). Entries left by a dropped connection are retried; saves the database permanently refuses (SQLSTATE classes 22/23/42) move to a "failed" list instead of retrying forever. Other phone-only settings: `wl_increments` (smallest weight jumps), `wl_session_minutes`.
 
 ## 5. The training engine as it stands (1.11.1)
 
