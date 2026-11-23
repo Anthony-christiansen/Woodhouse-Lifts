@@ -1,8 +1,8 @@
 // v1.12.1: pinned to one reviewed release, so the code users get only changes with a commit here (outside audit, finding 4).
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.2/+esm';
-import * as L from './logic.js?v=38';
-import * as LEARN from './learn.js?v=38';
-import * as MD from './md.js?v=38';
+import * as L from './logic.js?v=39';
+import * as LEARN from './learn.js?v=39';
+import * as MD from './md.js?v=39';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -19,7 +19,7 @@ let authReturn = (() => {
   return null;
 })();
 let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
-export const APP_VERSION = '1.12.2'; // keep in sync with CHANGELOG.md
+export const APP_VERSION = '1.12.3'; // keep in sync with CHANGELOG.md
 const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
 // v1.11.4: the training rules are a page inside the app (#/logic), built from this repo's docs/training-logic.md.
 // The app never links to anyone's Google Drive.
@@ -156,8 +156,10 @@ function sendQueued(k, qk, uid) {
     return Object.assign(new String('failed'), { message: error.message });
   });
 }
+const lastSent = new Map();   // newest value of every set edited in this app session (for finishing with no signal)
 async function saveSet(payload) {
   const qk = qKey(), uid = session?.user?.id, k = setKey(payload);
+  lastSent.set(k, { ...payload });
   if (!qk) return 'failed';
   const q = qLoadFor(qk); q[k] = { ...payload, _v: newVer() }; qStoreFor(qk, q);   // on the phone first
   const res = await sendQueued(k, qk, uid);
@@ -182,16 +184,68 @@ async function flushQueue() {
   return left;
 }
 function syncBadge() {
-  const qk = qKey(), n = Object.keys(qLoad()).filter(k => !setChains.has(qk + '|' + k)).length;   // in-flight saves aren't "waiting"
+  const qk = qKey(), sets = Object.keys(qLoad()).filter(k => !setChains.has(qk + '|' + k)).length;   // in-flight saves aren't "waiting"
+  const ops = opsFlushing ? 0 : oLoad().length, n = sets + ops;
   let b = document.getElementById('syncBadge');
+  document.body.classList.toggle('has-sync', !!n);   // v1.12.3: room at the bottom so the badge never covers a button
   if (!n) { b?.remove(); return; }
-  if (!b) { b = document.createElement('button'); b.id = 'syncBadge'; b.className = 'sync-badge'; b.onclick = () => flushQueue(); document.body.appendChild(b); }
-  b.textContent = `⟳ ${n} set${n > 1 ? 's' : ''} waiting to sync — tap to retry`;
+  if (!b) { b = document.createElement('button'); b.id = 'syncBadge'; b.className = 'sync-badge'; b.onclick = () => syncAll(); document.body.appendChild(b); }
+  b.textContent = `⟳ ${[sets ? `${sets} set${sets > 1 ? 's' : ''}` : '', ops ? `${ops} change${ops > 1 ? 's' : ''}` : ''].filter(Boolean).join(' + ')} waiting to sync — tap to retry`;
   b.setAttribute('aria-live', 'polite');
 }
-window.addEventListener('online', () => flushQueue());
-document.addEventListener('visibilitychange', () => { if (!document.hidden) flushQueue(); });
-setInterval(() => { if (Object.keys(qLoad()).length) flushQueue(); }, 20000);
+// ---------- durable writes for ratings and finishing a workout (v1.12.3, outside audit finding 3) ----------
+// Each change is kept on the phone (in order) before it is sent, then sent one at a time, oldest first, after any
+// waiting sets. Every change is idempotent (an upsert on its natural key, or an update to fixed values), so a retry
+// after a dropped connection can never apply it twice. With no signal, a workout can be rated and finished; it all
+// syncs by itself when the connection is back. Refused changes are kept aside, never silently dropped.
+const OKEY = 'wl_pending_ops_v1';
+const oKey = () => session?.user?.id ? `${OKEY}:${session.user.id}` : null;
+const oLoad = (k = oKey()) => { try { return k ? JSON.parse(localStorage.getItem(k) || '[]') : []; } catch { return []; } };
+const oStore = (k, a) => { if (!k) return; try { localStorage.setItem(k, JSON.stringify(a)); } catch { /* private mode */ } };
+const opFailed = new Set();
+function opQuery(op) {
+  if (op.kind === 'upsert') return sb.from(op.table).upsert(op.values, { onConflict: op.onConflict });
+  let q = sb.from(op.table).update(op.values);
+  for (const [c, v] of Object.entries(op.eq || {})) q = q.eq(c, v);
+  return q;
+}
+let opsFlushing = null;
+function flushOps() {
+  if (opsFlushing) return opsFlushing;
+  opsFlushing = (async () => {
+    const k = oKey(), uid = session?.user?.id; if (!k) return 'none';
+    for (;;) {
+      const op = oLoad(k)[0]; if (!op) return 'done';
+      if (session?.user?.id !== uid) return 'queued';
+      const { error } = await opQuery(op);
+      if (session?.user?.id !== uid) return 'queued';
+      if (!error) { oStore(k, oLoad(k).filter(x => x.id !== op.id)); continue; }
+      if (!isPermanentErr(error)) return 'queued';               // no signal: keep everything, in order
+      oStore(k, oLoad(k).filter(x => x.id !== op.id)); opFailed.add(op.id); qAddFailed({ op }, error.message);
+      toast(`A change saved on your phone was refused by the server and kept aside: ${error.message}`, true);
+    }
+  })().finally(() => { opsFlushing = null; syncBadge(); });
+  return opsFlushing;
+}
+async function syncAll() { await flushQueue(); return flushOps(); }
+// Returns 'saved' (on the server), 'queued' (kept on the phone, will sync) or 'failed' (refused; kept aside).
+async function durableWrite(op) {
+  const k = oKey(); if (!k) return 'failed';
+  op = { id: newVer(), at: new Date().toISOString(), ...op };
+  oStore(k, [...oLoad(k), op]);
+  if (!Object.keys(qLoad()).length || await flushQueue() === 0) await flushOps();
+  if (opFailed.has(op.id)) return 'failed';
+  return oLoad(k).some(x => x.id === op.id) ? 'queued' : 'saved';
+}
+// Pending changes overlay what the server returned, so a page loaded before they sync still shows them.
+const pendingOps = (table, match) => oLoad().filter(o => o.table === table && match(o));
+function overlayDays(days) {
+  for (const d of days) for (const o of pendingOps('workout_days', o => o.eq?.id === d.id)) Object.assign(d, o.values);
+  return days;
+}
+window.addEventListener('online', () => syncAll());
+document.addEventListener('visibilitychange', () => { if (!document.hidden) syncAll(); });
+setInterval(() => { if (Object.keys(qLoad()).length || oLoad().length) syncAll(); }, 20000);
 
 // ---------- per-lift insights (doc §6.1) ----------
 // For a list of exercise ids: recent sessions + earlier best (lift_recent), tagged with meso and meso week, then the
@@ -261,7 +315,7 @@ async function route() {
   if (!session) { tabs.hidden = true; return renderAuth(); }
   if (awaitingNewPassword) return renderNewPassword(true);
   qMigrateLegacy();
-  if (Object.keys(qLoad()).length) { syncBadge(); flushQueue(); }
+  if (Object.keys(qLoad()).length || oLoad().length) { syncBadge(); syncAll(); }
   if (!profile) profile = (await sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle()).data;
   const [name, ...args] = location.hash.replace(/^#\/?/, '').split('/');
   window.scrollTo(0, 0);
@@ -430,8 +484,8 @@ async function activeMeso() {
   return m.find(x => x.status === 'active') || m.find(x => x.status === 'planned') || null;
 }
 async function mesoDays(mesoId) {
-  return check(await sb.from('workout_days').select('id, week, day_index, label, started_at, completed_at, skipped_at, mesocycle_id')
-    .eq('mesocycle_id', mesoId).order('week').order('day_index'));
+  return overlayDays(check(await sb.from('workout_days').select('id, week, day_index, label, started_at, completed_at, skipped_at, mesocycle_id')
+    .eq('mesocycle_id', mesoId).order('week').order('day_index')));
 }
 const openDays = days => days.filter(d => !d.completed_at && !d.skipped_at);
 async function cardioSince(fromIso) {
@@ -995,7 +1049,7 @@ async function renderWorkout(dayId, mode) {
       <button class="list-btn" data-go="#/cardio"><span>♥︎</span><div class="grow"><b>Just cardio today?</b><div class="muted small">Log time and intensity</div></div>›</button>`;
     return $$('[data-go]').forEach(b => b.onclick = () => { if (b.dataset.go === '#/new') builder = null; go(b.dataset.go); });
   }
-  const day = check(await sb.from('workout_days').select('*, mesocycles(*)').eq('id', dayId).single());
+  const day = overlayDays([check(await sb.from('workout_days').select('*, mesocycles(*)').eq('id', dayId).single())])[0];
   const meso = day.mesocycles;
   setHeader(`Wk ${day.week} · ${dayName(day)}`, '#/meso/' + meso.id, 'workout');
   const all = await mesoDays(meso.id);
@@ -1039,7 +1093,10 @@ async function renderWorkout(dayId, mode) {
   wes.forEach(w => Object.values(pending).filter(p => p.workout_exercise_id === w.id).forEach(p => {
     const i = w.sets.findIndex(x => x.set_index === p.set_index); const row = { ...(w.sets[i] || {}), ...p, _queued: true };
     if (i >= 0) w.sets[i] = row; else w.sets.push(row); }));
-  wes.forEach(w => { w.sets.sort((a, b) => a.set_index - b.set_index); w.sets.forEach(x => { x.weight = W(x.weight); }); });
+  wes.forEach(w => w.sets.sort((a, b) => a.set_index - b.set_index));
+  // v1.12.3: a copy in stored units (lb), used if you finish with no signal.
+  const loadedRaw = wes.map(w => ({ id: w.id, exercise_id: w.exercise_id, target_rir: w.target_rir, exercises: w.exercises, sets: w.sets.map(x => ({ ...x })) }));
+  wes.forEach(w => w.sets.forEach(x => { x.weight = W(x.weight); }));
   // The meso's goal sets each exercise's rep range (hypertrophy keeps the exercise's own range).
   const goal = L.goalOf(meso.goal);
   wes.forEach(w => { w.exercises = { ...w.exercises, ...L.repRange(w.exercises, goal) }; });
@@ -1124,10 +1181,12 @@ async function renderWorkout(dayId, mode) {
   };
   const feedback = {};
   check(await sb.from('muscle_feedback').select('*').eq('workout_day_id', dayId)).forEach(f => feedback[f.muscle_group] = f);
+  for (const o of pendingOps('muscle_feedback', o => o.values?.workout_day_id === dayId)) feedback[o.values.muscle_group] = { ...(feedback[o.values.muscle_group] || {}), ...o.values, _queued: true };
   const exFb = {}; let exFbOn = true;   // workout_exercise_id → this session's exercise rating (v1.10)
   { const liftIds = wes.filter(w => !isCardio(w)).map(w => w.id);
     const r = liftIds.length ? await sb.from('exercise_feedback').select('*').in('workout_exercise_id', liftIds) : { data: [] };
-    if (r.error) exFbOn = false; else r.data.forEach(f => exFb[f.workout_exercise_id] = f); }
+    if (r.error) exFbOn = false; else r.data.forEach(f => exFb[f.workout_exercise_id] = f);
+    for (const o of pendingOps('exercise_feedback', o => liftIds.includes(o.values?.workout_exercise_id))) exFb[o.values.workout_exercise_id] = { ...(exFb[o.values.workout_exercise_id] || {}), ...o.values, _queued: true }; }
   if (!day.started_at && !day.completed_at && !preview) {
     await sb.from('workout_days').update({ started_at: new Date().toISOString() }).eq('id', dayId);
     if (meso.status === 'planned') await sb.from('mesocycles').update({ status: 'active' }).eq('id', meso.id);
@@ -1300,12 +1359,17 @@ async function renderWorkout(dayId, mode) {
           if (row) { row.classList.add('need'); row.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
           return toast(`Pick ${RATINGS[miss].label.toLowerCase()} for ${m} to finish`, true);
         }
-        const row = check(await sb.from('exercise_feedback').upsert({ workout_exercise_id: we.id, workload: f.workload, joint_pain: f.joint_pain, updated_at: new Date().toISOString() },
-          { onConflict: 'workout_exercise_id' }).select().single());
+        const exVals = { workout_exercise_id: we.id, workload: f.workload, joint_pain: f.joint_pain, updated_at: new Date().toISOString() };
+        const r1 = await durableWrite({ kind: 'upsert', table: 'exercise_feedback', values: exVals, onConflict: 'workout_exercise_id' });
+        if (r1 === 'failed') return;
+        const row = { ...(exFb[we.id] || {}), ...exVals, _queued: r1 === 'queued' };
         exFb[we.id] = row;
         if (withMuscle) {
           const payload = { workout_day_id: dayId, muscle_group: m }; rateKeys(m).forEach(k => payload[k] = g[k]);
-          feedback[m] = check(await sb.from('muscle_feedback').upsert(payload, { onConflict: 'workout_day_id,muscle_group' }).select().single());
+          const r2 = await durableWrite({ kind: 'upsert', table: 'muscle_feedback', values: payload, onConflict: 'workout_day_id,muscle_group' });
+          if (r2 === 'failed') return;
+          feedback[m] = { ...(feedback[m] || {}), ...payload, _queued: r2 === 'queued' };
+          if (r1 === 'queued' || r2 === 'queued') toast('No signal — rating saved on your phone, it will sync automatically');
           const ms = app.querySelector(`[data-rate="${CSS.escape(m)}"]`); if (ms) ms.innerHTML = rateLine(m, feedback[m]);
         }
         closeSheet();
@@ -1352,9 +1416,10 @@ async function renderWorkout(dayId, mode) {
         if (miss) { const r = panel.querySelector(`[data-row="${miss}"]`); if (r) { r.classList.add('need'); r.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
           return toast(`Pick ${RATINGS[miss].label.toLowerCase()} to finish`, true); }
         const payload = { workout_day_id: dayId, muscle_group: m }; rateKeys(m).forEach(k => payload[k] = f[k]);
-        const row = check(await sb.from('muscle_feedback').upsert(payload,
-          { onConflict: 'workout_day_id,muscle_group' }).select().single());
-        feedback[m] = row; closeSheet();
+        const res = await durableWrite({ kind: 'upsert', table: 'muscle_feedback', values: payload, onConflict: 'workout_day_id,muscle_group' });
+        if (res === 'failed') return;
+        const row = feedback[m] = { ...(feedback[m] || {}), ...payload, _queued: res === 'queued' }; closeSheet();
+        if (res === 'queued') toast('No signal — rating saved on your phone, it will sync automatically');
         const slot = app.querySelector(`[data-rate="${CSS.escape(m)}"]`); if (slot) slot.innerHTML = rateLine(m, row);
         wireRate();
         enforceRatings();
@@ -1519,7 +1584,7 @@ async function renderWorkout(dayId, mode) {
       const last = rows[rows.length - 1], key = we.id + ':' + last.dataset.idx;
       if (last.dataset.busy) return toast('That set is still saving — try again in a second', true);
       // Drop any queued offline save for this set FIRST, so a later sync can't bring it back.
-      const q = qLoad(); const queued = q[key]; delete q[key]; qStore(q); syncBadge();
+      const q = qLoad(); const queued = q[key]; delete q[key]; qStore(q); syncBadge(); lastSent.delete(key);
       const { error } = await sb.from('sets').delete().eq('workout_exercise_id', we.id).eq('set_index', +last.dataset.idx);
       if (error) {   // keep the row (and its queued save) if the server didn't delete it
         if (queued) { const q2 = qLoad(); q2[key] = queued; qStore(q2); syncBadge(); }
@@ -1635,12 +1700,18 @@ async function renderWorkout(dayId, mode) {
     // Performance trend per muscle vs. last week (doc §1.7). First let in-flight saves land and push anything
     // saved offline; sets still waiting (no signal) are merged in, so the feedback never misses a logged set.
     for (let i = 0; i < 30 && document.querySelector('.set[data-busy]'); i++) await new Promise(r => setTimeout(r, 100));
+    $('#finish').disabled = true;
     await flushQueue();
-    const fresh = check(await sb.from('workout_exercises').select('id, exercise_id, target_rir, exercises(*), sets(*)').eq('workout_day_id', dayId));
-    const waiting = Object.values(qLoad());
+    // v1.12.3: with no signal, finish from what is on the phone (sets as loaded + every edit since + anything waiting).
+    let fresh, offline = false;
+    const r = await sb.from('workout_exercises').select('id, exercise_id, target_rir, exercises(*), sets(*)').eq('workout_day_id', dayId);
+    if (!r.error) fresh = r.data;
+    else if (isNetErr(r.error)) { offline = true; fresh = loadedRaw.map(w => ({ ...w, sets: w.sets.map(x => ({ ...x })) })); }
+    else { $('#finish').disabled = false; return check(r); }
+    const waiting = [...Object.values(qLoad()), ...(offline ? [...lastSent.values()] : [])];
     fresh.forEach(w => waiting.filter(p => p.workout_exercise_id === w.id).forEach(p => {
       const i = w.sets.findIndex(x => x.set_index === p.set_index); if (i >= 0) w.sets[i] = { ...w.sets[i], ...p }; else w.sets.push({ ...p }); }));
-    if (waiting.some(p => fresh.some(w => w.id === p.workout_exercise_id))) toast('No signal — finishing with the sets saved on your phone; they’ll sync automatically.');
+    if (offline || waiting.some(p => fresh.some(w => w.id === p.workout_exercise_id))) toast('No signal — finishing with what’s saved on your phone; it all syncs automatically.');
     fresh.forEach(w => w.sets.forEach(x => { x.weight = W(x.weight); }));
     const bw = bwD();
     for (const m of muscles) {
@@ -1651,12 +1722,14 @@ async function renderWorkout(dayId, mode) {
         return L.performanceTrend(cur, old);
       });
       const perf = L.combineTrends(trends);
-      check(await sb.from('muscle_feedback').upsert({ workout_day_id: dayId, muscle_group: m, performance: perf }, { onConflict: 'workout_day_id,muscle_group' }));
+      if (await durableWrite({ kind: 'upsert', table: 'muscle_feedback', values: { workout_day_id: dayId, muscle_group: m, performance: perf }, onConflict: 'workout_day_id,muscle_group' }) === 'failed') { $('#finish').disabled = false; return; }
     }
-    check(await sb.from('workout_days').update({ completed_at: new Date().toISOString() }).eq('id', dayId));
+    const done = await durableWrite({ kind: 'update', table: 'workout_days', values: { completed_at: new Date().toISOString() }, eq: { id: dayId } });
+    if (done === 'failed') { $('#finish').disabled = false; return; }
     const left = openDays(all).filter(d => d.id !== dayId);
-    if (!left.length) await sb.from('mesocycles').update({ status: 'completed' }).eq('id', meso.id);
-    toast('Workout saved 💪'); go(left.length ? '#/' : '#/meso/' + meso.id);
+    if (!left.length) await durableWrite({ kind: 'update', table: 'mesocycles', values: { status: 'completed' }, eq: { id: meso.id } });
+    toast(done === 'queued' ? 'Workout saved on your phone 💪 — it syncs when you’re back online' : 'Workout saved 💪', false, done === 'queued' ? 4000 : 1800);
+    go(left.length ? '#/' : '#/meso/' + meso.id);
   };
 }
 
