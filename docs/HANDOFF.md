@@ -1,6 +1,6 @@
 # Woodhouse Lifts — Start Here (handoff for a new chat)
 
-**Current version: 1.11.0 (2026-11-22).** If you are a new chat picking this up: read this page first, then *Woodhouse Lifts — Training Logic* (the full rules and evidence) and *Woodhouse Lifts — Changelog* (what changed, version by version). All three live in the Google Drive folder **Woodhouse Lifts**; older copies are in its **Archive — earlier versions** subfolder. The repo holds the same files under `docs/` and `CHANGELOG.md`, and the repo copy is the one that changes first.
+**Current version: 1.12.0 (2026-11-22).** If you are a new chat picking this up: read this page first, then *Woodhouse Lifts — Training Logic* (the full rules and evidence) and *Woodhouse Lifts — Changelog* (what changed, version by version). All three live in the Google Drive folder **Woodhouse Lifts**; older copies are in its **Archive — earlier versions** subfolder. The repo holds the same files under `docs/` and `CHANGELOG.md`, and the repo copy is the one that changes first.
 
 ---
 
@@ -34,11 +34,11 @@ No build step. Plain ES modules served by GitHub Pages.
 
 | File | What's in it |
 |---|---|
-| `index.html` | Shell. Loads `styles.css?v=N` and `app.js?v=N` — **bump `?v=` on every release** (now `v=29`). |
-| `app.js` (~1,900 lines) | UI + data access. Hash router (`#/`, `#/workout/<dayId>`, `#/workout/<id>/view`, `#/meso/<id>`, `#/new`, `#/templates`, `#/cardio`, settings…). Supabase client, offline save queue, workout logger, recovery gate, builder, home dashboard and drill-downs. `APP_VERSION` constant at the top (now `'1.11.0'`) must match the changelog. |
+| `index.html` | Shell. Loads `styles.css?v=N` and `app.js?v=N` — **bump `?v=` on every release** (now `v=30`). |
+| `app.js` (~1,900 lines) | UI + data access. Hash router (`#/`, `#/workout/<dayId>`, `#/workout/<id>/view`, `#/meso/<id>`, `#/new`, `#/templates`, `#/cardio`, settings…). Supabase client, offline save queue, workout logger, recovery gate, builder, home dashboard and drill-downs. `APP_VERSION` constant at the top (now `'1.12.0'`) must match the changelog. |
 | `logic.js` (~850 lines) | **Pure training engine, no I/O.** Everything testable lives here (see §5). |
 | `learn.js` | In-app "Learn" explanations and app defaults. |
-| `styles.css` | Styling; phone-first (inputs ≥16 px font, ≥44 px tap targets, small text ≥13 px). Accent colour `--accent` = lime `#9be33c` (v1.11). |
+| `styles.css` | Layered (`@layer tokens, base, components, screens`). **Use tokens, never hex**: `--surface-1/2/3`, `--border`, `--text`, `--muted`, `--accent` (fills) vs `--accent-text` (text/links — darker lime in light theme), status `--warn/--bad/--info/--good-*`, `--pr/--dip/--on-track`, type `--fs-xs…--fs-2xl` (13/14/16/18/22/28), spacing `--s1…--s6`, radius `--r-*`, elevation `--e1/--e2`, motion `--t-fast/--t-med`. Light theme = the same tokens re-valued under `[data-theme=light]` / `prefers-color-scheme`. Phone-first: inputs 16px, tap targets ≥44px. |
 | `supabase/migrations/` | Every schema change, in order (§4). `supabase/seed/` = exercise library. |
 | `docs/training-logic.md` | The rules and evidence (master of the Drive "Training Logic" doc). |
 | `docs/HANDOFF.md` | This page. |
@@ -49,7 +49,7 @@ No build step. Plain ES modules served by GitHub Pages.
 1. Branch off `main`.
 2. Change `logic.js` / `app.js`; add tests.
 3. Run **all** suites: `node test/logic.test.mjs`; `node test/db.test.mjs` (needs `npm i @electric-sql/pglite` in `test/`); serve the folder on port 8765 and `for f in test/e2e/*.py; do python3 "$f" | tail -1; done`.
-4. Update `docs/training-logic.md`, `CHANGELOG.md`, `APP_VERSION`, and `?v=` in `index.html`.
+4. Update `docs/training-logic.md`, `CHANGELOG.md`, `APP_VERSION`, and **every** `?v=`: `index.html` (styles.css, app.js) **and the `logic.js` / `learn.js` imports at the top of app.js** (forgetting those let 1.10's screens load 1.9's rules for a few minutes).
 5. Merge to `main` and push → GitHub Pages deploys in about a minute.
 6. If a migration is needed: write it in `supabase/migrations/`, test it in PGlite, **get Anthony's approval**, apply to prod, then verify with a rolled-back test (a `DO` block that ends in `raise exception`) so no prod data changes.
 7. Drive: move the old docs to the archive folder, upload the new ones.
@@ -79,7 +79,7 @@ Row Level Security is on for every table ("own rows" policies keyed on `user_id`
 
 **Offline queue:** unsaved sets are kept per account in localStorage `wl_pending_sets_v1:<user id>` and retried; saves the database permanently refuses (SQLSTATE classes 22/23/42) move to a "failed" list instead of retrying forever. Other phone-only settings: `wl_increments` (smallest weight jumps), `wl_session_minutes`.
 
-## 5. The training engine as it stands (1.11.0)
+## 5. The training engine as it stands (1.12.0)
 
 Full rules, examples and sources: *Training Logic* doc. Quick map of `logic.js`:
 
@@ -116,7 +116,7 @@ Useful so a future change doesn't reintroduce an old problem.
 | ≤1.1 | Run-it-again from calendar dates. | Dates aren't tracked meaningfully. | 1.2.0 pick a meso week. |
 | ≤1.7 | Single shared offline queue; retried refused saves forever. | Could mix accounts; stuck retries. | 1.8.0 per-account queue + failed list. |
 
-## 6a. UI conventions (v1.11 usability pass)
+## 6a. UI conventions (v1.11 usability pass, v1.12 design system)
 
 Keep these when adding screens, so the app stays usable for someone who didn't build it:
 - **Plain words on screen; jargon in ⓘ / Learn.** Use `effortText(rir)` / `effortShort(rir)` ("stop 2 reps short of failure" / "2 reps short") instead of "RIR".
@@ -124,6 +124,10 @@ Keep these when adding screens, so the app stays usable for someone who didn't b
 - **One pop-up per finished exercise**, with the muscle questions folded in when it's the muscle's last exercise; always offer **✓ All normal**.
 - **First set within about one screen**: details go in ⓘ, not on the card.
 - Tabs: Home · Workout · Mesos · Library (exercises, templates) · More (learn, stats, settings). Don't duplicate tab destinations inside More.
+- **Icons:** `ic('name')` from the `ICONS` set at the top of app.js (24px line icons). No emoji as icons. Icon-only buttons need an `aria-label` and a ≥44px hit area (`.icon-btn`).
+- **Charts:** colour SVG parts with classes (`.cbar`, `.cbar.now`, `.line`, `.dot`, `.guide`), not `fill=`. Don't name SVG classes after existing components (`.bar` collided with the progress bar and squashed every chart bar to 10px).
+- **Motion** only inside `@media (prefers-reduced-motion: no-preference)`.
+- **Brand:** `icons/logo.svg` is the master. Regenerate the PNG icons from it (see `docs/screenshots/README` in PR history / the render script) instead of editing PNGs.
 
 ## 7. Open ideas (not started)
 

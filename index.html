@@ -3,26 +3,37 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
-<meta name="color-scheme" content="dark">
+<meta name="color-scheme" content="dark light">
+<meta name="description" content="Woodhouse Lifts — lift smarter, week by week. Mesocycles that adjust to how you train and recover.">
 <meta name="format-detection" content="telephone=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lifts">
-<meta name="theme-color" content="#0f1115">
+<meta name="theme-color" content="#0d0f13">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
-<link rel="icon" href="icons/icon-192.png">
+<link rel="icon" href="icons/logo.svg" type="image/svg+xml">
+<link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
 <title>Woodhouse Lifts</title>
-<link rel="stylesheet" href="styles.css?v=29">
+<script>
+  // Apply the saved theme before first paint (no dark→light flash). Settings → Appearance writes wl_theme.
+  try { var t = localStorage.getItem('wl_theme'); if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+    var light = t === 'light' || (t !== 'dark' && matchMedia('(prefers-color-scheme: light)').matches);
+    if (light) document.querySelector('meta[name="theme-color"]').setAttribute('content', '#f3f4f6'); } catch (e) {}
+</script>
+<link rel="stylesheet" href="styles.css?v=30">
 </head>
 <body>
 <header>
   <button class="ghost" id="backBtn" hidden>‹ Back</button>
   <h1 id="title">Woodhouse Lifts</h1>
-  <button class="ghost" id="gearBtn" hidden aria-label="Settings">⚙︎</button>
+  <button class="ghost icon-btn" id="gearBtn" hidden aria-label="Settings"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></svg></button>
 </header>
-<main id="app"><p class="muted center">Loading…</p></main>
+<main id="app"><div class="splash" role="status" aria-label="Loading Woodhouse Lifts">
+  <img src="icons/logo.svg" width="72" height="72" alt="">
+  <div class="splash-name">Woodhouse Lifts</div><div class="splash-tag">Lift smarter, week by week.</div>
+</div></main>
 <nav id="tabs" hidden>
   <a href="#/" data-tab="home"><span><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/></svg></span>Home</a>
   <a href="#/workout" data-tab="workout"><span><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/></svg></span>Workout</a>
@@ -31,6 +42,6 @@
   <a href="#/explore" data-tab="explore"><span><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></span>More</a>
 </nav>
 <div id="sheet" hidden></div>
-<script type="module" src="app.js?v=29"></script>
+<script type="module" src="app.js?v=30"></script>
 </body>
 </html>

@@ -12,6 +12,39 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.12.0 — 2026-11-22 · "Foundations" (design PR 1)
+
+The look-and-feel foundation for the App-Store-quality pass. No training logic, data, routes or storage keys changed.
+
+**Brand**
+- New logomark (a "W" over a barbell) and wordmark in the Home header; tagline "Lift smarter, week by week."
+- New icons: 192/512 "any", 192/512 maskable (safe-zone padded), 180 Apple touch icon, SVG + 32px favicon. Branded launch screen while the app loads. Manifest gets description, categories and new colours.
+
+**Design system** (styles.css is now layered: tokens → components)
+- Every colour is a token. The 43 hard-coded hex values are gone, and so are the hex fills in SVG charts (now classes). The 46 inline `style=""` attributes are down to 6 that carry data (bar widths, grid column count).
+- Semantic tokens (`--surface-1/2/3`, `--border`, `--focus`, `--pr`, `--dip`, `--on-track`, status colours), a spacing scale (4/8/12/16/24/32), a radius scale and two elevation levels (cards have a subtle shadow and inner highlight).
+- Type: 12 different sizes became a 6-step scale (13/14/16/18/22/28). Nothing is under 13px, and every number uses tabular figures; key numbers are bold. System font (SF Pro on iPhone), no webfont.
+- **Light theme** (ADDITIVE): follows the phone by default. Settings → Appearance → Match phone / Dark / Light, saved on this phone (`wl_theme`), applied before first paint so there's no flash.
+
+**Icons**
+- About 60 emoji used as icons became one consistent line-icon set (24px, 1.75 stroke), including the 👋 greeting, 🏆 PRs, ⓘ, ⇄, ★/☆/⦸, the 🔥 warm-up and the tab bar. Icon-only buttons have labels and ≥44px tap areas.
+
+**Motion** (ADDITIVE; switched off when the phone asks for reduced motion)
+- 150–250ms: screens fade/rise in, sheets slide up, buttons press, the set check pops, PR badges glow once.
+- Haptic tick on set completion where the phone supports it (Android; iPhone Safari has no vibration API).
+
+**Bugs fixed**
+- Home charts: the tallest bar's number was clipped. A cardio session saved without minutes made the whole cardio chart blank (NaN).
+- Home stat tiles had uneven heights and misaligned labels.
+- Library: a misplaced closing tag put only the first exercise inside the card. Every other row fell outside it with its buttons wrapped underneath.
+- logic.js / learn.js were still imported as `?v=27`, so phones could briefly run 1.10's screen code with 1.9's rules file. They now carry the release number. *(Release checklist updated.)*
+
+**Tests**
+- New `test/e2e/design1.py`, run on 12 screens: no emoji icons, no text under 13px, every icon-only button labelled, 44px tap targets, chart labels not clipped and no NaN bars, equal stat tiles, every library row inside its card, theme picker applies and is remembered.
+- `test/e2e/shots.py` captures 5 screens × phone/desktop × dark/light for before/after reviews (`docs/screenshots/pr1/`).
+
+---
+
 ## 1.11.0 — 2026-11-22 · "Easier for anyone"
 
 A usability pass from looking at every main screen as a first-time user, plus a more lime green.
