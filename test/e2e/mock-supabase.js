@@ -37,10 +37,13 @@ const fixtures = {
     plan: [{ label: 'Workout 1', slots: [{ muscle: 'Quads', exerciseId: 'e5', sets: 2 }, { muscle: 'Cardio', exerciseId: 'c1', sets: 1 }] }, { label: 'Workout 2', slots: [{ muscle: 'Chest', exerciseId: 'e1', sets: 2 }] }] }],
 };
 function builder(table) {
-  let single = false, maybe = false, payload = null, inIds = null;
+  let single = false, maybe = false, payload = null, inIds = null, statusIn = null, lim = null;
   const b = new Proxy({}, { get(_, k) {
     if (k === 'then') return (res, rej) => {
       let data = fixtures[table] || [];
+      if (table === 'mesocycles' && window.__MESOS) data = window.__MESOS;   // test hook
+      if (table === 'mesocycles' && statusIn) data = data.filter(m => statusIn.includes(m.status));
+      if (table === 'mesocycles' && lim) data = data.slice(0, lim);
       if (table === 'workout_exercises' && inIds && inIds.some(id => /s\d+$/.test(id))) data = inIds.map(id => ({ id, exercises: { load_type: 'weighted' }, workout_days: { week: +id.match(/s(\d+)$/)[1] + 1, mesocycle_id: 'm0', mesocycles: { name: 'Test Meso', weeks: 8 } } }));
       if (payload && window.__FAIL_NET) return Promise.resolve({ data: null, error: { message: 'TypeError: Failed to fetch' } }).then(res, rej);
       if (payload) { (window.__writes = window.__writes || []).push([table, payload]);
@@ -53,8 +56,9 @@ function builder(table) {
     };
     if (k === 'single') return () => { single = true; return b; };
     if (k === 'upsert' || k === 'insert' || k === 'update') return (p) => { payload = Array.isArray(p) ? p[0] : p; return b; };
+    if (k === 'limit') return n => { lim = n; return b; };
     if (k === 'maybeSingle') return () => { maybe = true; return b; };
-    if (k === 'in') return (col, vals) => { if (col === 'id') inIds = vals; return b; };
+    if (k === 'in') return (col, vals) => { if (col === 'id') inIds = vals; if (col === 'status') statusIn = vals; return b; };
     return () => b;
   } });
   return b;
