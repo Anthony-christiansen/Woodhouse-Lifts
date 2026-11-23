@@ -117,6 +117,27 @@ Snapshots: `backup.snapshot` (all 11 user tables as JSON). Weekly automatic (Sun
 
 **Proven by** `node test/restore.drill.mjs`: snapshot → bad edits + a whole meso deleted (cascading to days, sets, ratings) → restore → every row identical in all 11 tables, the other user untouched; and `missing` mode leaves later edits alone. Runs on a throwaway database in every release.
 
+### 6.5 Off-project backups (owner's private Drive)
+
+In-database snapshots don't survive losing the whole Supabase project. So a copy also goes to the owner's private Google Drive, in a **Backups** folder inside the private *Woodhouse Lifts* folder:
+- It's shared with nobody. The app has no link to it and never reads it.
+- Each copy is a snapshot, exported, with every table's row count checked, then gzipped and uploaded as `woodhouse-lifts-backup-<UTC time>.json.gz` (about 1 MB). Every copy is kept.
+- **Schedule:** before risky data operations, plus weekly once the owner approves a scheduled task for it (pending as of 2026-11-23). The first copy was taken 2026-11-23.
+- Also taken by hand before risky data operations.
+- **Never commit a backup file to this repo.**
+
+To restore from a Drive copy, download the file, then:
+- **One user, or a few rows:** `node supabase/ops/load_backup_file.mjs <file> --snapshot > restore.sql`. Run it to put the snapshot back into `backup.snapshot`, then follow §6.4.
+- **The whole project is gone:**
+  1. Create a new project.
+  2. Run every migration in order.
+  3. Have users sign up again with the same emails, or recreate `auth.users` with the same ids.
+  4. Run `--full` output. It refuses a non-empty database, replaces the seeded exercise library with the backup's copy (same ids as your workouts), and checks every table's row count.
+
+  The SQL is several MB; run it with `psql`, or split it per table for the dashboard SQL editor.
+
+**Proven by** `node test/restore.drill.mjs`: synthetic backup file → `--full` into a fresh database → every row identical. The first real backup (2026-11-23, 23,104 rows) was also loaded in full into a fresh database built from every migration, outside the repo.
+
 **Compatibility check for tier B:** if the new app writes something the previous app never wrote (e.g. 1.11.1 saves pump as *not rated*), confirm the previous app handles it after a rollback. Write the result in the Changelog's Rollback line.
 
 ## 7. Data operations (tier C)
