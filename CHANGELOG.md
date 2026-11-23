@@ -12,6 +12,25 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.15.0 — 2026-11-23 · Add an exercise mid-meso, send feedback, RIR dropdown fix
+
+- **Add an exercise during a meso.** Every open workout now has **+ Add an exercise** above Finish.
+  - Pick a muscle and an exercise, then choose the sets (1–5).
+  - Choose where it goes: **Just today**, or **Today and every later week** of the same day.
+  - The list skips exercises already in today's workout, ones you've excluded, ones that don't fit your equipment, and ones for injury areas you've turned on.
+  - Effort follows the meso's week, including the "main lifts ≥1 rep short of failure" choice. Light weeks get half the sets.
+  - It starts fresh: you pick the weight the first time, then it progresses like the rest.
+- **Remove an exercise from today.** The Replace sheet now has **Remove … from today**, shown only when that exercise has no logged sets. Later weeks keep the exercise.
+- **Send feedback** (More → Send feedback):
+  - A 1–5 star rating and/or a note, tagged Idea, Something's wrong, Praise or Other.
+  - Saved privately with the app version and the screen you came from. You see your own past notes; the owner reads them in the database.
+  - This needs the new `app_feedback` table (migration `20261123220000_app_feedback`). Until it's applied, the screen says feedback isn't switched on yet.
+- **RIR dropdown:** the "Set 1 reps left" number no longer sits on top of the dropdown arrow.
+
+**Rollback:** app → `release/v1.14.1`. The `app_feedback` table can stay; 1.14.1 never reads it.
+
+---
+
 ## 1.14.1 — 2026-11-23 · Injuries in the meso builder; chest, arms, legs and abs
 
 - **The builder asks "Any injuries or sore spots?"**

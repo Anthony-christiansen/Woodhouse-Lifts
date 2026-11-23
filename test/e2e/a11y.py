@@ -9,7 +9,7 @@ if not os.path.exists(AXE): print('a11y.py: axe-core not installed — FAIL'); s
 PORT=int(os.environ.get('PORT','8807'))
 srv=subprocess.Popen([sys.executable,'-m','http.server',str(PORT),'-d',ROOT],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
 MOCK=open(HERE+'/mock-supabase.js').read(); B=f'http://localhost:{PORT}/'
-SCREENS=['#/','#/workout/d21','#/mesos','#/meso/m1','#/new','#/templates','#/exercises','#/progress','#/progress/e5','#/explore','#/settings','#/learn','#/logic','#/cardio','#/volume','#/history']
+SCREENS=['#/','#/workout/d21','#/mesos','#/meso/m1','#/new','#/templates','#/exercises','#/progress','#/progress/e5','#/explore','#/settings','#/learn','#/logic','#/cardio','#/volume','#/history','#/feedback']
 R=[]
 async def main():
     async with async_playwright() as p:
