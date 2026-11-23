@@ -15,5 +15,8 @@ for (const f of files) {
   for (const m of s.match(EMAIL) || []) if (!ok(m)) bad.push(`${f}: email ${m}`);
   for (const m of s.match(UUID) || []) bad.push(`${f}: id ${m}`);
 }
+// v1.11.4: the app never links to Google Drive / Docs (private documents stay private).
+for (const f of ['app.js', 'learn.js', 'logic.js', 'md.js', 'index.html', 'manifest.json'])
+  if (/docs\.google\.com|drive\.google\.com/i.test(readFileSync(f, 'utf8'))) bad.push(`${f}: links to Google Drive/Docs`);
 if (bad.length) { console.error(bad.join('\n')); console.error('PRIVACY CHECK FAILED'); process.exit(1); }
 console.log(`PRIVACY CHECK PASSED (${files.length} files)`);

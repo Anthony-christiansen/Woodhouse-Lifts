@@ -1,6 +1,7 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import * as L from './logic.js?v=33';
-import * as LEARN from './learn.js?v=33';
+import * as L from './logic.js?v=34';
+import * as LEARN from './learn.js?v=34';
+import * as MD from './md.js?v=34';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -17,9 +18,10 @@ let authReturn = (() => {
   return null;
 })();
 let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
-export const APP_VERSION = '1.11.3'; // keep in sync with CHANGELOG.md
+export const APP_VERSION = '1.11.4'; // keep in sync with CHANGELOG.md
 const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
-const DOC_URL = 'https://docs.google.com/document/d/108s5nwTS3LExaFqsrUZtIvRBqkptd3630kxNq7ud4_o';
+// v1.11.4: the training rules are a page inside the app (#/logic), built from this repo's docs/training-logic.md.
+// The app never links to anyone's Google Drive.
 
 const app = document.getElementById('app');
 const titleEl = document.getElementById('title');
@@ -207,7 +209,7 @@ const routes = {
   '': renderHome, mesos: renderMesos, train: renderMesos, new: renderBuilder, meso: renderMeso, workout: renderWorkout,
   explore: renderExplore, history: renderHistory, progress: renderProgress, volume: renderVolume,
   cardio: renderCardio, library: renderLibrary, exercises: () => renderLibrary('exercises'), templates: () => renderLibrary('templates'),
-  settings: renderSettings, learn: renderLearn, stats: renderStats,
+  settings: renderSettings, learn: renderLearn, stats: renderStats, logic: renderLogic,
 };
 async function route() {
   closeSheet();
@@ -1642,7 +1644,7 @@ function renderExplore() {
   ];
   app.innerHTML = items.map(([h, i, t, d]) => `<button class="list-btn" data-go="${h}"><span style="font-size:22px">${i}</span>
     <div class="grow"><b>${t}</b><div class="muted small">${d}</div></div>›</button>`).join('') +
-    `<div class="card small muted">How the app decides weights, sets and RIR: <a href="${DOC_URL}" target="_blank" rel="noopener">Training Logic & Evidence</a></div>`;
+    `<div class="card small muted">How the app decides weights, sets and RIR: <a href="#/logic">How it works — training logic &amp; evidence</a></div>`;
   $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
 }
 
@@ -1752,6 +1754,20 @@ async function renderStats(kind, arg) {
 }
 
 // ---------- Learn ----------
+// v1.11.4 — "How it works": the full training rules and evidence, rendered from docs/training-logic.md (same origin,
+// public-safe content). md.js escapes everything before formatting, so the page can't inject markup.
+async function renderLogic() {
+  setHeader('How it works', '#/learn', 'explore');
+  const res = await fetch(`./docs/training-logic.md?v=${APP_VERSION}`);
+  if (!res.ok) throw new Error('Couldn’t load the training logic page');
+  const { html, toc } = MD.mdToHtml(await res.text());
+  app.innerHTML = `<div class="card small"><b>Contents</b><ul class="tight">${toc.map(t => `<li><a href="#" data-jump="${t.id}">${t.html}</a></li>`).join('')}</ul></div>
+    <article class="card md">${html}</article>`;
+  app.querySelectorAll('[data-jump]').forEach(a => a.onclick = e => { e.preventDefault(); document.getElementById(a.dataset.jump)?.scrollIntoView({ behavior: 'smooth' }); });
+  // In-doc "#section" anchors would clash with the hash router: scroll instead of navigating.
+  app.querySelectorAll('article.md a[href^="#"]:not([href^="#/"])').forEach(a => a.onclick = e => { e.preventDefault(); document.getElementById(a.getAttribute('href').slice(1))?.scrollIntoView({ behavior: 'smooth' }); });
+}
+
 function renderLearn(sub) {
   const srcLinks = ids => `<div class="srcs">${ids.map(k => { const s = LEARN.SOURCES[k];
     return `<a href="https://doi.org/${s.doi}" target="_blank" rel="noopener">${esc(s.t)}</a>`; }).join('')}</div>`;
@@ -1788,7 +1804,7 @@ function renderLearn(sub) {
       <button class="list-btn" data-go="#/learn/muscles"><span style="font-size:22px">🧍</span><div class="grow"><b>Per muscle</b><div class="muted small">Sets, reps and go-to exercises for each muscle</div></div>›</button>
       <h2>Read</h2>
       ${LEARN.ARTICLES.map(a => `<button class="list-btn" data-go="#/learn/${a.id}"><div class="grow"><b>${esc(a.title)}</b><div class="muted small">${esc(a.body[0].slice(0, 90))}…</div></div>›</button>`).join('')}
-      <div class="card small muted">The full rules the app follows: <a href="${DOC_URL}" target="_blank" rel="noopener">Training Logic &amp; Evidence</a></div>`;
+      <div class="card small muted">The full rules the app follows: <a href="#/logic">How it works — training logic &amp; evidence</a></div>`;
   }
   $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
 }
@@ -2034,7 +2050,7 @@ async function renderSettings() {
         return `<div class="row inc-row"><label class="grow" for="inc-${k}">${k === 'Machine' ? 'Machines (pin / plate)' : k === 'Cable' ? 'Cables' : k === 'Barbell' ? 'Barbell & sled (per jump, both sides)' : 'Dumbbells (next pair up)'}</label>
           <select id="inc-${k}" data-inc="${k}">${opts.map(o => `<option ${o === v ? 'selected' : ''}>${o}</option>`).join('')}</select><span class="muted small">${unit()}</span></div>`; }).join('')}
       <button class="block" id="saveInc">Save weight jumps</button></div>
-    <div class="card small"><a href="${DOC_URL}" target="_blank" rel="noopener">Training Logic & Evidence</a> <span class="muted">— why the app sets your weights, sets and RIR the way it does.</span></div>
+    <div class="card small"><a href="#/logic">How it works — training logic &amp; evidence</a> <span class="muted">— why the app sets your weights, sets and RIR the way it does.</span></div>
     <button class="block" id="pw">Change password</button><div class="spacer"></div>
     <button class="block" id="out">Sign out</button>
     <p class="muted small center">Install: Safari → Share → Add to Home Screen.</p>

@@ -304,3 +304,13 @@ nav#tabs a span svg { display: block; }
 
 /* v1.11.2: lifts not trained in 8+ weeks (Progress → All time) */
 .list-btn.stale { opacity: .55; }
+
+/* v1.11.4: "How it works" page (rendered Markdown) */
+.md h2 { margin-top: 1.4em; } .md h3 { margin-top: 1.1em; } .md h4, .md h5 { margin-top: .9em; }
+.md p, .md li { line-height: 1.55; } .md ul, .md ol { padding-left: 1.2em; }
+.md code { font-size: .92em; padding: 0 .25em; border-radius: 4px; background: rgba(127,127,127,.15); }
+.md blockquote { margin: .8em 0; padding: .4em .8em; border-left: 3px solid var(--accent); opacity: .9; }
+.md hr { border: 0; border-top: 1px solid rgba(127,127,127,.3); margin: 1.2em 0; }
+.md-table { overflow-x: auto; margin: .8em 0; } .md-table table { border-collapse: collapse; min-width: 100%; font-size: .92em; }
+.md-table th, .md-table td { border: 1px solid rgba(127,127,127,.3); padding: 6px 8px; text-align: left; vertical-align: top; }
+.md a { word-break: break-word; }

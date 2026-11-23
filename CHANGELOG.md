@@ -12,6 +12,17 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.11.4 — 2026-11-23 · "How it works, inside the app"
+
+- **The training rules and evidence are now a page inside the app** (Learn → "How it works", also from More and Settings). It's built from this repo's `docs/training-logic.md`, with contents links that jump to each section.
+- **The app no longer links to Google Drive.** The three "Training Logic & Evidence" links used to open a private Google Doc. The page is now served by the app itself, from content that holds no personal information (1.11.3).
+- Underneath: new `md.js`, a small Markdown renderer that escapes every character before formatting, so the page can't inject markup. Links are allowed only to web addresses, in-app routes and section anchors (no `javascript:` or `data:` links). `test/privacy.check.mjs` now also fails if any app file links to Google Drive/Docs. New e2e `logic114.py`; renderer safety tests in `logic.test.mjs`.
+- No database changes. `?v=34`.
+
+**Rollback:** tier A (display only) — `git revert -m 1` the merge, bump `?v=`.
+
+---
+
 ## 1.11.3 — 2026-11-23 · "Nothing personal in the public repo"
 
 The code repository is public (it hosts the live app), so it now holds **no personal information**: no names of the people using the app or anyone else, no email addresses or account names, no health notes, no locations, and no personal training logs attributed to anyone. All of that lives only in the private Google Drive folder.
