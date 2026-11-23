@@ -2,6 +2,8 @@
 import os, sys, asyncio, subprocess
 from playwright.async_api import async_playwright
 HERE = os.path.dirname(os.path.abspath(__file__)); ROOT = os.path.abspath(os.path.join(HERE, '..', '..'))
+if len(sys.argv) < 2:   # a tool, not a test: CI runs every file in this folder, so do nothing without an output folder
+    print('shots.py: screenshot tool, skipped (usage: python3 shots.py <outdir> [port])'); sys.exit(0)
 OUT = sys.argv[1]; PORT = sys.argv[2] if len(sys.argv) > 2 else '8790'
 os.makedirs(OUT, exist_ok=True)
 srv = subprocess.Popen([sys.executable, '-m', 'http.server', PORT, '-d', ROOT], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
