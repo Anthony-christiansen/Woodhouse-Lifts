@@ -38,7 +38,7 @@ No build step. Plain ES modules served by GitHub Pages.
 
 | File | What's in it |
 |---|---|
-| `index.html` | Shell. Loads `styles.css?v=N` and `app.js?v=N` — **bump `?v=` on every release** (now `v=29`). |
+| `index.html` | Shell. Loads `styles.css?v=N` and `app.js?v=N` — **bump `?v=` on every release** (now `v=31`; one number for every file). |
 | `app.js` (~1,900 lines) | UI + data access. Hash router (`#/`, `#/workout/<dayId>`, `#/workout/<id>/view`, `#/meso/<id>`, `#/new`, `#/templates`, `#/cardio`, settings…). Supabase client, offline save queue, workout logger, recovery gate, builder, home dashboard and drill-downs. `APP_VERSION` constant at the top (now `'1.11.1'`) must match the changelog. |
 | `logic.js` (~850 lines) | **Pure training engine, no I/O.** Everything testable lives here (see §5). |
 | `learn.js` | In-app "Learn" explanations and app defaults. |
