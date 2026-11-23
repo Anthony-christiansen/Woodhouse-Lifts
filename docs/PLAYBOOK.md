@@ -146,6 +146,14 @@ Each release entry ends with one line, e.g.:
 
 | Version | Released | Merge | Rollback point | Pre-release snapshot | Smoke test |
 |---|---|---|---|---|---|
+| 1.11.5 | 2026-11-23 04:48 UTC | `5dbe0bc` (PR #6) | `release/v1.11.4` = `33682ce` | 04:47 UTC (taken for the data fix below) | Live files 1.11.5, `?v=35`, `fitPlan` served; app loads with no errors. |
+| 1.11.4 | 2026-11-23 04:13 UTC | `33682ce` (PR #5) | `release/v1.11.3` = `75691c0` | not needed (tier A) | Live files 1.11.4, `?v=34`; no Google links in app code; rules page served; app loads. |
 | 1.11.3 | 2026-11-23 03:49 UTC | `75691c0` (PR #4) | `release/v1.11.2` = `fcfda31` | not needed (tier A) | Live files 1.11.3, `?v=33`; app loads with no errors. |
 | 1.11.2 | 2026-11-23 03:43 UTC | `fcfda31` (PR #3) | `release/v1.11.1` = `936ef4b` | not needed (tier A) | Live files 1.11.2, `?v=32`, new doc link; app loads with no errors. |
 | 1.11.1 | 2026-11-23 03:25 UTC | `936ef4b` (PR #2) | `release/v1.11.0` = `d7e3e11` | 2026-11-23 03:24:06 UTC (11 tables, 14,286 sets) | Live files 1.11.1, `?v=31`, new doc link; app loads with no errors; security advisors unchanged. Signed-in steps 3–5: the owner to check on their phone. |
+
+### Data operations log (tier C)
+
+| When | What | Rows | Snapshot before | Undo |
+|---|---|---|---|---|
+| 2026-11-23 04:47 UTC | Removed two mistyped imported sets from one user's history (owner-approved) | 2 sets (`returning` output kept) | 04:47:43 UTC | Inverse insert kept privately, outside this repo |
