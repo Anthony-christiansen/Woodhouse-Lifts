@@ -769,5 +769,11 @@ console.log('GUARDRAIL TESTS PASSED');
   const r = L.fitPlan({ plan: Array.from({ length: 3 }, () => ({ label: 'D', slots: [] })), priorities: L.presetPriorities('balanced'), focus: 'whole', goal: 'hypertrophy', split: 'full_body_split', library: P.library, minutes: 75 });
   const byId = new Map(lib.map(e => [e.id, e]));
   for (const d of r.days) for (const s of d.slots) { const e = byId.get(s.exerciseId); if (e) assert.ok(!['knees', 'lower_back'].some(a => L.exerciseAreas(e).has(a)), `built plan avoids ${e.name}`); }
-  console.log('V1.14.0 BODY AREA TESTS PASSED (7 areas × 13 muscles on the shared library)');
+  // v1.14.1: chest, arms, legs, abs
+  assert.equal(Object.keys(L.BODY_AREAS).length, 11);
+  assert.ok(has('Barbell Bench Press', 'chest') && has('Dumbbell Fly', 'chest') && !has('Machine Chest Press', 'chest') && !has('Cable Fly', 'chest'));
+  assert.ok(has('EZ-Bar Curl', 'arms') && has('Chin-Up', 'arms') && !has('Cable Curl', 'arms') && !has('Triceps Pushdown', 'arms'));
+  assert.ok(has('Back Squat', 'legs') && has('Deadlift', 'legs') && !has('Leg Press', 'legs') && !has('Belt Squat', 'legs') && !has('Lying Leg Curl', 'legs'));
+  assert.ok(has('Hanging Leg Raise', 'abs') && has('Ab Wheel Rollout', 'abs') && !has('Plank (sec)', 'abs') && !has('Pallof Press', 'abs'));
+  console.log('V1.14.0 BODY AREA TESTS PASSED (11 areas × 13 muscles on the shared library)');
 }
