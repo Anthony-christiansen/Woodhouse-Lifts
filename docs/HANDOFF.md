@@ -4,6 +4,10 @@
 
 ---
 
+## 0. Status (2026-11-22)
+
+Live: **1.11.0**. Open PRs: **#2** (1.11.1, engine fixes + this playbook) and **#1** (1.12.0, design foundations; rebase after #2, `?v=32`). Release order, one at a time with a smoke test between: 1.11.1 → 1.12.0 → body-area protection (uses `profiles.avoid_tags`, no migration) → workout screen → home/library/mesos → install/offline/service worker (rehearse the kill switch first) → onboarding → code quality (module split, CI, linter, one version number, pinned supabase-js). Every release follows `docs/PLAYBOOK.md`. User-specific status (accounts, pending data fixes) lives only in the private Drive copy of this page, never in this public repo.
+
 ## 1. What it is
 
 An RP-style (Renaissance Periodization-style) hypertrophy app for Anthony and Haylee. It plans mesocycles, suggests weights and reps each week, asks how each muscle felt, and adjusts sets and loads from that feedback. It is an original app: it does not copy RP content.
@@ -42,10 +46,12 @@ No build step. Plain ES modules served by GitHub Pages.
 | `supabase/migrations/` | Every schema change, in order (§4). `supabase/seed/` = exercise library. |
 | `docs/training-logic.md` | The rules and evidence (master of the Drive "Training Logic" doc). |
 | `docs/HANDOFF.md` | This page. |
+| `docs/PLAYBOOK.md` | Release & rollback playbook: approvals, risk tiers, checklist, smoke test, app/DB/data rollback. |
+| `supabase/ops/restore_user_from_snapshot.sql` | Tested script that restores one user's data from `backup.snapshot` (preview + `missing`/`overwrite` modes). |
 | `CHANGELOG.md` | Every release. |
-| `test/` | `logic.test.mjs` (engine), `db.test.mjs` + `db.checks.mjs` + `dbkit.mjs` (fresh DB from all migrations in PGlite), `e2e/*.py` (real Chromium against a mocked Supabase). |
+| `test/` | `logic.test.mjs` (engine), `db.test.mjs` + `db.checks.mjs` + `dbkit.mjs` (fresh DB from all migrations in PGlite), `e2e/*.py` (real Chromium against a mocked Supabase), `restore.drill.mjs` (rollback drill on a throwaway DB). |
 
-### Release checklist (what every change has followed)
+### Release checklist (summary; the full version with rollback is `docs/PLAYBOOK.md`, Drive: *Woodhouse Lifts — Release & Rollback Playbook*)
 1. Branch off `main`.
 2. Change `logic.js` / `app.js`; add tests.
 3. Run **all** suites: `node test/logic.test.mjs`; `node test/db.test.mjs` (needs `npm i @electric-sql/pglite` in `test/`); serve the folder on port 8765 and `for f in test/e2e/*.py; do python3 "$f" | tail -1; done`.

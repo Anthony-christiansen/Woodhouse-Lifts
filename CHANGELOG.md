@@ -34,6 +34,9 @@ Haylee's week 3 (her current meso) run through our engine and compared set by se
 - `suggestSet` re-solves reps after a cap; the load-step and over-range paths check reps with `repsAtLoad` (now also returns `raw`); `weightRange` widens to last week's reps; `setAdjustment` rule 11; `TEMPLATE_EMPHASIS`.
 - New tests: regression tests for each fix, and a **longitudinal simulation** — 10 lifter profiles × 5 lifts × 6 weeks, 1,200 invariant checks (weekly cap, meso ceiling, rep jump ≤ 2, weekly demand ≤ +8%, heavier-with-fewer-reps only when equivalent, holds never add weight, deload never heavier).
 - No database changes. `?v=31`.
+- New: `docs/PLAYBOOK.md` (release & rollback playbook), `supabase/ops/restore_user_from_snapshot.sql`, `test/restore.drill.mjs` (rollback drill, passes).
+
+**Rollback:** tier A — `git revert -m 1` the merge, bump `?v=`. No database changes. Ratings saved by 1.11.1 with pump *not rated* stay valid; 1.11.0 would simply ask for pump again on those muscles (it treats a missing pump as unrated, not an error).
 
 ---
 
