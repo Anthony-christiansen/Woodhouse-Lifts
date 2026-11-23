@@ -253,7 +253,11 @@ export function fitToTime(plan, { minutes, priorities = {}, focus = null, librar
   const lib = new Map(library.map(e => [e.id, e]));
   const days = plan.map(d => ({ ...d, slots: d.slots.map(x => ({ ...x })) }));
   const trimmed = {};
-  const cut = (d, s) => { s.sets--; trimmed[s.muscle] = (trimmed[s.muscle] || 0) + 1; if (s.sets <= 0) d.slots.splice(d.slots.indexOf(s), 1); };
+  let week = null;
+  const cut = (d, s) => { s.sets--; if (week) week[s.muscle]--; trimmed[s.muscle] = (trimmed[s.muscle] || 0) + 1; if (s.sets <= 0) d.slots.splice(d.slots.indexOf(s), 1); };
+  // v1.11.5: a Maintain muscle keeps at least MAINTAIN_WEEK_MIN direct sets across the WEEK (it may still leave some days).
+  week = placedSets(days);
+  const prio = m => normPriority(priorities[m], focus);
   for (const d of days) {
     // per-muscle session cap
     for (const m of new Set(d.slots.map(x => x.muscle))) {
@@ -266,14 +270,56 @@ export function fitToTime(plan, { minutes, priorities = {}, focus = null, librar
       const perMuscle = {}; for (const x of d.slots) perMuscle[x.muscle] = (perMuscle[x.muscle] || 0) + (x.sets || 0);
       // floors per session: Emphasize keeps ≥ 2 sets, Grow ≥ 1; Maintain/Skip can be dropped from a day entirely
       const floor = m => ({ emphasize: 2, grow: 1 })[normPriority(priorities[m], focus)] ?? 0;
-      const cands = d.slots.filter(x => x.sets > 0 && perMuscle[x.muscle] > floor(x.muscle));
+      const cands = d.slots.filter(x => x.sets > 0 && perMuscle[x.muscle] > floor(x.muscle)
+        && !(prio(x.muscle) === 'maintain' && week[x.muscle] <= MAINTAIN_WEEK_MIN));
       if (!cands.length) break;
+      // v1.11.5: within a priority, cut from the muscle furthest above its weekly growth level (GROW_FLOOR); on a tie,
+      // smaller muscles first (they also get indirect work from the big lifts), then the muscle with most sets today.
+      const room = m => week[m] - GROW_FLOOR[sizeOf(m)], SIZE_RANK = { minor: 0, small: 1, large: 2 };
       cands.sort((a, b) => PRI_RANK[normPriority(priorities[a.muscle], focus)] - PRI_RANK[normPriority(priorities[b.muscle], focus)]
+        || room(b.muscle) - room(a.muscle) || SIZE_RANK[sizeOf(a.muscle)] - SIZE_RANK[sizeOf(b.muscle)]
         || perMuscle[b.muscle] - perMuscle[a.muscle] || b.sets - a.sets);
       cut(d, cands[0]);
     }
   }
   return { days, trimmed, minutes: days.map(d => sessionMinutes(d, lib)) };
+}
+
+// Maintenance needs far less than growth (Bickel 2011: a third to a ninth of the dose kept size), so a Maintain muscle
+// keeps at least 1 direct set a week when time is short — never zero.
+export const MAINTAIN_WEEK_MIN = 1;
+/**
+ * v1.11.5 — build a week that fits the time AND still grows what it says it grows.
+ * When time is short, trimming every muscle a little leaves big muscles at maintenance volume (3 days × 60 min,
+ * Balanced: chest and back 4/8). Volume is the main growth lever (§1.1), so it's better to grow fewer muscles
+ * properly: smaller Grow muscles (calves, arms, shoulders — they also get indirect work from the big lifts, counted
+ * at ½, §1.1) move to Maintain, one at a time, until every remaining Grow/Emphasize muscle reaches GROW_FLOOR.
+ * Emphasize is never moved, and large muscles are never moved automatically — if they still fall short, `under`
+ * lists them so the builder can say so plainly. Only for full rebuilds ('all').
+ * Returns { days, trimmed, minutes, priorities, demoted: [muscle], under: [{ muscle, sets, floor }] }.
+ */
+export const GROW_FLOOR = { large: 6, small: 4, minor: 3 };
+const DEMOTE_ORDER = ['Calves', 'Biceps', 'Triceps', 'Shoulders'];
+export function fitPlan({ plan, priorities, focus, goal, split, library, favorites = null, mode = 'all', minutes = null }) {
+  let pr = { ...priorities }; const demoted = [];
+  const once = () => {
+    const raw = autofill({ plan, priorities: pr, focus, goal, split, library, favorites, mode });
+    return fitToTime(raw, { minutes, priorities: pr, focus, library });
+  };
+  const short = f => { const got = placedSets(f.days), out = [];
+    for (const m of MUSCLES) { const p = normPriority(pr[m], focus);
+      if (p !== 'grow' && p !== 'emphasize') continue;
+      const floor = Math.min(GROW_FLOOR[sizeOf(m)], weeklyTarget(m, pr[m], focus, goal));
+      if (got[m] < floor) out.push({ muscle: m, sets: got[m], floor }); }
+    return out; };
+  let f = once(), under = short(f);
+  while (mode === 'all' && minutes && under.length) {
+    const next = DEMOTE_ORDER.find(m => normPriority(pr[m], focus) === 'grow');
+    if (!next) break;
+    pr = { ...pr, [next]: 'maintain' }; demoted.push(next);
+    f = once(); under = short(f);
+  }
+  return { ...f, priorities: pr, demoted, under };
 }
 
 export function placedSets(plan) {

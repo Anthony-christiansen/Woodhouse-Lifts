@@ -643,3 +643,32 @@ console.log('GUARDRAIL TESTS PASSED');
   assert.ok(doc.toc.length >= 7 && /<table>/.test(doc.html), 'the real doc renders with contents and tables');
   console.log('V1.11.4 MD RENDER TESTS PASSED');
 }
+
+// ---------- v1.11.5: the builder is maximized for the days and time you have ----------
+{
+  let n = 0; const lib2 = [];
+  for (const m of L.MUSCLES) for (let i = 1; i <= 5; i++) lib2.push({ id: 'b' + (++n), name: `${m} ${i}`, muscle_group: m, kind: i <= 2 ? 'compound' : 'isolation', load_type: 'weighted', equipment: 'Machine', rep_min: 8, rep_max: 15 });
+  let checked = 0;
+  for (const days of [2, 3, 4, 5, 6]) for (const split of L.splitsFor(days).map(x => x.id)) for (const goal of ['hypertrophy', 'strength', 'athletic'])
+    for (const focus of ['whole', 'upper', 'lower']) for (const minutes of [45, 60, 75, 90, null]) {
+      const pr = L.templatePriorities(focus), tag = `${days}d ${split} ${goal} ${focus} ${minutes}`;
+      const r = L.fitPlan({ plan: Array.from({ length: days }, () => ({ label: 'Day', slots: [] })), priorities: pr, focus, goal, split, library: lib2, minutes });
+      const got = L.placedSets(r.days);
+      for (const m of L.MUSCLES) {
+        const p = L.normPriority(r.priorities[m], focus), f = r.days.filter(d => d.slots.some(s => s.muscle === m)).length;
+        if (p === 'maintain') assert.ok(got[m] >= L.MAINTAIN_WEEK_MIN, `${tag}: Maintain ${m} must never be 0`);
+        // muscles you grow are trained 2×/week (PPL and 2-day Upper/Lower train each muscle once by design)
+        if ((p === 'grow' || p === 'emphasize') && !(split === 'ppl' && days === 3) && !(split === 'upper_lower' && days === 2)) assert.ok(f >= 2, `${tag}: ${m} only ${f}×/week`);
+        if (L.normPriority(pr[m], focus) === 'emphasize') assert.equal(L.normPriority(r.priorities[m], focus), 'emphasize', `${tag}: Emphasize is never moved`);
+      }
+      for (const m of r.demoted) assert.ok(['Calves', 'Biceps', 'Triceps', 'Shoulders'].includes(m) && L.normPriority(pr[m], focus) === 'grow', `${tag}: only small Grow muscles move to Maintain (${m})`);
+      // the usual 3-day setup grows everything it says it grows
+      if (days === 3 && split === 'full_body_split' && [60, 75, 90].includes(minutes)) assert.deepEqual(r.under, [], `${tag}: ${JSON.stringify(r.under)}`);
+      checked++;
+    }
+  // 3 days × 60 min, Balanced hypertrophy: big muscles at a growth level, not 4/8 as before
+  const r = L.fitPlan({ plan: [1, 2, 3].map(() => ({ label: 'D', slots: [] })), priorities: L.templatePriorities('whole'), focus: 'whole', goal: 'hypertrophy', split: 'full_body_split', library: lib2, minutes: 60 });
+  const got = L.placedSets(r.days);
+  for (const m of ['Chest', 'Back', 'Quads', 'Hamstrings', 'Glutes']) assert.ok(got[m] >= 6, `${m} ${got[m]}`);
+  console.log(`V1.11.5 BUILDER TESTS PASSED (${checked} day/split/goal/template/time combinations)`);
+}

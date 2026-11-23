@@ -12,6 +12,27 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.11.5 — 2026-11-23 · "3 days a week, maximized"
+
+**Building a meso when time is short**
+- Checked every builder setup from 2 to 6 days, for each goal, template and workout length (630 combinations). Muscles you grow were already trained 2× a week, but short workouts spread volume too thin. Example, 3 days × 60 min, Balanced hypertrophy: chest and back got **4 of 8** weekly sets, and abs, traps and forearms got **none**.
+- **Now the builder concentrates instead of spreading.** If a muscle you grow would fall below a growth level (large 6+, smaller 4+ sets a week), the smallest Grow muscles (calves, then biceps, triceps, shoulders) move to Maintain. A note explains why, and you can change it.
+  - **Example result:** the same 3 × 60 min plan now gives the big muscles 6–7 sets a week.
+  - Emphasize and large muscles are never moved automatically.
+- **Maintain never means zero:** at least 1 set a week, even when time is short.
+- **Fairer trimming:** sets come off the muscle with the most room above its growth level, smaller muscles first.
+- **Plain warning** when something still can't grow in the time (e.g. 45-minute workouts, or legs once a week on 3-day Push/Pull/Legs).
+- Raising the time or adding a day and rebuilding puts moved muscles back to Grow. Your own priority choices always win.
+
+**Underneath**
+- `logic.js`: `fitPlan`, `GROW_FLOOR`, `MAINTAIN_WEEK_MIN`; `fitToTime` keeps the Maintain floor and trims fairly.
+- Tests: all 630 builder combinations checked for 2×/week, Maintain ≥ 1, Emphasize untouched, only small Grow muscles moved, and no shortfall for the usual 3-day setup at 60–90 min. New e2e `builder115.py`.
+- No database changes. Existing mesos are untouched; this only affects building a new meso. `?v=35`.
+
+**Rollback:** tier A (affects only new plans being built) — `git revert -m 1` the merge, bump `?v=`.
+
+---
+
 ## 1.11.4 — 2026-11-23 · "How it works, inside the app"
 
 - **The training rules and evidence are now a page inside the app** (Learn → "How it works", also from More and Settings). It's built from this repo's `docs/training-logic.md`, with contents links that jump to each section.

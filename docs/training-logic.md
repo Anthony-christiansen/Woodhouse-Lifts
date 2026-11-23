@@ -175,12 +175,28 @@ The builder asks **time per workout** (45 / 60 / 75 / 90 / 120 min; remembered o
 **6 min** warm-up + **1 min** setup per exercise + per working set **3 min** for compounds / **2 min** for isolations (set + rest).
 
 - No muscle gets more than **10 sets in one session**.
-- If a day runs long, sets come off the **lowest priority first** (Skip → Maintain → Grow → Emphasize), then from whichever muscle has the most sets that day. Floors per session: Emphasize keeps at least 2 sets, Grow 1; Maintain can be dropped from that day.
+- If a day runs long, sets come off the **lowest priority first** (Skip → Maintain → Grow → Emphasize), then from whichever muscle has the most sets that day. Floors per session: Emphasize keeps at least 2 sets, Grow 1; Maintain can be dropped from a day but keeps at least 1 set across the week (v1.11.5).
 - The builder shows **what was trimmed and why**, and each day shows its sets and estimated minutes.
 
 Why: the second external review found the old builder could produce **35–40 set** sessions on 2-day plans. Checked across every split, 2–6 days, three templates and 60/75/90 min: every day now fits its time (a 2-day full-body plan at 60 min can land 1–2 min over, because Emphasize/Grow muscles keep their floor sets — the day shows a warning).
 
 Example (2 days, full body, Balanced, 60 min): untrimmed 38 / 35 sets (~113 / 101 min) → **17 / 18 sets (~58 / 59 min)**, with the builder listing "Chest −5, Back −4, Quads −4 …".
+
+**v1.11.5 — fit the time without spreading too thin.** Volume is the main growth lever (§1.1), so when the time per workout can't hold every muscle's target, the builder now keeps what it grows at a growing amount:
+- **Growth level** per week: large muscles 6+ sets, smaller muscles 4+, abs/traps/forearms 3+ (capped at the muscle's own target). It sits at the low end of the productive range (§1.1) and is a judgement call.
+- **Concentrate, don't spread.** If a Grow or Emphasize muscle would end below its growth level, the smallest Grow muscles move to **Maintain**, one at a time in this order: Calves, Biceps, Triceps, Shoulders. They still get indirect work from the big lifts (counted at ½, §1.1). The builder says so in a note, and you can change it under "Adjust muscles". Emphasize is never moved, and large muscles are never moved automatically.
+- **Maintain never means zero.** A Maintain muscle keeps at least **1 direct set a week**, even when time is short. Maintenance needs only a fraction of the growth dose (Bickel 2011).
+- **Fair trimming.** Within a priority, sets come off the muscle furthest above its growth level first. On a tie, smaller muscles go first.
+- **Plain warning.** If a muscle still can't reach its growth level (e.g. 45-minute workouts, or legs once a week on a 3-day Push/Pull/Legs), the builder says "Not enough time to grow …" with the weekly sets and what to change.
+- **Moves reverse automatically.** Raise the time or add a day and rebuild, and the muscles the builder moved go back to Grow. A priority you set yourself always wins.
+
+3 days a week (full-body split, the default), checked for every goal and template at 60/75/90 min:
+- every Grow and Emphasize muscle is trained 2× a week and reaches its growth level;
+- no Maintain muscle drops to 0.
+
+Example, hypertrophy Balanced, 3 × 60 min:
+- **Before:** chest and back 4/8 sets, abs/traps/forearms 0.
+- **Now:** big muscles 6–7/8, with calves on Maintain and every Maintain muscle at 1 or more.
 
 ### 2.2 Personal exercise preferences
 

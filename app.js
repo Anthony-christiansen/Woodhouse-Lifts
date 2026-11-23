@@ -1,7 +1,7 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import * as L from './logic.js?v=34';
-import * as LEARN from './learn.js?v=34';
-import * as MD from './md.js?v=34';
+import * as L from './logic.js?v=35';
+import * as LEARN from './learn.js?v=35';
+import * as MD from './md.js?v=35';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -18,7 +18,7 @@ let authReturn = (() => {
   return null;
 })();
 let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
-export const APP_VERSION = '1.11.4'; // keep in sync with CHANGELOG.md
+export const APP_VERSION = '1.11.5'; // keep in sync with CHANGELOG.md
 const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
 // v1.11.4: the training rules are a page inside the app (#/logic), built from this repo's docs/training-logic.md.
 // The app never links to anyone's Google Drive.
@@ -630,7 +630,7 @@ async function renderBuilder() {
           <div class="seg c4">${L.PRIORITIES.map(p => `<button type="button" data-m="${m}" data-p="${p}" class="${pr === p ? 'on' : ''}" title="${esc(L.PRIORITY_INFO[p])}">${p[0].toUpperCase() + p.slice(1)}</button>`).join('')}</div></div>`; }).join('')}
       </details>
       <button class="primary block" id="next">Next: build the days ›</button>`;
-    $$('[data-focus]').forEach(b => b.onclick = () => { S.focus = b.dataset.focus; S.priorities = L.templatePriorities(S.focus); step1(); });
+    $$('[data-focus]').forEach(b => b.onclick = () => { S.focus = b.dataset.focus; S.priorities = L.templatePriorities(S.focus); S.autoMaintain = []; step1(); });
     $$('[data-goal]').forEach(b => b.onclick = () => { S.goal = b.dataset.goal; step1(); });
     $$('[data-split]').forEach(b => b.onclick = () => { S.split = b.dataset.split; S.plan = []; step1(); });
     $('#name').oninput = e => S.name = e.target.value;
@@ -641,6 +641,7 @@ async function renderBuilder() {
     $('#days').onchange = e => { S.days = +e.target.value; S.split = null; S.plan = []; step1(); };
     $$('[data-p]').forEach(b => b.onclick = () => {
       S.priorities[b.dataset.m] = b.dataset.p;
+      S.autoMaintain = (S.autoMaintain || []).filter(m => m !== b.dataset.m);   // your choice wins over the automatic one
       step1();
     });
     $('#next').onclick = () => {
@@ -652,10 +653,13 @@ async function renderBuilder() {
   };
 
   // Doc §2.3 — autofill, then fit each day into the time available; remember what had to be trimmed.
+  // v1.11.5: a full rebuild may move small Grow muscles to Maintain so the rest still get a growing amount of work.
   const buildFit = mode => {
-    const raw = L.autofill({ plan: S.plan, priorities: S.priorities, focus: S.focus, goal: S.goal, split: S.split, library: P.library, favorites: P.favorites, mode });
-    const f = L.fitToTime(raw, { minutes: S.minutes, priorities: S.priorities, focus: S.focus, library: P.library });
-    S.trimmed = f.trimmed; return f.days;
+    // Muscles the builder moved to Maintain last time go back to Grow first, so more time (or another day) restores them.
+    if (mode === 'all' && S.autoMaintain?.length) { S.priorities = { ...S.priorities }; S.autoMaintain.forEach(m => { S.priorities[m] = 'grow'; }); S.autoMaintain = []; }
+    const f = L.fitPlan({ plan: S.plan, priorities: S.priorities, focus: S.focus, goal: S.goal, split: S.split, library: P.library, favorites: P.favorites, mode, minutes: S.minutes });
+    if (f.demoted.length) { S.priorities = f.priorities; S.autoMaintain = f.demoted; }
+    S.trimmed = f.trimmed; S.demoted = f.demoted; S.under = f.under; return f.days;
   };
   const step2 = () => {
     const targets = L.weeklyTargets(S.priorities, S.focus, S.goal), placed = L.placedSets(S.plan);
@@ -672,6 +676,8 @@ async function renderBuilder() {
           <button class="sm" id="fillLeft">Fill what's left</button>
           <button class="sm" id="clear">Clear (manual)</button>
         </div>
+        ${S.demoted?.length ? `<div class="card small" style="margin:10px 0 0">To keep your bigger muscles growing in ~${S.minutes} min, <b>${esc(S.demoted.join(', '))}</b> ${S.demoted.length > 1 ? 'were' : 'was'} set to <b>Maintain</b> (still trained; ${S.demoted.length > 1 ? 'they also get' : 'it also gets'} work from the big lifts). Growing a few muscles properly beats spreading too little across all of them. Change it under “Adjust muscles”.</div>` : ''}
+        ${S.under?.length ? `<div class="card warn small" style="margin:10px 0 0"><b>Not enough time to grow ${esc(S.under.map(u => u.muscle).join(', '))}</b> — ${esc(S.under.map(u => `${u.muscle} ${u.sets} sets/week`).join(', '))}, which maintains rather than grows (about ${S.under[0].floor}+ a week is the growth range here). Allow more time per workout, add a day, or set fewer muscles to Grow.</div>` : ''}
         ${trimmedTxt ? `<div class="card warn small" style="margin:10px 0 0">To fit ~${S.minutes} min a workout, these weekly sets were trimmed (lowest priority first): <b>${esc(trimmedTxt)}</b>. Want them back? Add a day, allow more time, or set fewer muscles to Emphasize/Grow.</div>` : ''}
         <h2>Weekly sets: placed / target</h2>
         <div class="chips">${L.MUSCLES.filter(m => targets[m] || placed[m]).map(m => {
