@@ -979,7 +979,7 @@ async function renderBuilder() {
         ${(() => { const ar = L.avoidedAreas(profile?.avoid_tags || []); return ar.length ? `<div class="card small mt10-only">${ic('alert')} Going easy on <b>${esc(ar.map(a => L.BODY_AREAS[a].name).join(', '))}</b>: exercises that load ${ar.length > 1 ? 'these areas' : 'it'} the most were left out. <a href="#/settings">Change in Settings</a>.</div>` : ''; })()}
         ${(() => { const need = P.blocked.filter(b => targets[b.muscle] > 0 || S.plan.some(d => d.slots.some(x => x.muscle === b.muscle)));
           return need.map(b => { const ar = [...new Set(b.options.flatMap(e => e.areas || []))].map(a => L.BODY_AREAS[a]?.name).filter(Boolean);
-            return `<div class="card warn small mt10-only" data-blocked="${esc(b.muscle)}"><b>${esc(b.muscle)}: every exercise loads ${esc(ar.join(' or ') || 'an area you’re going easy on')}.</b>
+            return `<div class="card warn small mt10-only" data-blocked="${esc(b.muscle)}"><b>${esc(b.muscle)}: every option loads ${esc(ar.join(' or ') || 'an area')}, which you’re going easy on.</b>
               Nothing was put back on its own. OK one to use anyway, or leave ${esc(b.muscle)} out of this meso.
               <div class="chips mt6">${b.options.slice(0, 4).map(e => `<button class="sm" data-allow="${e.id}">OK ${esc(e.name)}</button>`).join('')}</div>
               <button class="sm ghost mt6" data-leaveout="${esc(b.muscle)}">Leave ${esc(b.muscle)} out</button>
