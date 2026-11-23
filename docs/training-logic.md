@@ -559,6 +559,14 @@ Rules, checked in this order:
 - **Chart page:** the status and recommendation at the top; a This meso / 3 months / All range; 🏆 PR markers; and a dashed line where the meso started.
 - **Workout:** a flag on the lift itself for Stalled, Down or last-time PR. Tap it for the full recommendation and a link to the chart. Today's unfinished session is left out, so the flag is about how the lift went in earlier sessions.
 
+### 6.2 Progress screen: which percentages are shown where (v1.11.2)
+
+A percentage only means something against a recent, comparable starting point. So:
+- **This meso** (default view): lifts planned in the current meso; change = latest meso week vs. **week 1 of this meso**, on performance (load × reps, no RIR credit), light weeks excluded. One week logged → no number yet.
+- **All time**: every lift, sessions logged and **last done** date. **No percentages**: "first session ever vs. latest" mixes years of history, layoffs and a different measure, so it reads as current progress when it isn't. Lifts not trained in **8 weeks** are greyed (a judgement call: about two mesos).
+- **One lift's page**: if the lift isn't in the current meso, the status badge and % change are replaced by "Not in this meso · last done …". The chart and table still show the full history.
+- Unchanged: the workout screen (vs. last week / same week last meso), Home's "This meso's lifts", "PRs this meso", and with no active meso, the 8-week trend and 14-day PRs. These already compare against recent data.
+
 ## 7. Sources (all retrieved from PubMed)
 
 1. Schoenfeld BJ et al. Dose-response relationship between weekly resistance training volume and increases in muscle mass. *J Sports Sci* 2017. https://doi.org/10.1080/02640414.2016.1210197
