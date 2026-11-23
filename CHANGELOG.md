@@ -12,6 +12,16 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.12.2 — 2026-11-23 · Suggested follows your running meso
+
+- **Fix (found checking 1.12.1 live):** Suggested could carry on from an older imported meso instead of the one you're running. Imported mesos share one creation time, so the running one could fall outside the 10 newest the app looked at.
+- Now the running (or planned) meso is read directly. Only when there isn't one does it fall back to the most recent meso that wasn't abandoned.
+- **Test:** `builder120.py` adds 12 imports with the same time plus the running meso. It fails on 1.12.1 and passes now. The test mock now honours status filters and limits for mesos.
+
+**Rollback:** app → `release/v1.12.1`. No database change.
+
+---
+
 ## 1.12.1 — 2026-11-23 · "Harder to break" (security fixes from the outside audit)
 
 **Set saving can't go stale** (audit finding 2)

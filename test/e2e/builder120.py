@@ -74,6 +74,14 @@ async def main():
         await pg.click('[data-tpl="lower.full_body_split.3"]'); await pg.wait_for_timeout(900)
         ok('opens the builder on that template', await pg.evaluate(pressed)==['template'] and await pg.locator('[data-tpl="lower.full_body_split.3"].on').count()==1
            and await pg.get_attribute('[data-days="3"]','aria-checked')=='true')
+        # 6) v1.12.2: Suggested carries on from the RUNNING meso even when many imported mesos share one created_at
+        pg2=await ctx.new_page(); pg2.on('pageerror', lambda e: errs.append(str(e)))
+        await pg2.add_init_script("""window.__MESOS = [...Array.from({length: 12}, (_, i) => ({ id: 'old'+i, name: 'Old Leg Meso '+i, status: 'completed', focus: 'lower', priorities: {}, weeks: 6, days_per_week: 4, created_at: '2026-11-21T00:00:00Z' })),
+          { id: 'cur', name: 'Current Upper Meso', status: 'active', focus: 'upper', priorities: {}, weeks: 5, days_per_week: 5, created_at: '2026-11-21T00:00:00Z' }];""")
+        await pg2.goto(B+'#/new'); await pg2.wait_for_timeout(900); t=await pg2.inner_text('main')
+        ok('suggestion follows the running meso, not the newest import', 'Carries on from your last meso (Current Upper Meso)' in t and 'Upper body' in t, t[t.find('Carries'):t.find('Carries')+120])
+        ok('days follow the running meso (5)', await pg2.get_attribute('[data-days="5"]','aria-checked')=='true')
+        await pg2.close()
         # 5) layout: nothing wider than the phone
         over=await pg.evaluate("[...document.querySelectorAll('main *')].filter(e=>{const b=e.getBoundingClientRect();return b.width&&b.right>innerWidth+1}).length")
         ok('fits a 390px phone', over==0, over)

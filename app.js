@@ -1,8 +1,8 @@
 // v1.12.1: pinned to one reviewed release, so the code users get only changes with a commit here (outside audit, finding 4).
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.2/+esm';
-import * as L from './logic.js?v=37';
-import * as LEARN from './learn.js?v=37';
-import * as MD from './md.js?v=37';
+import * as L from './logic.js?v=38';
+import * as LEARN from './learn.js?v=38';
+import * as MD from './md.js?v=38';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -19,7 +19,7 @@ let authReturn = (() => {
   return null;
 })();
 let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
-export const APP_VERSION = '1.12.1'; // keep in sync with CHANGELOG.md
+export const APP_VERSION = '1.12.2'; // keep in sync with CHANGELOG.md
 const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
 // v1.11.4: the training rules are a page inside the app (#/logic), built from this repo's docs/training-logic.md.
 // The app never links to anyone's Google Drive.
@@ -834,8 +834,11 @@ async function renderBuilder() {
   }
   // v1.12.0 — the suggestion carries on from your current (or most recent) meso, so read it once per new builder.
   if (S.lastMeso === undefined) {
-    const { data } = await sb.from('mesocycles').select('id, name, focus, priorities, weeks, days_per_week, goal, status, created_at').order('created_at', { ascending: false }).limit(10);
-    S.lastMeso = L.lastMesoFor(Array.isArray(data) ? data : []);
+    // v1.12.2: the running meso first (asked for directly — imported mesos share one created_at, so a "newest 10" list could miss it).
+    const cols = 'id, name, focus, priorities, weeks, days_per_week, goal, status, created_at';
+    const cur = (await sb.from('mesocycles').select(cols).in('status', ['active', 'planned']).order('created_at', { ascending: false })).data;
+    const recent = Array.isArray(cur) && cur.length ? [] : (await sb.from('mesocycles').select(cols).neq('status', 'abandoned').order('created_at', { ascending: false }).limit(10)).data;
+    S.lastMeso = L.lastMesoFor([...(Array.isArray(cur) ? cur : []), ...(Array.isArray(recent) ? recent : [])]);
     if (S.lastMeso && S.start === 'suggested' && !S.daysTouched) {
       if ([2, 3, 4, 5, 6].includes(S.lastMeso.days_per_week)) S.days = S.lastMeso.days_per_week;
       S.goal = L.goalOf(S.lastMeso.goal);
