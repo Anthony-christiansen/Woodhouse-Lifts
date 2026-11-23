@@ -65,7 +65,7 @@ async def main():
         await pg.goto(B+'#/workout/d21'); await pg.wait_for_timeout(1000); await pg.evaluate(CLOSE)
         n=await pg.inner_text('.card[data-we="w1"] .prog-note') if await pg.locator('.card[data-we="w1"] .prog-note').count() else ''
         ok('exercise joint pain → holding this lift', 'Holding' in n and 'this exercise' in n, n)
-        ok('rated line shows', '✓ This exercise' in await pg.inner_text('.card[data-we="w1"] [data-exrate]'))
+        ok('rated line shows', 'This exercise ·' in await pg.inner_text('.card[data-we="w1"] [data-exrate]'))
         ok('no JS errors (c)', not errs, errs); await ctx.close()
         # d) without the table (older database) the app keeps working with muscle ratings only
         m3=MOCK.replace("let data = fixtures[table] || [];","let data = fixtures[table] || []; if (table === 'exercise_feedback') return Promise.resolve({ data: null, error: { code: 'PGRST205', message: 'not found' } }).then(res, rej);")

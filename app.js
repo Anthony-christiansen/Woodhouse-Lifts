@@ -1,8 +1,8 @@
 // v1.12.1: pinned to one reviewed release, so the code users get only changes with a commit here (outside audit, finding 4).
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.2/+esm';
-import * as L from './logic.js?v=39';
-import * as LEARN from './learn.js?v=39';
-import * as MD from './md.js?v=39';
+import * as L from './logic.js?v=40';
+import * as LEARN from './learn.js?v=40';
+import * as MD from './md.js?v=40';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -19,10 +19,64 @@ let authReturn = (() => {
   return null;
 })();
 let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
-export const APP_VERSION = '1.12.3'; // keep in sync with CHANGELOG.md
+export const APP_VERSION = '1.13.0'; // keep in sync with CHANGELOG.md
 const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
 // v1.11.4: the training rules are a page inside the app (#/logic), built from this repo's docs/training-logic.md.
 // The app never links to anyone's Google Drive.
+
+// ---------- icons (v1.12) ----------
+// One line-icon set (24px grid, 1.75 stroke, round caps) replacing emoji used as icons. ic(name) → inline SVG,
+// decorative (aria-hidden); the button or text next to it carries the accessible name.
+const ICONS = {
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 16v-4.5M12 8h.01"/>',
+  trophy: '<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/>',
+  heart: '<path d="M19.5 12.6 12 20l-7.5-7.4A4.6 4.6 0 0 1 12 6.6a4.6 4.6 0 0 1 7.5 6z"/>',
+  bars: '<path d="M3 20h18M6 20v-6M11 20V8M16 20v-9M21 20V5" />',
+  x: '<path d="M18 6 6 18M6 6l12 12"/>',
+  star: '<path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/>',
+  flame: '<path d="M12 22a7 7 0 0 0 7-7c0-4.5-3.5-6.5-4.5-10-1.5 2-2 3-3.5 3.8C10.5 7 10 5 10.5 2.5 7 5.5 5 9.5 5 15a7 7 0 0 0 7 7z"/>',
+  pencil: '<path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4z"/>',
+  party: '<path d="M4 20 8.5 8l7.5 7.5z"/><path d="M14 4.5 14.5 6M19.5 9.5l-1.5.5M17.5 6.5 19 5M11 8.5 10 4M15.5 13l4.5 1"/>',
+  alert: '<path d="M12 3.5 2.5 20h19z"/><path d="M12 10v4M12 17h.01"/>',
+  cap: '<path d="m2 9 10-5 10 5-10 5z"/><path d="M6 11v5c0 1.5 3 3 6 3s6-1.5 6-3v-5M22 9v6"/>',
+  trendUp: '<path d="m3 17 6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
+  trendDown: '<path d="m3 7 6 6 4-4 8 8"/><path d="M15 17h6v-6"/>',
+  history: '<path d="M3 12a9 9 0 1 0 2.6-6.4L3 8"/><path d="M3 3v5h5M12 7.5V12l3 2"/>',
+  dumbbell: '<path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/>',
+  smile: '<circle cx="12" cy="12" r="9"/><path d="M8.5 14s1.3 2 3.5 2 3.5-2 3.5-2M9 9.5h.01M15 9.5h.01"/>',
+  refresh: '<path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/><path d="M21 3v5h-5"/>',
+  pin: '<path d="M12 17v5M9 3h6M10 3v7l-3 4h10l-3-4V3"/>',
+  arrowUpRight: '<path d="M7 17 17 7M8 7h9v9"/>',
+  arrowUp: '<path d="M12 20V5M5.5 11.5 12 5l6.5 6.5"/>',
+  pause: '<path d="M9 5v14M15 5v14"/>',
+  eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  swap: '<path d="M7 4 3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7"/>',
+  sliders: '<path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/>',
+  person: '<circle cx="12" cy="5" r="2.5"/><path d="M12 8v7M8 22l4-7 4 7M6.5 11h11"/>',
+  zap: '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
+  scale: '<path d="M12 3v18M7 21h10M5 7h14M5 7l-3 7a3 3 0 0 0 6 0zM19 7l-3 7a3 3 0 0 0 6 0z"/>',
+  ban: '<circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/>',
+  calendar: '<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/>',
+  chevron: '<path d="m9 6 6 6-6 6"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  minus: '<path d="M5 12h14"/>',
+  download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
+  share: '<path d="M12 15V3M7.5 7.5 12 3l4.5 4.5M5 12v7a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19v-7"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4 6.5 6.5 0 0 0 20 14.5z"/>',
+};
+// Theme: 'system' (default) follows the phone; 'dark' / 'light' pin it. Applied early by index.html too (no flash).
+const themePref = () => { try { return localStorage.getItem('wl_theme') || 'system'; } catch { return 'system'; } };
+function applyTheme(t = themePref()) {
+  if (t === 'system') document.documentElement.removeAttribute('data-theme'); else document.documentElement.dataset.theme = t;
+  const light = t === 'light' || (t === 'system' && matchMedia('(prefers-color-scheme: light)').matches);
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', light ? '#f3f4f6' : '#0d0f13');
+}
+matchMedia('(prefers-color-scheme: light)').addEventListener?.('change', () => applyTheme());
+// Small haptic tick on set completion where supported (Android). Never required for anything.
+const haptic = () => { try { if (!matchMedia('(prefers-reduced-motion: reduce)').matches) navigator.vibrate?.(12); } catch {} };
+const ic = (name, cls = '') => `<svg class="ic${cls ? ' ' + cls : ''}" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${ICONS[name] || ''}</svg>`;
 
 const app = document.getElementById('app');
 const titleEl = document.getElementById('title');
@@ -64,7 +118,9 @@ async function fetchAll(build, page = 1000) {
   }
 }
 function setHeader(title, back, tab) {
-  titleEl.textContent = title;
+  // Home shows the brand (logomark + wordmark); other screens show their own title.
+  if (tab === 'home' && !back) titleEl.innerHTML = '<span class="brand"><img class="brand-mark" src="icons/logo.svg" alt="" width="26" height="26">Woodhouse Lifts</span>';
+  else titleEl.textContent = title;
   backBtn.hidden = !back; backBtn.onclick = () => go(back);
   tabs.hidden = !session;
   gearBtn.hidden = !session || tab !== 'home'; gearBtn.onclick = () => go('#/settings');
@@ -321,7 +377,7 @@ async function route() {
   window.scrollTo(0, 0);
   // Show a loading state only if the screen takes a moment (no flash on fast loads); errors offer a retry.
   const slow = setTimeout(() => { app.setAttribute('aria-busy', 'true'); app.innerHTML = '<div class="loading" role="status">Loading…</div>'; }, 250);
-  try { await (routes[name] || renderHome)(...args); }
+  try { await (routes[name] || renderHome)(...args); app.classList.remove('enter'); void app.offsetWidth; app.classList.add('enter'); }
   catch (e) {
     console.error(e);
     app.innerHTML = `<div class="card warn" role="alert"><b>${isNetErr(e) ? 'No connection' : 'Something went wrong'}</b>
@@ -558,38 +614,39 @@ async function renderHome() {
   const cardio = cardioItems(cSess, cSets);
   const inWeek = (dstr, s) => { const d = new Date(dstr + 'T12:00'); const e = new Date(s); e.setDate(e.getDate() + 7); return d >= s && d < e; };
   const thisCardio = cardio.filter(c => inWeek(c.date, ws));
-  const cMin = thisCardio.reduce((a, c) => a + c.minutes, 0), cLoad = thisCardio.reduce((a, c) => a + L.cardioLoad(c), 0);
+  const mins = c => Number(c.minutes) || 0;   // a session logged without minutes counts as 0, not NaN (NaN blanked the whole chart)
+  const cMin = thisCardio.reduce((a, c) => a + mins(c), 0), cLoad = thisCardio.reduce((a, c) => a + (Number(L.cardioLoad(c)) || 0), 0);
   // Weekly hard sets (8 weeks) + this week's sets.
   const weeks = Array.from({ length: 8 }, (_, i) => { const s = new Date(ws); s.setDate(s.getDate() - (7 - i) * 7); return s; });
   const setsPerWeek = weeks.map(s => Number(stats.weeks?.[isoDay(s)] || 0));
-  const cardioPerWeek = weeks.map(s => cardio.filter(c => inWeek(c.date, s)).reduce((a, c) => a + c.minutes, 0));
+  const cardioPerWeek = weeks.map(s => cardio.filter(c => inWeek(c.date, s)).reduce((a, c) => a + mins(c), 0));
   const prs = stats.prs || [], movers = stats.movers || [];
   const totalWorkouts = stats.workouts || 0, totalSets = stats.sets || 0;
   const doneDays = days.filter(d => d.completed_at || d.skipped_at).length;
   const maxSets = Math.max(1, ...setsPerWeek), maxC = Math.max(1, ...cardioPerWeek);
-  const bars = (vals, max, color, kind) => `<svg class="chart" viewBox="0 0 320 110" style="height:110px">${vals.map((v, i) => { const h = Math.round(v / max * 88);
-    return `<g class="bar-hit" data-go="#/stats/${kind}/${isoDay(weeks[i])}" role="button" tabindex="0" aria-label="Week of ${weeks[i].getMonth() + 1}/${weeks[i].getDate()}: ${Math.round(v)}"><rect x="${i * 40 + 2}" y="0" width="36" height="110" fill="transparent"></rect><rect x="${i * 40 + 6}" y="${92 - h}" width="28" height="${h}" rx="4" fill="${i === 7 ? color : '#3a4150'}"></rect>
-      <text x="${i * 40 + 20}" y="${88 - h}" font-size="9" fill="#8b93a3" text-anchor="middle">${v ? Math.round(v) : ''}</text>
-      <text x="${i * 40 + 20}" y="106" font-size="8" fill="#8b93a3" text-anchor="middle">${weeks[i].getMonth() + 1}/${weeks[i].getDate()}</text></g>`; }).join('')}</svg>`;
+  const bars = (vals, max, color, kind) => `<svg class="chart h110" viewBox="0 0 320 110">${vals.map((v, i) => { const h = Math.round(v / max * 74);   // 74 + label room: the tallest bar's number is never clipped
+    return `<g class="bar-hit" data-go="#/stats/${kind}/${isoDay(weeks[i])}" role="button" tabindex="0" aria-label="Week of ${weeks[i].getMonth() + 1}/${weeks[i].getDate()}: ${Math.round(v)}"><rect x="${i * 40 + 2}" y="0" width="36" height="110" fill="transparent"></rect><rect class="cbar${i === 7 ? ' now' + (kind === 'cardio' ? ' cardio' : '') : ''}" x="${i * 40 + 6}" y="${92 - h}" width="28" height="${h}" rx="4"></rect>
+      <text x="${i * 40 + 20}" y="${88 - h}" font-size="10" text-anchor="middle">${v ? Math.round(v) : ''}</text>
+      <text x="${i * 40 + 20}" y="106" font-size="9" text-anchor="middle">${weeks[i].getMonth() + 1}/${weeks[i].getDate()}</text></g>`; }).join('')}</svg>`;
 
   app.innerHTML = `
-    <div class="muted small">Hi ${esc(profile?.display_name || '')} 👋</div><div class="spacer"></div>
+    <div class="muted small">Hi ${esc(profile?.display_name || '')} ${ic('smile', 'accent')}</div><div class="spacer"></div>
     ${live ? `<div class="card warn"><div class="small">Workout in progress</div><h3>Week ${live.week} · ${esc(dayName(live))}</h3>
         <div class="spacer"></div><button class="primary block" data-go="#/workout">Resume workout</button></div>`
       : next ? `<div class="card"><div class="muted small">Next workout · ${esc(meso.name)}</div>
         <h3>Week ${next.week} · ${esc(dayName(next))}</h3>
         <div class="muted small">${r.deload ? 'Light (deload) week — half the sets, easy effort' : `This week: ${effortText(r.rir)}`}</div>
         <div class="spacer"></div><button class="primary block" data-go="#/workout">Start workout</button>
-        ${wk.filter(d => !d.completed_at && !d.skipped_at).length > 1 ? `<button class="ghost block" id="pickDay" style="margin-top:6px">Do a different day this week ›</button>` : ''}</div>`
-      : `<div class="card"><h3>${meso ? 'Mesocycle finished 🎉' : 'No active mesocycle'}</h3>
+        ${wk.filter(d => !d.completed_at && !d.skipped_at).length > 1 ? `<button class="ghost block mt6" id="pickDay">Do a different day this week ›</button>` : ''}</div>`
+      : `<div class="card"><h3>${meso ? `Mesocycle finished ${ic('party', 'accent')}` : 'No active mesocycle'}</h3>
         <p class="muted">Start from a base template or one of your saved ones.</p>
         <div class="grid2"><button class="primary" data-go="#/new">+ New mesocycle</button><button data-go="#/templates">Templates</button></div></div>`}
     ${meso ? `<div class="card drill" tabindex="0" role="link" data-go="#/meso/${meso.id}"><div class="row"><div class="grow"><div class="muted small">Mesocycle</div><b>${esc(meso.name)}</b></div>
         <span class="pill ${r?.deload ? 'warn' : 'on'}">${r ? (r.deload ? 'Light week' : `Week ${curWeek}`) : ''}</span></div>
         <div class="prog"><i style="width:${Math.round(doneDays / Math.max(1, days.length) * 100)}%"></i></div>
-        <div class="muted tiny" style="margin-top:4px">${doneDays}/${days.length} workouts · week ${curWeek} of ${meso.weeks}</div>
-        ${warnings.length ? `<div class="meso-note">⚠ ${warnings.length} thing${warnings.length > 1 ? 's' : ''} to check on this meso ›</div>` : doneDays ? '<div class="meso-note ok">✓ Reps, sets and recovery on track</div>' : ''}</div>` : ''}
-    <div class="grid2">
+        <div class="muted tiny mt4">${doneDays}/${days.length} workouts · week ${curWeek} of ${meso.weeks}</div>
+        ${warnings.length ? `<div class="meso-note">${ic('alert')} ${warnings.length} thing${warnings.length > 1 ? 's' : ''} to check on this meso ›</div>` : doneDays ? `<div class="meso-note ok">${ic('check')} Reps, sets and recovery on track</div>` : ''}</div>` : ''}
+    <div class="grid2 stat-grid">
       <button class="card stat drill" data-go="${meso ? `#/stats/workouts/${curWeek}` : '#/history'}"><span class="muted small">Workouts this week</span><span class="big">${wk.filter(d => d.completed_at).length}/${wk.length || 0}</span><span class="chev">›</span></button>
       <button class="card stat drill" data-go="#/stats/sets/${isoDay(ws)}"><span class="muted small">Sets this week</span><span class="big">${setsPerWeek[7]}</span><span class="chev">›</span></button>
       <button class="card stat drill" data-go="#/stats/cardio/${isoDay(ws)}"><span class="muted small">Cardio this week</span><span class="big">${fmt(cMin)}<span class="muted small"> min</span></span><span class="muted tiny">load ${fmt(cLoad)}</span><span class="chev">›</span></button>
@@ -601,11 +658,11 @@ async function renderHome() {
       return chart('Working sets per week', setsPerWeek, maxSets, 'var(--accent)', 'sets', 'Your weekly set totals show up here once you log a workout.')
         + chart('Cardio minutes per week', cardioPerWeek, maxC, 'var(--info)', 'cardio', 'No cardio in the last 8 weeks. Log it inside a workout or with “Log cardio” below.'); })()}
     ${meso && lifts.length ? `<div class="card"><div class="row"><b class="grow">This meso’s lifts</b><span class="muted tiny">tap a lift for its chart</span></div>
-        ${lifts.filter(x => ['regressing', 'stalled'].includes(x.status.status)).length ? `<div class="muted small" style="margin:4px 0 2px">${lifts.filter(x => ['regressing', 'stalled'].includes(x.status.status)).length} need attention — you’ll see what to do on that lift in your next workout.</div>` : ''}
+        ${lifts.filter(x => ['regressing', 'stalled'].includes(x.status.status)).length ? `<div class="muted small my4-2">${lifts.filter(x => ['regressing', 'stalled'].includes(x.status.status)).length} need attention — you’ll see what to do on that lift in your next workout.</div>` : ''}
         ${lifts.map((x, i) => `<button class="mover lift-row ${i >= 8 ? 'more' : ''}" data-go="#/progress/${x.id}" ${i >= 8 ? 'hidden' : ''}><span>${esc(x.name)}</span>${statusPill(x.status)}<span class="chev">›</span></button>`).join('')}
         ${lifts.length > 8 ? `<button class="ghost sm" id="moreLifts">Show all ${lifts.length}</button>` : ''}</div>` : ''}
-    ${mesoPrs.length ? `<div class="card"><b>PRs this meso 🏆</b>${mesoPrs.slice(0, 5).map(p => `<button class="mover lift-row" data-go="#/progress/${p.id}"><span>${esc(p.name)}${p.n > 1 ? ` <span class="muted tiny">×${p.n}</span>` : ''}</span><span class="pill on">+${p.pct.toFixed(1)}%</span><span class="chev">›</span></button>`).join('')}</div>` : ''}
-    ${!meso && prs.length ? `<div class="card"><b>Recent PRs 🏆</b>${prs.slice(0, 5).map(p => `<button class="mover lift-row" data-go="#/stats/prs"><span>${esc(p.name)}</span><span class="pill on">+${Number(p.pct).toFixed(1)}%</span><span class="chev">›</span></button>`).join('')}</div>` : ''}
+    ${mesoPrs.length ? `<div class="card"><b>PRs this meso ${ic('trophy', 'pr')}</b>${mesoPrs.slice(0, 5).map(p => `<button class="mover lift-row" data-go="#/progress/${p.id}"><span>${esc(p.name)}${p.n > 1 ? ` <span class="muted tiny">×${p.n}</span>` : ''}</span><span class="pill on">+${p.pct.toFixed(1)}%</span><span class="chev">›</span></button>`).join('')}</div>` : ''}
+    ${!meso && prs.length ? `<div class="card"><b>Recent PRs ${ic('trophy', 'pr')}</b>${prs.slice(0, 5).map(p => `<button class="mover lift-row" data-go="#/stats/prs"><span>${esc(p.name)}</span><span class="pill on">+${Number(p.pct).toFixed(1)}%</span><span class="chev">›</span></button>`).join('')}</div>` : ''}
     ${!meso && movers.length ? `<div class="card"><b>Strength trend · last 8 weeks</b>
         ${[...movers.slice(0, 3), ...movers.slice(-2).filter(m => m.pct < 0 && !movers.slice(0, 3).includes(m))].map(m => `<button class="mover lift-row" data-go="#/progress"><span>${esc(m.name)}</span>
           <span class="pill ${m.pct > 0 ? 'on' : m.pct < 0 ? 'bad' : ''}">${m.pct > 0 ? '+' : ''}${Number(m.pct).toFixed(1)}%</span><span class="chev">›</span></button>`).join('')}
@@ -618,10 +675,10 @@ async function renderHome() {
     </div>
     <h2>Quick actions</h2>
     <div class="grid2">
-      <button class="tile" data-go="#/cardio"><span class="ico">♥︎</span><b>Log cardio</b><span class="muted small">Time + intensity</span></button>
-      <button class="tile" data-go="#/volume"><span class="ico">📊</span><b>Volume</b><span class="muted small">Sets per muscle</span></button>
-      <button class="tile" data-go="#/learn"><span class="ico">🎓</span><b>Learn</b><span class="muted small">Sets, reps &amp; why</span></button>
-      <button class="tile" data-go="#/progress"><span class="ico">📈</span><b>Progress</b><span class="muted small">Strength per lift</span></button>
+      <button class="tile" data-go="#/cardio"><span class="ico">${ic('heart')}</span><b>Log cardio</b><span class="muted small">Time + intensity</span></button>
+      <button class="tile" data-go="#/volume"><span class="ico">${ic('bars')}</span><b>Volume</b><span class="muted small">Sets per muscle</span></button>
+      <button class="tile" data-go="#/learn"><span class="ico">${ic('cap')}</span><b>Learn</b><span class="muted small">Sets, reps &amp; why</span></button>
+      <button class="tile" data-go="#/progress"><span class="ico">${ic('trendUp')}</span><b>Progress</b><span class="muted small">Strength per lift</span></button>
     </div>`;
   $$('[data-go]').forEach(b => { b.onclick = e => { e.stopPropagation(); go(b.dataset.go); };
     if (b.tagName === 'g' || b.classList.contains('drill')) b.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(b.dataset.go); } }; });
@@ -644,7 +701,7 @@ async function renderMesos() {
   const item = m => `<button class="list-btn" data-meso="${m.id}"><div class="grow"><b>${esc(m.name)}</b>
       <div class="muted small">${m.source === 'rp_import' ? 'RP import · ' : ''}${esc(L.TEMPLATES[m.focus]?.name || '')} · ${m.weeks} wks · ${m.days_per_week} days/wk</div></div>
       <span class="pill ${m.status === 'active' ? 'on' : ''}">${esc(m.status)}</span></button>`;
-  app.innerHTML = `<div class="muted small" style="margin-bottom:10px">A mesocycle is a training block of 4–8 weeks: effort builds week by week, then a light week lets you recover.</div>
+  app.innerHTML = `<div class="muted small mb10">A mesocycle is a training block of 4–8 weeks: effort builds week by week, then a light week lets you recover.</div>
     <div class="grid2"><button class="primary" data-go="#/new">+ New mesocycle</button><button data-go="#/templates">From a template</button></div>
     ${by(['active', 'planned']).length ? '<h2>Current</h2>' + by(['active', 'planned']).map(item).join('') : ''}
     <h2>Past</h2>${by(['completed', 'abandoned']).map(item).join('') || '<p class="muted">None yet.</p>'}`;
@@ -693,7 +750,7 @@ async function renderBuilder() {
     if (!S.weeksTouched) S.weeks = sg.weeks; S.sugg = sg;
   };
   const applyTemplate = t => { S.tpl = t.id; S.split = t.split; applyPriorities(L.presetPriorities(t.preset), t.preset); };
-  const tick = on => on ? '<span class="tick" aria-hidden="true">✓</span>' : '';
+  const tick = on => on ? `<span class="tick" aria-hidden="true">${ic('check')}</span>` : '';
   const step1 = () => {
     if (!S.split || !L.SPLITS[S.split]?.days.includes(S.days)) S.split = L.defaultSplit(S.days);
     if (!S.nameTouched) S.name = autoName();
@@ -735,7 +792,7 @@ async function renderBuilder() {
       </div>
       <div class="card"><div class="step-h"><span class="step-n">2</span><b>Start from</b></div>
         <div class="start-tiles" role="radiogroup" aria-label="Start from">
-          ${[['suggested', '★', 'Suggested', 'One tap'], ['template', '▦', 'Templates', `${cat.length} to pick from`], ['scratch', '✎', 'From scratch', 'Set it all yourself']].map(([k, ico, n, sub]) =>
+          ${[['suggested', ic('star'), 'Suggested', 'One tap'], ['template', ic('calendar'), 'Templates', `${cat.length} to pick from`], ['scratch', ic('pencil'), 'From scratch', 'Set it all yourself']].map(([k, ico, n, sub]) =>
             `<button type="button" role="radio" aria-checked="${S.start === k}" data-start="${k}" class="choice start ${S.start === k ? 'on' : ''}"><span class="ico">${ico}</span><b>${n}</b><span class="tiny muted">${sub}</span>${tick(S.start === k)}</button>`).join('')}
         </div>
         <div class="spacer"></div>${startBody}
@@ -751,7 +808,7 @@ async function renderBuilder() {
           <li><b>Grow</b> — steady growth with moderate sets.</li><li><b>Maintain</b> — keep what you have with a few sets.</li><li><b>Skip</b> — leave it out.</li></ul>
         <div class="muted tiny">Number = weekly starting sets.</div>
         ${(() => { const n = L.MUSCLES.filter(m => L.normPriority(S.priorities[m], S.focus) === 'emphasize').length;
-          return n > L.MAX_EMPHASIZE ? `<div class="card warn small" style="margin:8px 0">You're emphasizing ${n} muscles. Recovery is shared — emphasizing ${L.MAX_EMPHASIZE} or fewer at a time usually grows them faster. Consider moving some to Grow.</div>` : ''; })()}
+          return n > L.MAX_EMPHASIZE ? `<div class="card warn small my8">You're emphasizing ${n} muscles. Recovery is shared — emphasizing ${L.MAX_EMPHASIZE} or fewer at a time usually grows them faster. Consider moving some to Grow.</div>` : ''; })()}
         ${L.MUSCLES.map(m => { const pr = L.normPriority(S.priorities[m], S.focus); return `<div class="prio"><div>${m} <span class="muted small">${L.weeklyTarget(m, pr, S.focus, S.goal)} sets</span></div>
           <div class="seg c4">${L.PRIORITIES.map(p => `<button type="button" data-m="${m}" data-p="${p}" class="${pr === p ? 'on' : ''}" aria-pressed="${pr === p}" title="${esc(L.PRIORITY_INFO[p])}">${p[0].toUpperCase() + p.slice(1)}</button>`).join('')}</div></div>`; }).join('')}
       </details>
@@ -815,27 +872,27 @@ async function renderBuilder() {
           <button class="sm" id="fillLeft">Fill what's left</button>
           <button class="sm" id="clear">Clear (manual)</button>
         </div>
-        ${S.demoted?.length ? `<div class="card small" style="margin:10px 0 0">To keep your bigger muscles growing in ~${S.minutes} min, <b>${esc(S.demoted.join(', '))}</b> ${S.demoted.length > 1 ? 'were' : 'was'} set to <b>Maintain</b> (still trained; ${S.demoted.length > 1 ? 'they also get' : 'it also gets'} work from the big lifts). Growing a few muscles properly beats spreading too little across all of them. Change it under “Adjust muscles”.</div>` : ''}
-        ${S.under?.length ? `<div class="card warn small" style="margin:10px 0 0"><b>Not enough time to grow ${esc(S.under.map(u => u.muscle).join(', '))}</b> — ${esc(S.under.map(u => `${u.muscle} ${u.sets} sets/week`).join(', '))}, which maintains rather than grows (about ${S.under[0].floor}+ a week is the growth range here). Allow more time per workout, add a day, or set fewer muscles to Grow.</div>` : ''}
-        ${trimmedTxt ? `<div class="card warn small" style="margin:10px 0 0">To fit ~${S.minutes} min a workout, these weekly sets were trimmed (lowest priority first): <b>${esc(trimmedTxt)}</b>. Want them back? Add a day, allow more time, or set fewer muscles to Emphasize/Grow.</div>` : ''}
+        ${S.demoted?.length ? `<div class="card small mt10-only">To keep your bigger muscles growing in ~${S.minutes} min, <b>${esc(S.demoted.join(', '))}</b> ${S.demoted.length > 1 ? 'were' : 'was'} set to <b>Maintain</b> (still trained; ${S.demoted.length > 1 ? 'they also get' : 'it also gets'} work from the big lifts). Growing a few muscles properly beats spreading too little across all of them. Change it under “Adjust muscles”.</div>` : ''}
+        ${S.under?.length ? `<div class="card warn small mt10-only"><b>Not enough time to grow ${esc(S.under.map(u => u.muscle).join(', '))}</b> — ${esc(S.under.map(u => `${u.muscle} ${u.sets} sets/week`).join(', '))}, which maintains rather than grows (about ${S.under[0].floor}+ a week is the growth range here). Allow more time per workout, add a day, or set fewer muscles to Grow.</div>` : ''}
+        ${trimmedTxt ? `<div class="card warn small mt10-only">To fit ~${S.minutes} min a workout, these weekly sets were trimmed (lowest priority first): <b>${esc(trimmedTxt)}</b>. Want them back? Add a day, allow more time, or set fewer muscles to Emphasize/Grow.</div>` : ''}
         <h2>Weekly sets: placed / target</h2>
         <div class="chips">${L.MUSCLES.filter(m => targets[m] || placed[m]).map(m => {
           const p = placed[m], t = targets[m]; const cls = p < t ? 'under' : p > t * 1.25 + 1 ? 'over' : 'ok';
           return `<span class="chip ${cls}">${m} ${p}/${t}</span>`; }).join('')}</div>
       </div>
       ${S.plan.map((d, di) => `<div class="card">
-        <div class="row"><input data-label="${di}" value="${esc(d.label)}" style="flex:1">
+        <div class="row"><input class="flex1" data-label="${di}" value="${esc(d.label)}">
           <span class="pill ${mins[di] > S.minutes + 2 ? 'warn' : ''}">${dayTotals[di]} sets · ~${mins[di]} min</span></div>
-        ${mins[di] > S.minutes + 2 ? `<div class="muted small" style="color:var(--warn);margin-top:6px">About ${mins[di]} min — longer than your ${S.minutes} min. Remove a slot, add a day, or move a muscle to Maintain.</div>` : ''}
+        ${mins[di] > S.minutes + 2 ? `<div class="muted small warn-text mt6">About ${mins[di]} min — longer than your ${S.minutes} min. Remove a slot, add a day, or move a muscle to Maintain.</div>` : ''}
         ${d.slots.map((s, si) => `<div class="slot">
           <select data-sm="${di}.${si}">${[...L.MUSCLES, 'Cardio'].map(m => `<option ${m === s.muscle ? 'selected' : ''}>${m}</option>`).join('')}</select>
           <select data-se="${di}.${si}">${exOptions(s.muscle, s.exerciseId)}</select>
           <input type="number" inputmode="numeric" min="1" max="10" value="${s.sets}" data-ss="${di}.${si}">
-          <button class="ghost danger sm" data-rm="${di}.${si}">✕</button></div>`).join('')}
+          <button class="ghost danger sm icon-btn" data-rm="${di}.${si}" aria-label="Remove this exercise">${ic('x')}</button></div>`).join('')}
         <div class="spacer"></div><button class="sm block" data-add="${di}">+ Add exercise slot</button>
       </div>`).join('')}
       <div class="row"><button id="back1" class="grow">‹ Back</button><button class="primary grow" id="create">Create mesocycle</button></div>
-      <div class="spacer"></div><button class="ghost block" id="saveTpl">☆ Save this plan as a template</button>`;
+      <div class="spacer"></div><button class="ghost block" id="saveTpl">${ic('star')} Save this plan as a template</button>`;
     const at = s => s.split('.').map(Number);
     { const nc = $('#noCarry'); if (nc) nc.onclick = () => { S.carry = null; step2(); }; }
     $('#fillAll').onclick = () => { S.plan = buildFit('all'); step2(); };
@@ -919,10 +976,10 @@ async function renderMeso(id) {
         ${days.filter(d => d.week === w).map(d => `<button class="day ${d.completed_at ? 'done' : ''} ${d.skipped_at ? 'skipped' : ''} ${d.started_at && !d.completed_at && !d.skipped_at ? 'live' : ''} ${next && d.id === next.id ? 'next' : ''}" data-day="${d.id}">${esc(dayName(d))}</button>`).join('')}
       </div>`; }).join('')}
     </div></div><div class="spacer"></div>
-    ${next ? '<button class="primary block" id="go">Go to next workout</button>' : '<p class="muted center">All workouts done 🎉</p>'}
+    ${next ? '<button class="primary block" id="go">Go to next workout</button>' : `<p class="muted center">All workouts done ${ic('party', 'accent')}</p>`}
     <div class="spacer"></div>
-    <div class="grid2"><button data-go="#/volume/${id}">📊 Volume</button><button data-go="#/history">🗂 History</button>
-      <button id="again">↻ Run it again</button><button id="tpl">☆ Save as template</button></div>
+    <div class="grid2"><button data-go="#/volume/${id}">${ic('bars')} Volume</button><button data-go="#/history">${ic('history')} History</button>
+      <button id="again">${ic('refresh')} Run it again</button><button id="tpl">${ic('star')} Save as template</button></div>
     <div class="spacer"></div>
     ${meso.status !== 'completed' ? '<button class="block" id="complete">Mark complete</button>' : ''}
     <div class="danger-zone"><button class="link-danger" id="del">Delete this mesocycle…</button></div>`;
@@ -1046,7 +1103,7 @@ async function renderWorkout(dayId, mode) {
     if (cur) return renderWorkout(cur.id);
     app.innerHTML = `<div class="card"><h3>No workout queued</h3><p class="muted">${m ? 'This mesocycle is finished.' : 'Start a mesocycle to get your next workout here.'}</p>
       <div class="grid2"><button class="primary" data-go="#/new">+ New mesocycle</button><button data-go="#/templates">Templates</button></div></div>
-      <button class="list-btn" data-go="#/cardio"><span>♥︎</span><div class="grow"><b>Just cardio today?</b><div class="muted small">Log time and intensity</div></div>›</button>`;
+      <button class="list-btn" data-go="#/cardio"><span class="list-ico">${ic('heart')}</span><div class="grow"><b>Just cardio today?</b><div class="muted small">Log time and intensity</div></div>›</button>`;
     return $$('[data-go]').forEach(b => b.onclick = () => { if (b.dataset.go === '#/new') builder = null; go(b.dataset.go); });
   }
   const day = overlayDays([check(await sb.from('workout_days').select('*, mesocycles(*)').eq('id', dayId).single())])[0];
@@ -1165,15 +1222,15 @@ async function renderWorkout(dayId, mode) {
   const histNote = we => { const x = insights[we.exercise_id]; if (!x || deload || day.completed_at) return '';
     const lastE = x.entries.at(-1)?.e, best = Math.max(x.prior || 0, ...x.entries.map(w => w.e));
     if (!lastE || !(best > lastE * 1.05)) return '';
-    return `<span class="hist-note">📌 ${Math.round((1 - lastE / best) * 100)}% below your all-time best estimate — for reference only; today's targets come from last week.</span>`; };
-  const FLAG = { stalled: '⚠️', regressing: '📉', pr: '🏆' };
+    return `<span class="hist-note">${ic('pin')} ${Math.round((1 - lastE / best) * 100)}% below your all-time best estimate — for reference only; today's targets come from last week.</span>`; };
+  const FLAG = { stalled: 'minus', regressing: 'trendDown', pr: 'trophy' };
   // One coach note per lift (v1.11): this week's plan, plus last weeks' trend if it needs attention. Tap → what to do.
   const coachLine = we => {
     if (day.completed_at || isCardio(we)) return we.flag && !day.completed_at ? `<div class="coach-flag">${esc(we.flag)}</div>` : '';
     const n = suggestionFor(we, 0)?.note, x = insights[we.exercise_id], st = x && FLAG[x.status.status] ? x.status : null;
-    const plan = n && n !== 'Deload' ? `${/faster|extra rep/i.test(n) ? '⤴︎' : /holding|smaller|same weight/i.test(n) ? '⏸︎' : '↗︎'} <span class="prog-note">This week: ${esc(n)}</span>` : '';
-    const trend = !st ? '' : st.status === 'pr' ? `🏆 New best last time (+${st.pct.toFixed(1)}%)`
-      : st.status === 'stalled' ? '● Same as the last 2 weeks — tap for a tip' : `▼ ${Math.abs(st.pct).toFixed(1)}% under 2 weeks ago — tap for a tip`;
+    const plan = n && n !== 'Deload' ? `${ic(/faster|extra rep/i.test(n) ? 'trendUp' : /holding|smaller|same weight/i.test(n) ? 'pause' : 'arrowUpRight')} <span class="prog-note">This week: ${esc(n)}</span>` : '';
+    const trend = !st ? '' : st.status === 'pr' ? `${ic('trophy', 'pr')} New best last time (+${st.pct.toFixed(1)}%)`
+      : st.status === 'stalled' ? `${ic('minus')} Same as the last 2 weeks — tap for a tip` : `${ic('trendDown')} ${Math.abs(st.pct).toFixed(1)}% under 2 weeks ago — tap for a tip`;
     const flag = we.flag ? `<div class="coach-flag">${esc(we.flag)}</div>` : '';
     if (!plan && !trend) return flag;
     const inner = `${plan ? `<div>${plan}</div>` : ''}${trend ? `<div class="coach-trend">${trend}</div>` : ''}`;
@@ -1211,13 +1268,13 @@ async function renderWorkout(dayId, mode) {
   };
   const lastOfMuscle = {}; wes.forEach(w => lastOfMuscle[isCardio(w) ? 'Cardio' : w.exercises.muscle_group] = w.id);
   const firstOfMuscle = {}; wes.filter(w => !isCardio(w)).forEach(w => { firstOfMuscle[w.exercises.muscle_group] ??= w.id; });
-  const infoBtn = we => `<button class="ghost sm" data-info="${we.id}" aria-label="Warm-up and tips for ${esc(we.exercises.name)}" title="Warm-up & tips">ⓘ</button>`;
+  const infoBtn = we => `<button class="ghost sm" data-info="${we.id}" aria-label="Warm-up and tips for ${esc(we.exercises.name)}" title="Warm-up & tips">${ic('info')}</button>`;
   // v1.11: only how today's muscles recovered; missed sets and lift trends live on the meso page / each lift's note.
   const todayWarn = day.completed_at ? [] : (await slipFor(meso)).filter(w => ['recovery', 'joints', 'workload'].includes(w.kind) && muscles.includes(w.muscle));
   const cardioCard = we => {
     const n = Math.max(we.sets.length, we.target_sets || 0, 1);
     return `<div class="card" data-we="${we.id}" data-muscle="Cardio">
-      <div class="row"><div class="grow"><h3>♥︎ ${esc(we.exercises.name)} <span class="trend" data-trend="${we.id}"></span></h3>
+      <div class="row"><div class="grow"><h3>${ic('heart')} ${esc(we.exercises.name)} <span class="trend" data-trend="${we.id}"></span></h3>
         <div class="muted small">Cardio · minutes + intensity (RPE 0 easy → 10 max)</div></div>
         ${infoBtn(we)}</div>
       <div class="sets"><div class="set-head"><div>#</div><div>min</div><div>RPE</div><div></div></div>
@@ -1227,25 +1284,25 @@ async function renderWorkout(dayId, mode) {
             <input type="number" inputmode="numeric" min="0" max="10" data-f="rpe" value="${s.rpe ?? ''}" placeholder="0–10">
             <button class="check">✓</button></div>`; }).join('')}
       </div>
-      <div class="row" style="margin-top:8px"><button class="ghost sm" data-addset>+ bout</button><button class="ghost sm" data-rmset>− bout</button></div>
+      <div class="row mt8"><button class="ghost sm" data-addset>+ bout</button><button class="ghost sm" data-rmset>− bout</button></div>
       ${lastOfMuscle.Cardio === we.id ? `<div data-rate="Cardio">${rateLine('Cardio', feedback.Cardio)}</div>` : ''}</div>`;
   };
 
   app.innerHTML = `
-    ${preview ? `<div class="card info small preview-banner"><b>👀 Preview</b> — not started, nothing can be logged here.
-      <div class="grid2" style="margin-top:8px"><button class="primary sm" data-go="#/workout/${day.id}">Start this day</button><button class="sm" data-go="#/meso/${meso.id}">All days</button></div></div>` : ''}
+    ${preview ? `<div class="card info small preview-banner"><b>${ic('eye')} Preview</b> — not started, nothing can be logged here.
+      <div class="grid2 mt8"><button class="primary sm" data-go="#/workout/${day.id}">Start this day</button><button class="sm" data-go="#/meso/${meso.id}">All days</button></div></div>` : ''}
     ${day.completed_at ? '<div class="card good small">Finished ✓ — you can still edit sets and ratings.</div>' : ''}
     ${day.completed_at ? '' : (() => { let seen = false; try { seen = localStorage.getItem('wl_warmup_seen') === '1'; } catch {}
-      return seen ? '<div class="muted small warm-line">🔥 Warm up first — tap ⓘ on each muscle’s first exercise for ramp-up sets. Warm-ups aren’t logged.</div>'
-        : `<div class="card info small" id="warmNote"><b>🔥 Warm up before your first set</b>
+      return seen ? `<div class="muted small warm-line">${ic('flame')} Warm up first — tap ${ic('info')} on each muscle’s first exercise for ramp-up sets. Warm-ups aren’t logged.</div>`
+        : `<div class="card info small" id="warmNote"><b>${ic('flame')} Warm up before your first set</b>
           <ol class="tight"><li>5 min easy cardio + a few dynamic moves (leg swings, arm circles, bodyweight squats).</li>
-          <li>On the <b>first exercise for each muscle</b>, tap <b>ⓘ</b> for 2–3 light ramp-up sets worked out from today’s weight.</li>
+          <li>On the <b>first exercise for each muscle</b>, tap <b>${ic('info')}</b> for 2–3 light ramp-up sets worked out from today’s weight.</li>
           <li>Warm-up sets are <b>not logged</b> and never count toward your sets or progress — only log working sets.</li></ol>
           <button class="ghost sm" id="warmOk">Got it</button></div>`; })()}
     ${deload ? '<div class="card info small"><b>Light (deload) week.</b> Same weights as last week, half the sets, stop about 4 reps short of failure.</div>' : ''}
     ${!deload && goal === 'athletic' ? '<div class="card info small"><b>Athleticism.</b> Move every rep of the main lifts as fast as you can with good form, and end the set when the speed drops — even if reps are left.</div>' : ''}
     ${!deload && goal === 'strength' ? '<div class="card info small"><b>Strength.</b> Heavy main lifts first while you’re fresh; rest 3–5 min between them. Never grind to failure.</div>' : ''}
-    ${todayWarn.length ? `<details class="heads-up"><summary>⚠ ${esc(todayWarn[0].msg)}${todayWarn.length > 1 ? `&nbsp;·&nbsp;<span class="muted">+${todayWarn.length - 1} more</span>` : ''}</summary>${warnList(todayWarn)}</details>` : ''}
+    ${todayWarn.length ? `<details class="heads-up"><summary>${ic('alert')} ${esc(todayWarn[0].msg)}${todayWarn.length > 1 ? `&nbsp;·&nbsp;<span class="muted">+${todayWarn.length - 1} more</span>` : ''}</summary>${warnList(todayWarn)}</details>` : ''}
     ${wes.map(we => {
       if (isCardio(we)) return cardioCard(we);
       const ex = we.exercises; const n = Math.max(we.sets.length, we.target_sets || 0, 1);
@@ -1253,7 +1310,7 @@ async function renderWorkout(dayId, mode) {
       return `<div class="card" data-we="${we.id}" data-muscle="${esc(ex.muscle_group)}">
         <div class="row"><div class="grow"><h3>${esc(ex.name)} <span class="trend" data-trend="${we.id}"></span></h3>
           <div class="meta">${esc(ex.muscle_group)} · ${we.target_sets} × ${ex.rep_min}–${ex.rep_max} reps · ${deload ? 'light week' : effortShort(we.target_rir)}</div></div>
-          ${infoBtn(we)}${!day.completed_at && !preview ? `<button class="ghost sm" data-replace="${we.id}" aria-label="Replace ${esc(ex.name)}" title="Replace exercise">⇄</button>` : ''}</div>
+          ${infoBtn(we)}${!day.completed_at && !preview ? `<button class="ghost sm" data-replace="${we.id}" aria-label="Replace ${esc(ex.name)}" title="Replace exercise">${ic('swap')}</button>` : ''}</div>
         ${coachLine(we)}
         <div class="sets"><div class="set-head"><div>#</div><div>${wLabel(ex)}</div><div>reps</div><div></div></div>
           ${Array.from({ length: n }, (_, i) => {
@@ -1266,7 +1323,7 @@ async function renderWorkout(dayId, mode) {
               <button class="check" aria-label="Set ${i + 1} done">✓</button></div>`;
           }).join('')}
         </div>
-        <div class="row" style="margin-top:8px"><button class="ghost sm" data-addset>+ set</button><button class="ghost sm" data-rmset>− set</button>
+        <div class="row mt8"><button class="ghost sm" data-addset>+ set</button><button class="ghost sm" data-rmset>− set</button>
           ${!deload && ex.load_type !== 'cardio' ? (r1 => `<label class="rir1 tiny" title="Optional: how many reps you really had left on set 1. Left on “as planned”, the app assumes you stopped ${we.target_rir} short.">Set 1 reps left <select data-rir1 aria-label="Reps you had left on set 1">
             <option value="">as planned (${we.target_rir})</option>${[0, 1, 2, 3, 4, 5].map(v => `<option value="${v}" ${r1 != null && r1 !== we.target_rir && r1 === v ? 'selected' : ''}>${v}${v === 5 ? '+' : ''}</option>`).join('')}</select></label>`)(we.sets.find(x => x.set_index === 1)?.rir) : ''}
           </div>
@@ -1284,12 +1341,12 @@ async function renderWorkout(dayId, mode) {
   function rateLine(m, f) {
     if (!f || needKeys(m).some(k => f[k] == null)) return '';
     const first = m === 'Cardio' ? `breathing ${RATINGS.breathing.opts[f.breathing].toLowerCase()}, ` : f.pump != null ? `pump ${RATINGS.pump.opts[f.pump].toLowerCase()}, ` : '';
-    return `<button class="rated-line" data-open="${esc(m)}"><span>✓ ${esc(m)} overall · ${first}${RATINGS.workload.opts[f.workload].toLowerCase()}, joints ${RATINGS.joint_pain.opts[f.joint_pain].toLowerCase()}</span><span class="edit">✎</span></button>`;
+    return `<button class="rated-line" data-open="${esc(m)}"><span>${ic('check')} ${esc(m)} overall · ${first}${RATINGS.workload.opts[f.workload].toLowerCase()}, joints ${RATINGS.joint_pain.opts[f.joint_pain].toLowerCase()}</span><span class="edit">${ic('pencil')}</span></button>`;
   }
   function exRated(we) { return !exFbOn || isCardio(we) || (exFb[we.id]?.workload != null && exFb[we.id]?.joint_pain != null); }
   function exRateLine(we, f) {
     if (isCardio(we) || f?.workload == null || f?.joint_pain == null) return '';
-    return `<button class="rated-line" data-exopen="${we.id}"><span>✓ This exercise · ${RATINGS.workload.opts[f.workload].toLowerCase()}, joints ${RATINGS.joint_pain.opts[f.joint_pain].toLowerCase()}</span><span class="edit">✎</span></button>`;
+    return `<button class="rated-line" data-exopen="${we.id}"><span>${ic('check')} This exercise · ${RATINGS.workload.opts[f.workload].toLowerCase()}, joints ${RATINGS.joint_pain.opts[f.joint_pain].toLowerCase()}</span><span class="edit">${ic('pencil')}</span></button>`;
   }
   const wireRate = () => {
     $$('[data-open]').forEach(b => b.onclick = () => openRating(b.dataset.open, !isRated(b.dataset.open) && muscleComplete(b.dataset.open)));
@@ -1395,7 +1452,7 @@ async function renderWorkout(dayId, mode) {
     openSheet(`<h3>${esc(m)} overall today</h3>
       <div class="muted small">${required ? 'All of today’s ' + esc(m) + ' work together — sets next week come from this.' : 'Adjust your ratings.'}</div>
       <button type="button" class="allnormal" id="allNormal">✓ All normal <span>pretty good, no joint pain</span></button>
-      <div class="card" style="margin:10px 0 4px;padding:10px"><div class="muted tiny">Progression</div>
+      <div class="card box-tight"><div class="muted tiny">Progression</div>
         ${exs.map(w => { const tr = exComplete(w) ? exerciseTrend(w) : null;
           const ef = exFb[w.id], er = ef?.workload != null ? ` <span class="muted tiny">· ${RATINGS.workload.opts[ef.workload].toLowerCase()}, joints ${RATINGS.joint_pain.opts[ef.joint_pain].toLowerCase()}</span>` : '';
           return `<div class="mover"><span>${esc(w.exercises.name)}${er}</span>${tr ? trendHtml(tr) : `<span class="muted tiny">${exComplete(w) ? 'no history yet' : 'not finished'}</span>`}</div>`; }).join('')}</div>
@@ -1499,6 +1556,7 @@ async function renderWorkout(dayId, mode) {
       if (row.dataset.again) { delete row.dataset.again; save(false); }
       row.dataset.at = payload.completed_at || ''; wIn.classList.remove('sug');
       row.classList.toggle('done', done);
+      if (markDone && done) haptic();
       updateDirs(we, row);
       const m = we.exercises.muscle_group;
       refreshTrend(we);
@@ -1594,9 +1652,9 @@ async function renderWorkout(dayId, mode) {
     };
   });
 
-  $('#warmOk') && ($('#warmOk').onclick = () => { try { localStorage.setItem('wl_warmup_seen', '1'); } catch {} $('#warmNote').outerHTML = '<div class="muted small warm-line">🔥 Warm up first — tap ⓘ on each muscle’s first exercise for ramp-up sets. Warm-ups aren’t logged.</div>'; });
+  $('#warmOk') && ($('#warmOk').onclick = () => { try { localStorage.setItem('wl_warmup_seen', '1'); } catch {} $('#warmNote').outerHTML = `<div class="muted small warm-line">${ic('flame')} Warm up first — tap ${ic('info')} on each muscle’s first exercise for ramp-up sets. Warm-ups aren’t logged.</div>`; });
   const trendSheet = we => { const x = insights[we.exercise_id]; if (!x) return;
-    openSheet(`<h3>${esc(we.exercises.name)}</h3><div class="row" style="margin:6px 0">${statusPill(x.status)}<span class="muted small">by meso week · reps × load</span></div>
+    openSheet(`<h3>${esc(we.exercises.name)}</h3><div class="row my6">${statusPill(x.status)}<span class="muted small">by meso week · reps × load</span></div>
       <p>${esc(x.status.rec)}</p>${x.status.vs ? `<p class="small">${esc(x.status.vs.text)}</p>` : ''}
       <div class="muted small">Last time: ${(t => t ? `${fmt(W(t.weight))} ${unit()} × ${t.reps}` : '—')(x.sessions[x.sessions.length - 1]?.top)}</div>
       <div class="spacer"></div><button class="block" id="toChart">See the chart ›</button><div class="spacer"></div><button class="primary block" id="closeFlag">Got it</button>`,
@@ -1649,9 +1707,9 @@ async function renderWorkout(dayId, mode) {
       <div id="rpList" class="rp-list">${ok.map(e => `<button class="list-btn" data-rp="${e.id}"><div class="grow"><b>${esc(e.name)}</b> <span class="muted tiny">${esc(e.equipment || '')}${P2.favorites.has(e.id) ? ' · ★' : ''}</span></div></button>`).join('') || '<p class="muted">No other exercises for this muscle.</p>'}</div>
       <div id="rpScope" hidden>
         <p class="small">Replace with <b id="rpName"></b>:</p>
-        ${logged ? `<p class="small" style="color:var(--warn)">${logged} logged set${logged > 1 ? 's' : ''} of ${esc(we.exercises.name)} will be removed from today.</p>` : ''}
+        ${logged ? `<p class="small warn-text">${logged} logged set${logged > 1 ? 's' : ''} of ${esc(we.exercises.name)} will be removed from today.</p>` : ''}
         <button class="primary block" data-scope="today">Just today</button>
-        <button class="block" data-scope="future" style="margin-top:6px">Today and every later week (this day)</button>
+        <button class="block mt6" data-scope="future">Today and every later week (this day)</button>
         <p class="muted tiny">The new exercise starts fresh: no history means you pick the weight the first time, then it progresses normally.</p></div>`,
       panel => {
         const list = panel.querySelector('#rpList');
@@ -1728,7 +1786,7 @@ async function renderWorkout(dayId, mode) {
     if (done === 'failed') { $('#finish').disabled = false; return; }
     const left = openDays(all).filter(d => d.id !== dayId);
     if (!left.length) await durableWrite({ kind: 'update', table: 'mesocycles', values: { status: 'completed' }, eq: { id: meso.id } });
-    toast(done === 'queued' ? 'Workout saved on your phone 💪 — it syncs when you’re back online' : 'Workout saved 💪', false, done === 'queued' ? 4000 : 1800);
+    toast(done === 'queued' ? 'Workout saved on your phone — it syncs when you’re back online' : 'Workout saved', false, done === 'queued' ? 4000 : 1800);
     go(left.length ? '#/' : '#/meso/' + meso.id);
   };
 }
@@ -1776,13 +1834,13 @@ async function renderCardio() {
     <div class="card"><h3>Log cardio</h3>
       <form id="f">
         <div class="row"><div class="grow"><label>Activity</label><select name="activity">${ACTIVITIES.map(a => `<option>${a}</option>`).join('')}</select></div>
-          <div style="width:140px"><label>Date</label><input type="date" name="date" value="${today()}"></div></div>
+          <div class="w140"><label>Date</label><input type="date" name="date" value="${today()}"></div></div>
         <div class="row"><div class="grow"><label>Minutes</label><input name="minutes" type="number" inputmode="decimal" step="any" required></div>
           <div class="grow"><label>Avg HR (optional)</label><input name="hr" type="number" inputmode="numeric"></div></div>
         <label>Intensity (session RPE): <b id="rpeLbl">5 · ${RPE_WORDS[5]}</b></label>
         <div class="seg c11">${Array.from({ length: 11 }, (_, i) => `<button type="button" data-rpe="${i}" class="${i === 5 ? 'on' : ''}">${i}</button>`).join('')}</div>
         <div class="row"><div class="grow"><label>Distance (optional)</label><input name="dist" type="number" inputmode="decimal" step="any"></div>
-          <div style="width:90px"><label>Unit</label><select name="du"><option>mi</option><option>km</option><option>m</option></select></div></div>
+          <div class="w90"><label>Unit</label><select name="du"><option>mi</option><option>km</option><option>m</option></select></div></div>
         <label>Notes</label><input name="notes">
         <div class="spacer"></div><button class="primary block">Save cardio</button>
       </form></div>
@@ -1791,12 +1849,12 @@ async function renderCardio() {
     ${spike ? '<div class="card warn small">Cardio load is up more than 50% vs your recent weeks. If leg recovery dips, ease off or swap running for cycling (doc §1.9).</div>' : ''}
     <div class="card"><b>Weekly load (8 weeks)</b>
       <svg class="chart" viewBox="0 0 320 120">${byWeek.map((w, i) => { const h = Math.round(w.load / maxLoad * 100);
-        return `<rect x="${i * 40 + 6}" y="${110 - h}" width="28" height="${h}" rx="4" fill="${i === 7 ? 'var(--accent)' : '#3a4150'}"></rect>
-          <text x="${i * 40 + 20}" y="119" font-size="8" fill="#8b93a3" text-anchor="middle">${w.s.getMonth() + 1}/${w.s.getDate()}</text>`; }).join('')}</svg></div>
+        return `<rect class="cbar${i === 7 ? ' now' : ''}" x="${i * 40 + 6}" y="${110 - h}" width="28" height="${h}" rx="4"></rect>
+          <text x="${i * 40 + 20}" y="119" font-size="9" text-anchor="middle">${w.s.getMonth() + 1}/${w.s.getDate()}</text>`; }).join('')}</svg></div>
     <h2>Recent</h2>
     ${list.length ? `<div class="card"><table><tr><th>Date</th><th>Activity</th><th>Min</th><th>RPE</th><th>Load</th><th></th></tr>
       ${list.slice(0, 30).map(c => `<tr><td>${c.performed_on.slice(5)}</td><td>${esc(c.activity)}${c.distance ? ` <span class="muted tiny">${fmt(c.distance)}${c.distance_unit}</span>` : ''}</td>
-        <td>${fmt(c.minutes)}</td><td>${c.rpe}</td><td>${fmt(L.cardioLoad(c))}</td><td><button class="ghost sm danger" data-del="${c.id}">✕</button></td></tr>`).join('')}</table></div>` : '<p class="muted">No cardio logged yet.</p>'}`;
+        <td>${fmt(c.minutes)}</td><td>${c.rpe}</td><td>${fmt(L.cardioLoad(c))}</td><td><button class="ghost sm danger" data-del="${c.id}" aria-label="Delete this cardio session">${ic('x')}</button></td></tr>`).join('')}</table></div>` : '<p class="muted">No cardio logged yet.</p>'}`;
   $$('[data-rpe]').forEach(b => b.onclick = () => { rpe = +b.dataset.rpe; $$('[data-rpe]').forEach(x => x.classList.toggle('on', x === b)); $('#rpeLbl').textContent = `${rpe} · ${RPE_WORDS[rpe]}`; });
   $('#f').onsubmit = async e => {
     e.preventDefault(); const fd = new FormData(e.target);
@@ -1812,14 +1870,14 @@ async function renderCardio() {
 function renderExplore() {
   setHeader('More', null, 'explore');   // v1.11: "More" = learn, stats and settings; exercises/templates live in Library, mesos in Mesos
   const items = [
-    ['#/learn', '🎓', 'Learn', 'Sets, reps and effort for size, strength, athleticism and cardio — with the research'],
-    ['#/history', '🗂', 'History', 'Every workout and cardio session'],
-    ['#/progress', '📈', 'Exercise progress', 'How each lift is trending over time'],
-    ['#/volume', '📊', 'Muscle volume', 'Weekly sets per muscle vs. the range that builds muscle'],
-    ['#/cardio', '♥︎', 'Cardio', 'Minutes, intensity and load by week'],
-    ['#/settings', '⚙︎', 'Settings', 'Name, units, bodyweight, sign out'],
+    ['#/learn', 'cap', 'Learn', 'Sets, reps and effort for size, strength, athleticism and cardio — with the research'],
+    ['#/history', 'history', 'History', 'Every workout and cardio session'],
+    ['#/progress', 'trendUp', 'Exercise progress', 'How each lift is trending over time'],
+    ['#/volume', 'bars', 'Muscle volume', 'Weekly sets per muscle vs. the range that builds muscle'],
+    ['#/cardio', 'heart', 'Cardio', 'Minutes, intensity and load by week'],
+    ['#/settings', 'sliders', 'Settings', 'Name, units, bodyweight, sign out'],
   ];
-  app.innerHTML = items.map(([h, i, t, d]) => `<button class="list-btn" data-go="${h}"><span style="font-size:22px">${i}</span>
+  app.innerHTML = items.map(([h, i, t, d]) => `<button class="list-btn" data-go="${h}"><span class="list-ico">${ic(i)}</span>
     <div class="grow"><b>${t}</b><div class="muted small">${d}</div></div>›</button>`).join('') +
     `<div class="card small muted">How the app decides weights, sets and RIR: <a href="#/logic">How it works — training logic &amp; evidence</a></div>`;
   $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
@@ -1828,7 +1886,7 @@ function renderExplore() {
 // ---------- Home drill-downs (#/stats/<kind>/<arg>) ----------
 async function renderStats(kind, arg) {
   const wkNav = (base, startIso) => { const d = new Date(startIso + 'T12:00'); const p = new Date(d), n = new Date(d); p.setDate(p.getDate() - 7); n.setDate(n.getDate() + 7);
-    const cur = isoDay(weekStart()); return `<div class="row wk-nav"><button class="ghost sm" data-go="${base}/${isoDay(p)}">‹ Prev week</button><b class="grow center">Week of ${d.getMonth() + 1}/${d.getDate()}${startIso === cur ? ' (this week)' : ''}</b>${isoDay(n) <= cur ? `<button class="ghost sm" data-go="${base}/${isoDay(n)}">Next week ›</button>` : '<span style="width:84px"></span>'}</div>`; };
+    const cur = isoDay(weekStart()); return `<div class="row wk-nav"><button class="ghost sm" data-go="${base}/${isoDay(p)}">‹ Prev week</button><b class="grow center">Week of ${d.getMonth() + 1}/${d.getDate()}${startIso === cur ? ' (this week)' : ''}</b>${isoDay(n) <= cur ? `<button class="ghost sm" data-go="${base}/${isoDay(n)}">Next week ›</button>` : '<span class="w84"></span>'}</div>`; };
   const wire = () => $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
   const range = iso => { const a = new Date(iso + 'T00:00'); const b = new Date(a); b.setDate(b.getDate() + 7); return [a, b]; };
   const isIso = x => /^\d{4}-\d{2}-\d{2}$/.test(x || '');
@@ -1857,7 +1915,7 @@ async function renderStats(kind, arg) {
 
   if (kind === 'sets') {
     const iso = isIso(arg) ? arg : isoDay(weekStart()); const [a, b] = range(iso);
-    setHeader('Hard sets', '#/', 'home');
+    setHeader('Working sets', '#/', 'home');
     const rows = await fetchAll(() => sb.from('sets').select('id, weight, reps, rir, set_type, completed_at, workout_exercises!inner(id, exercise_id, exercises!inner(name, muscle_group, load_type), workout_days(id, week, label, day_index, mesocycles(name)))')
       .not('completed_at', 'is', null).is('duration_min', null).gte('completed_at', a.toISOString()).lt('completed_at', b.toISOString()).order('id'));
     const hard = rows.filter(x => x.workout_exercises.exercises.load_type !== 'cardio' && x.set_type !== 'warmup');
@@ -1903,7 +1961,7 @@ async function renderStats(kind, arg) {
     const prs = ins.filter(x => x.prs.count).sort((p, q) => q.prs.count - p.prs.count || q.prs.last.pct - p.prs.last.pct);
     const none = ins.filter(x => !x.prs.count).sort((p, q) => p.name.localeCompare(q.name));
     app.innerHTML = `<div class="card"><div class="big">${prs.reduce((t, x) => t + x.prs.count, 0)}</div><div class="muted small">PRs this meso across ${prs.length} lift${prs.length === 1 ? '' : 's'} · a PR = best weekly strength estimate beats every earlier one by more than 1%</div></div>
-      ${prs.length ? `<div class="card"><b>Lifts with PRs 🏆</b>${prs.map(x => `<button class="mover lift-row" data-go="#/progress/${x.id}/meso"><span>${esc(x.name)} <span class="muted tiny">${x.prs.count}× · latest +${x.prs.last.pct.toFixed(1)}% in wk ${x.prs.last.week}</span></span>${statusPill(x.status)}<span class="chev">›</span></button>`).join('')}</div>` : ''}
+      ${prs.length ? `<div class="card"><b>Lifts with PRs ${ic('trophy', 'pr')}</b>${prs.map(x => `<button class="mover lift-row" data-go="#/progress/${x.id}/meso"><span>${esc(x.name)} <span class="muted tiny">${x.prs.count}× · latest +${x.prs.last.pct.toFixed(1)}% in wk ${x.prs.last.week}</span></span>${statusPill(x.status)}<span class="chev">›</span></button>`).join('')}</div>` : ''}
       ${none.length ? `<div class="card"><b>No PR yet this meso</b>${none.map(x => `<button class="mover lift-row" data-go="#/progress/${x.id}/meso"><span>${esc(x.name)}</span>${statusPill(x.status)}<span class="chev">›</span></button>`).join('')}</div>` : ''}`;
     return wire();
   }
@@ -1975,10 +2033,10 @@ function renderLearn(sub) {
     app.innerHTML = `<div class="card small muted">Short, plain-language guides to what the research says — and how the app uses it. Every page links its sources.</div>
       <h2>By goal</h2>
       <div class="card"><table class="goals"><thead><tr><th>Goal</th><th>Sets/muscle/wk</th><th>Reps</th><th>Effort</th></tr></thead><tbody>
-        ${LEARN.GOALS.map(g => `<tr data-go="#/learn/${g.id}"><td><b>${g.ico} ${esc(g.name.split(' (')[0])}</b></td><td>${esc(g.weekly.replace(' per muscle', ''))}</td>
+        ${LEARN.GOALS.map(g => `<tr data-go="#/learn/${g.id}"><td><b>${ic(g.ico)} ${esc(g.name.split(' (')[0])}</b></td><td>${esc(g.weekly.replace(' per muscle', ''))}</td>
           <td>${esc(g.reps.split(';')[0].split(' at ')[0])}</td><td>${esc(g.effort.split(' — ')[0].split(' (')[0])}</td></tr>`).join('')}
-      </tbody></table><div class="muted tiny" style="margin-top:6px">Tap a row for sessions, rest, frequency and the why.</div></div>
-      <button class="list-btn" data-go="#/learn/muscles"><span style="font-size:22px">🧍</span><div class="grow"><b>Per muscle</b><div class="muted small">Sets, reps and go-to exercises for each muscle</div></div>›</button>
+      </tbody></table><div class="muted tiny mt6">Tap a row for sessions, rest, frequency and the why.</div></div>
+      <button class="list-btn" data-go="#/learn/muscles"><span class="list-ico">${ic('person')}</span><div class="grow"><b>Per muscle</b><div class="muted small">Sets, reps and go-to exercises for each muscle</div></div>›</button>
       <h2>Read</h2>
       ${LEARN.ARTICLES.map(a => `<button class="list-btn" data-go="#/learn/${a.id}"><div class="grow"><b>${esc(a.title)}</b><div class="muted small">${esc(a.body[0].slice(0, 90))}…</div></div>›</button>`).join('')}
       <div class="card small muted">The full rules the app follows: <a href="#/logic">How it works — training logic &amp; evidence</a></div>`;
@@ -1994,9 +2052,9 @@ async function renderHistory() {
   const items = [...days.filter(d => d.completed_at).map(d => ({ t: d.completed_at, kind: 'lift', d })), ...cardio.map(c => ({ t: c.performed_on + 'T12:00:00', kind: 'cardio', c }))]
     .sort((a, b) => b.t.localeCompare(a.t));
   app.innerHTML = items.length ? items.map(it => it.kind === 'lift'
-    ? `<button class="list-btn" data-go="#/workout/${it.d.id}"><span>🏋︎</span><div class="grow"><b>${esc(it.d.mesocycles?.name)} · Wk ${it.d.week} ${esc(dayName(it.d))}</b>
+    ? `<button class="list-btn" data-go="#/workout/${it.d.id}"><span class="list-ico">${ic('dumbbell')}</span><div class="grow"><b>${esc(it.d.mesocycles?.name)} · Wk ${it.d.week} ${esc(dayName(it.d))}</b>
         <div class="muted small">${new Date(it.t).toLocaleDateString()} · ${it.d.workout_exercises.reduce((a, w) => a + w.sets.filter(s => s.completed_at).length, 0)} sets</div></div>›</button>`
-    : `<div class="list-btn"><span>♥︎</span><div class="grow"><b>${esc(it.c.activity)}</b>
+    : `<div class="list-btn"><span class="list-ico">${ic('heart')}</span><div class="grow"><b>${esc(it.c.activity)}</b>
         <div class="muted small">${it.c.performed_on} · ${fmt(it.c.minutes)} min · RPE ${it.c.rpe} · load ${fmt(L.cardioLoad(it.c))}</div></div></div>`).join('')
     : '<p class="muted">Nothing logged yet.</p>';
   $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
@@ -2069,24 +2127,24 @@ async function renderProgress(exId, rangeArg, metricArg) {
   const first = ss[0], last = ss[ss.length - 1], change = first.e ? (last.e - first.e) / first.e * 100 : 0;
   setHeader(all[0].name, '#/progress', 'explore');
   app.innerHTML = `${inMeso ? `<div class="card insight st-${status.status}"><div class="row"><b class="grow">${status.status === 'new' ? 'Getting started' : 'Where this lift stands'}</b>${statusPill(status)}</div>
-      <p class="small" style="margin:6px 0 0">${esc(status.rec)}</p>${status.vs ? `<p class="small muted" style="margin:6px 0 0">${esc(status.vs.text)}</p>` : ''}</div>`
-      : `<div class="card"><b>Not in this meso</b><p class="small muted" style="margin:6px 0 0">Last done ${lastDone}. The chart and table below are its history — add it to a meso to get weekly targets and trends again.</p></div>`}
+      <p class="small mt6-only">${esc(status.rec)}</p>${status.vs ? `<p class="small muted mt6-only">${esc(status.vs.text)}</p>` : ''}</div>`
+      : `<div class="card"><b>Not in this meso</b><p class="small muted mt6-only">Last done ${lastDone}. The chart and table below are its history — add it to a meso to get weekly targets and trends again.</p></div>`}
     <div class="seg c3" role="tablist" aria-label="Chart range">${Object.entries(ranges).map(([k, v]) => `<button role="tab" aria-selected="${k === range}" class="${k === range ? 'on' : ''}" data-go="#/progress/${exId}/${k}/${metric}" ${k === 'meso' && !mesoStart ? 'disabled' : ''}>${v}</button>`).join('')}</div>
-    <div class="seg c2" role="tablist" aria-label="Chart measure" style="margin-top:8px">${[['perf', 'Performance'], ['est', 'Strength estimate']].map(([k, v]) => `<button role="tab" aria-selected="${k === metric}" class="${k === metric ? 'on' : ''}" data-go="#/progress/${exId}/${range}/${k}">${v}</button>`).join('')}</div>
+    <div class="seg c2 mt8" role="tablist" aria-label="Chart measure">${[['perf', 'Performance'], ['est', 'Strength estimate']].map(([k, v]) => `<button role="tab" aria-selected="${k === metric}" class="${k === metric ? 'on' : ''}" data-go="#/progress/${exId}/${range}/${k}">${v}</button>`).join('')}</div>
     <div class="card"><div class="muted small">${metric === 'perf' ? `Performance per session (${unit()}) · weight × (1 + reps/30), no RIR credit — rises through a meso as you add reps or weight, resets a bit at each new meso's easier week 1`
       : `Estimated strength per session (${unit()}) · weight × (1 + (reps + RIR)/30) — gives credit for reps left in the tank, so hitting the plan each week looks flat; real gains show meso to meso`}</div>
       <svg class="chart" viewBox="0 0 320 120" role="img" aria-label="Estimated strength from ${fmt(Math.round(first.e))} to ${fmt(Math.round(last.e))} ${unit()}">
-      ${mesoIdx > 0 ? `<line x1="${X(mesoIdx)}" y1="8" x2="${X(mesoIdx)}" y2="114" stroke="#3a4150" stroke-dasharray="3 3"/><text x="${X(mesoIdx) + 3}" y="14" font-size="8" fill="#8b93a3">meso start</text>` : ''}
-      <polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
-      ${ss.map((s, i) => `<circle cx="${X(i)}" cy="${Y(s.e)}" r="${prDates.has(s.at) ? 4.5 : 3}" fill="${prDates.has(s.at) ? 'var(--warn)' : 'var(--accent)'}"/>`).join('')}</svg>
+      ${mesoIdx > 0 ? `<line x1="${X(mesoIdx)}" y1="8" x2="${X(mesoIdx)}" y2="114" class="guide" stroke-dasharray="3 3"/><text x="${X(mesoIdx) + 3}" y="14" font-size="9">meso start</text>` : ''}
+      <polyline class="line" points="${pts}" fill="none" stroke-width="2.5"/>
+      ${ss.map((s, i) => `<circle cx="${X(i)}" cy="${Y(s.e)}" r="${prDates.has(s.at) ? 4.5 : 3}" class="${prDates.has(s.at) ? 'dot-pr' : 'dot'}"/>`).join('')}</svg>
       <div class="row muted tiny"><span class="grow">${fmt(Math.round(min))}</span><span>${fmt(Math.round(max))}</span></div>
-      <div class="grid3 keep" style="margin-top:8px">
+      <div class="grid3 keep mt8">
         <div class="stat center"><span class="big">${ss.length}</span><span class="muted tiny">sessions</span></div>
         ${inMeso ? `<div class="stat center"><span class="big">${change > 0 ? '+' : ''}${change.toFixed(1)}%</span><span class="muted tiny">change</span></div>`
           : `<div class="stat center"><span class="big">${new Date(all[all.length - 1].done_at).toLocaleDateString(undefined, { month: 'short', year: '2-digit' })}</span><span class="muted tiny">last done</span></div>`}
-        <div class="stat center"><span class="big">${[...prDates].filter(d => ss.some(x => x.at === d)).length}</span><span class="muted tiny">PRs <span style="color:var(--warn)">●</span></span></div></div></div>
+        <div class="stat center"><span class="big">${[...prDates].filter(d => ss.some(x => x.at === d)).length}</span><span class="muted tiny">PRs <span class="warn-text">●</span></span></div></div></div>
     <div class="card"><table><tr><th>Date</th><th>Top set</th><th>Sets</th><th class="right">${metric === 'perf' ? 'Perf.' : 'Est.'}</th></tr>
-      ${ss.slice().reverse().map(s => `<tr><td>${new Date(s.at).toLocaleDateString()}${prDates.has(s.at) ? ' 🏆' : ''}</td><td>${fmt(s.top.weight)} × ${s.top.reps}</td><td>${s.n}</td><td class="right">${fmt(Math.round(s.e))}</td></tr>`).join('')}</table></div>`;
+      ${ss.slice().reverse().map(s => `<tr><td>${new Date(s.at).toLocaleDateString()}${prDates.has(s.at) ? ' ' + ic('trophy', 'pr') : ''}</td><td>${fmt(s.top.weight)} × ${s.top.reps}</td><td>${s.n}</td><td class="right">${fmt(Math.round(s.e))}</td></tr>`).join('')}</table></div>`;
   $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
 }
 
@@ -2109,10 +2167,10 @@ async function renderVolume(mesoId) {
   }
   const bandCls = { low: 'bad', maintain: 'info', productive: 'on', high: 'warn', over: 'bad' };
   app.innerHTML = `<div class="card"><div class="row"><div class="grow"><b>${esc(meso.name)}</b></div>
-      <select id="wk" style="width:120px">${[...new Set(days.map(d => d.week))].map(w => `<option value="${w}" ${w === wk ? 'selected' : ''}>Week ${w}</option>`).join('')}</select></div>
-      <div class="muted small" style="margin-top:6px">Planned sets per muscle (direct + ½ indirect). Productive range ≈ 10–20; under 4 is below maintenance (doc §1.1).</div></div>
+      <select class="w120" id="wk">${[...new Set(days.map(d => d.week))].map(w => `<option value="${w}" ${w === wk ? 'selected' : ''}>Week ${w}</option>`).join('')}</select></div>
+      <div class="muted small mt6">Planned sets per muscle (direct + ½ indirect). Productive range ≈ 10–20; under 4 is below maintenance (doc §1.1).</div></div>
     <div class="card">${L.MUSCLES.filter(m => plan[m] || ind[m]).map(m => { const tot = plan[m] + ind[m], band = L.volumeBand(tot);
-      return `<div style="margin:10px 0"><div class="row small"><span class="grow">${m}</span><span class="muted tiny">${done[m]}/${plan[m]} done${ind[m] ? ` · +${fmt(ind[m])} indirect` : ''}</span>
+      return `<div class="my10"><div class="row small"><span class="grow">${m}</span><span class="muted tiny">${done[m]}/${plan[m]} done${ind[m] ? ` · +${fmt(ind[m])} indirect` : ''}</span>
         <span class="pill ${bandCls[band]}">${fmt(tot)}</span></div>
         <div class="bar"><i style="width:${Math.min(100, tot / 24 * 100)}%;background:${band === 'productive' ? 'var(--accent)' : band === 'maintain' ? 'var(--info)' : 'var(--warn)'}"></i>
           <b style="left:${10 / 24 * 100}%"></b><b style="left:${20 / 24 * 100}%"></b></div></div>`; }).join('')}</div>`;
@@ -2146,11 +2204,11 @@ async function renderTemplates(head, wireTabs) {
     <h2>Your templates</h2>
     ${mine.length ? mine.map(t => `<div class="card"><div class="row"><div class="grow"><b>${esc(t.name)}</b>
         <div class="muted small">${t.weeks} wks · ${t.days_per_week} days/wk · ${t.plan.reduce((a, d) => a + d.slots.length, 0)} exercises</div></div></div>
-        ${t.notes ? `<div class="muted tiny" style="margin-top:4px">${esc(t.notes)}</div>` : ''}
-        <details style="margin-top:8px"><summary class="muted small">Preview</summary>
-          ${t.plan.map(d => `<div class="small" style="margin-top:6px"><b>${esc(d.label)}</b><div class="muted tiny">${d.slots.map(x => `${esc(byId.get(x.exerciseId)?.name || x.muscle)} ×${x.sets}`).join(' · ')}</div></div>`).join('')}
+        ${t.notes ? `<div class="muted tiny mt4">${esc(t.notes)}</div>` : ''}
+        <details class="mt8"><summary class="muted small">Preview</summary>
+          ${t.plan.map(d => `<div class="small mt6"><b>${esc(d.label)}</b><div class="muted tiny">${d.slots.map(x => `${esc(byId.get(x.exerciseId)?.name || x.muscle)} ×${x.sets}`).join(' · ')}</div></div>`).join('')}
         </details>
-        <div class="grid2" style="margin-top:10px"><button class="primary sm" data-use="${t.id}">Use template</button><button class="sm danger" data-del="${t.id}">Delete</button></div></div>`).join('')
+        <div class="grid2 mt10"><button class="primary sm" data-use="${t.id}">Use template</button><button class="sm danger" data-del="${t.id}">Delete</button></div></div>`).join('')
       : '<p class="muted">Save a plan from the builder or a mesocycle and it shows up here.</p>'}`;
     wireTabs();
     $$('[data-td]').forEach(b => b.onclick = () => { tplView.days = +b.dataset.td; draw(); });
@@ -2175,13 +2233,13 @@ async function renderExercises(filter = '', head = '', wireTabs = () => {}) {
       <input id="q" placeholder="Search ${list.length} exercises" value="${esc(q)}"><div class="spacer"></div>
       <div class="chips">${['', ...L.MUSCLES, 'Cardio'].map(m => `<button class="chip ${m === mf ? 'sel' : ''}" data-mf="${m}">${m || 'All'}</button>`).join('')}</div>
       <div class="spacer"></div>
-      <div class="muted tiny">★ favorite = autofill picks it first · ⦸ exclude = autofill never picks it (choose what to use instead). Your choices only.</div>
-      <div class="card">${shown.map(e => { const pf = prefs.get(e.id); return `<div class="row exrow" style="padding:7px 0;border-bottom:1px solid var(--line)"><div class="grow">${esc(e.name)}${(e.tags || []).includes('axial') ? ' <span class="pill warn" title="Heavy spinal loading">spinal load</span>' : ''}
-        <div class="muted tiny">${esc(e.muscle_group)} · ${esc(e.equipment || '')} · ${e.kind} · ${e.load_type} · ${e.rep_min}–${e.rep_max} reps${e.secondary?.length ? ' · also ' + e.secondary.join(', ') : ''}</div></div>
+      <div class="muted tiny">${ic('star')} favorite = autofill picks it first · ${ic('ban')} exclude = autofill never picks it (choose what to use instead). Your choices only.</div>
+      <div class="card">${shown.map(e => { const pf = prefs.get(e.id); return `<div class="row exrow"><div class="grow">${esc(e.name)}${(e.tags || []).includes('axial') ? ' <span class="pill warn" title="Heavy spinal loading">spinal load</span>' : ''}
+        <div class="muted tiny">${esc(e.muscle_group)} · ${esc(e.equipment || '')} · ${e.kind} · ${e.load_type} · ${e.rep_min}–${e.rep_max} reps${e.secondary?.length ? ' · also ' + e.secondary.join(', ') : ''}</div>
         ${pf?.pref === 'exclude' ? `<div class="sub"><label for="sub-${e.id}" class="tiny">Use instead</label><select id="sub-${e.id}" data-sub="${e.id}"><option value="">— autofill decides —</option>${list.filter(x => x.muscle_group === e.muscle_group && x.id !== e.id).map(x => `<option value="${x.id}" ${pf.substitute_id === x.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></div>` : ''}</div>
-        <button class="ghost sm pref ${pf?.pref === 'favorite' ? 'on' : ''}" data-fav="${e.id}" aria-pressed="${pf?.pref === 'favorite'}" aria-label="${pf?.pref === 'favorite' ? 'Remove from favorites' : 'Mark as favorite'}: ${esc(e.name)}">${pf?.pref === 'favorite' ? '★' : '☆'}</button>
-        <button class="ghost sm pref ${pf?.pref === 'exclude' ? 'bad' : ''}" data-excl="${e.id}" aria-pressed="${pf?.pref === 'exclude'}" aria-label="${pf?.pref === 'exclude' ? 'Stop excluding' : 'Exclude'}: ${esc(e.name)}">⦸</button>
-        ${e.owner_id ? `<button class="ghost sm danger" data-del="${e.id}" aria-label="Delete ${esc(e.name)}">✕</button>` : ''}</div>`; }).join('') || '<p class="muted">No matches.</p>'}</div>
+        <button class="ghost sm pref ${pf?.pref === 'favorite' ? 'on' : ''}" data-fav="${e.id}" aria-pressed="${pf?.pref === 'favorite'}" aria-label="${pf?.pref === 'favorite' ? 'Remove from favorites' : 'Mark as favorite'}: ${esc(e.name)}">${ic('star', pf?.pref === 'favorite' ? 'fill' : '')}</button>
+        <button class="ghost sm pref ${pf?.pref === 'exclude' ? 'bad' : ''}" data-excl="${e.id}" aria-pressed="${pf?.pref === 'exclude'}" aria-label="${pf?.pref === 'exclude' ? 'Stop excluding' : 'Exclude'}: ${esc(e.name)}">${ic('ban')}</button>
+        ${e.owner_id ? `<button class="ghost sm danger" data-del="${e.id}" aria-label="Delete ${esc(e.name)}">${ic('x')}</button>` : ''}</div>`; }).join('') || '<p class="muted">No matches.</p>'}</div>
       <div class="card"><h3>Add your own</h3><form id="f">
         <label>Name</label><input name="name" required>
         <div class="row"><div class="grow"><label>Muscle</label><select name="mg">${[...L.MUSCLES, 'Cardio'].map(m => `<option ${m === mf ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
@@ -2226,8 +2284,12 @@ async function renderSettings() {
       <label for="name">Name</label><input id="name" autocomplete="name" value="${esc(profile?.display_name || '')}">
       <div class="row"><div class="grow"><label for="unit">Units</label><select id="unit"><option ${unit() === 'lb' ? 'selected' : ''}>lb</option><option ${unit() === 'kg' ? 'selected' : ''}>kg</option></select></div>
         <div class="grow"><label for="bw">Bodyweight (${unit()})</label><input id="bw" type="number" inputmode="decimal" step="any" value="${profile?.bodyweight == null ? '' : Math.round(bwD() * 10) / 10}"></div></div>
-      <div class="muted tiny" style="margin-top:6px">Bodyweight lets pull-ups, dips and push-ups count toward strength trends. Switching units only changes how weights are shown — your history stays the same.</div>
+      <div class="muted tiny mt6">Bodyweight lets pull-ups, dips and push-ups count toward strength trends. Switching units only changes how weights are shown — your history stays the same.</div>
       <div class="spacer"></div><button class="primary block" id="save">Save</button></div>
+    <div class="card"><h3>Appearance</h3>
+      <div class="seg c3 theme-seg" role="radiogroup" aria-label="Theme">${[['system', 'Match phone'], ['dark', 'Dark'], ['light', 'Light']].map(([v, l]) =>
+        `<button type="button" role="radio" data-theme-pick="${v}" aria-checked="${themePref() === v}" class="${themePref() === v ? 'on' : ''}">${l}</button>`).join('')}</div>
+      <div class="muted tiny mt6">Saved on this phone.</div></div>
     <div class="card"><h3>Training preferences</h3>
       <div class="muted small">Used when the app builds a mesocycle for you. These are your choices; you can still add any exercise by hand.</div>
       <fieldset class="plain"><legend class="small">Equipment I have</legend>
@@ -2235,8 +2297,8 @@ async function renderSettings() {
         <div class="muted tiny">Bodyweight moves are always included.</div></fieldset>
       <label class="switch"><input type="checkbox" id="avoidAxial" ${avoidAxial ? 'checked' : ''}> <span>Avoid heavy spinal loading</span></label>
       <details class="small"><summary class="muted">${axial.length} exercises are tagged (bar on the back, shoulder-pad machines, heavy barbell hinges/rows, standing overhead press)</summary>
-        <div class="muted tiny" style="margin-top:6px">${axial.map(e => esc(e.name)).join(' · ')}</div>
-        <div class="muted tiny" style="margin-top:6px">Want to keep one of these? Star it in the Exercise library — favorites are always allowed.</div></details>
+        <div class="muted tiny mt6">${axial.map(e => esc(e.name)).join(' · ')}</div>
+        <div class="muted tiny mt6">Want to keep one of these? Star it in the Exercise library — favorites are always allowed.</div></details>
       <div class="spacer"></div><button class="block" id="savePrefs">Save preferences</button>
       <button class="ghost block sm" data-go="#/exercises">Favorites &amp; exclusions → Exercise library</button></div>
     <div class="card"><h3>Smallest weight jumps</h3>
@@ -2272,6 +2334,11 @@ async function renderSettings() {
   };
   $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
   $('#out').onclick = async () => { await sb.auth.signOut(); go('#/'); };
+  $$('[data-theme-pick]').forEach(b => b.onclick = () => {
+    try { localStorage.setItem('wl_theme', b.dataset.themePick); } catch {}
+    applyTheme(b.dataset.themePick);
+    $$('[data-theme-pick]').forEach(x => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-checked', on); });
+  });
   $('#pw').onclick = () => renderNewPassword(false);
 }
 

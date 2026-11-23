@@ -12,6 +12,74 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.13.0 — 2026-11-23 · "Foundations" (design PR 1)
+
+*Built 2026-11-22 as 1.12.0, then rebuilt on top of 1.12.3 so every 1.12.x change is kept:*
+- *the new builder now uses the design tokens;*
+- *the theme-before-first-paint script moved from inline to `theme.js`, because the Content-Security-Policy blocks inline scripts;*
+- *screenshots now use the de-personalised test account and live on the `pr-assets` branch, not in this public repo.*
+
+The look-and-feel foundation for the App-Store-quality pass. No training logic, data, routes or storage keys changed.
+
+**Brand**
+- New logomark (a "W" over a barbell) and wordmark in the Home header; tagline "Lift smarter, week by week."
+- New icons: 192/512 "any", 192/512 maskable (safe-zone padded), 180 Apple touch icon, SVG + 32px favicon. Branded launch screen while the app loads. Manifest gets description, categories and new colours.
+
+**Design system** (styles.css is now layered: tokens → components)
+- Every colour is a token. The 43 hard-coded hex values are gone, and so are the hex fills in SVG charts (now classes). The 46 inline `style=""` attributes are down to 6 that carry data (bar widths, grid column count).
+- Semantic tokens (`--surface-1/2/3`, `--border`, `--focus`, `--pr`, `--dip`, `--on-track`, status colours), a spacing scale (4/8/12/16/24/32), a radius scale and two elevation levels (cards have a subtle shadow and inner highlight).
+- Type: 12 different sizes became a 6-step scale (13/14/16/18/22/28). Nothing is under 13px, and every number uses tabular figures; key numbers are bold. System font (SF Pro on iPhone), no webfont.
+- **Light theme** (ADDITIVE): follows the phone by default. Settings → Appearance → Match phone / Dark / Light, saved on this phone (`wl_theme`), applied before first paint so there's no flash.
+
+**Icons**
+- About 60 emoji used as icons became one consistent line-icon set (24px, 1.75 stroke), including the 👋 greeting, 🏆 PRs, ⓘ, ⇄, ★/☆/⦸, the 🔥 warm-up and the tab bar. Icon-only buttons have labels and ≥44px tap areas.
+
+**Motion** (ADDITIVE; switched off when the phone asks for reduced motion)
+- 150–250ms: screens fade/rise in, sheets slide up, buttons press, the set check pops, PR badges glow once.
+- Haptic tick on set completion where the phone supports it (Android; iPhone Safari has no vibration API).
+
+**Bugs fixed**
+- Home charts: the tallest bar's number was clipped. A cardio session saved without minutes made the whole cardio chart blank (NaN).
+- Home stat tiles had uneven heights and misaligned labels.
+- Library: a misplaced closing tag put only the first exercise inside the card. Every other row fell outside it with its buttons wrapped underneath.
+- *(This PR's `?v=` fix already shipped in 1.11.1.)*
+
+**Tests**
+- New `test/e2e/design1.py`, run on 12 screens: no emoji icons, no text under 13px, every icon-only button labelled, 44px tap targets, chart labels not clipped and no NaN bars, equal stat tiles, every library row inside its card, theme picker applies and is remembered.
+- `test/e2e/shots.py` captures 5 screens × phone/desktop × dark/light for before/after reviews (kept on the `pr-assets` branch, never in `main`).
+
+---
+
+**Rollback:** app → `release/v1.12.3`. Nothing changed in the database. The only new phone setting is `wl_theme`, which older versions ignore.
+
+---
+
+## 1.12.3 — 2026-11-23 · Finish a workout with no signal (outside audit, finding 3)
+
+*(This entry was added in 1.13.0; it was left out of the 1.12.3 commit by mistake.)*
+
+**What changed for you**
+- **Rating with no signal:** exercise and muscle ratings, including ✓ All normal, are saved on your phone and show as rated straight away. You're not asked again after a reload.
+- **Finishing with no signal:** finishing works from what's on your phone:
+  - the sets as loaded;
+  - every edit made since;
+  - anything still waiting.
+
+  It says "Workout saved on your phone — it syncs when you're back online". Home and the meso already treat that workout as done.
+- **Syncing by itself:** everything goes out when the signal is back, in order, sets first, then ratings, then the finish. The badge shows what's waiting ("1 set + 2 changes waiting to sync").
+- **Fix:** the sync badge could cover the **Finish workout** button. The page now leaves room under it.
+
+**Underneath**
+- A second phone queue (`wl_pending_ops_v1:<user>`) holds ratings and finish changes in order, each one written before it's sent. Every change is idempotent (an upsert on its natural key, or an update to fixed values), so a retry can't apply it twice.
+- The account is fixed per change. Refused changes are kept aside with a message, never silently dropped.
+- Still online-only: the recovery questions at the *start* of the next workout, because they change next week's sets on the server.
+- Tests: `offline123.py` covers rating with no signal, a reload, finishing with no signal, sync order, and nothing left waiting. It fails on 1.12.2.
+- No database change.
+
+**Rollback:** app → `release/v1.12.2`.
+
+---
+
 ## 1.12.2 — 2026-11-23 · Suggested follows your running meso
 
 - **Fix (found checking 1.12.1 live):** Suggested could carry on from an older imported meso instead of the one you're running. Imported mesos share one creation time, so the running one could fall outside the 10 newest the app looked at.
