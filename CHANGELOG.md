@@ -12,6 +12,24 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.13.1 — 2026-11-23 · Dark ↔ Normal in one tap, accessibility pass
+
+**Dark / Normal switch**
+- A sun or moon button at the top of **every screen** switches between **Dark** and **Normal** (light) in one tap. The choice is saved on this phone and stays after closing the app.
+- Settings → Appearance still has all three: **Match phone**, **Dark**, **Normal** ("Light" is now called Normal).
+
+**Accessibility** (outside audit; automated axe-core WCAG 2.1 AA checks on 16 screens, in dark and light)
+- Every form field has its label linked. This covers Library → new exercise, Log cardio and the Volume week picker: screen readers say the field's name, and tapping a label focuses its field.
+- Chart bars are named for what they open ("Week of 11/23: 42, open details"). The numbers drawn on the chart no longer clash with that name.
+- A lift's trend tip says what tapping it does ("Show the tip for …") and includes the text you see.
+- Wide tables on the "How it works" page can be scrolled with a keyboard.
+- No colour-contrast problems were found in either theme.
+- The new test `a11y.py` fails on any serious or critical issue. CI installs axe-core, and the checker is injected only in tests (the app's security policy blocks it, as it should).
+
+**Rollback:** app → `release/v1.13.0`. No database change.
+
+---
+
 ## 1.13.0 — 2026-11-23 · "Foundations" (design PR 1)
 
 *Built 2026-11-22 as 1.12.0, then rebuilt on top of 1.12.3 so every 1.12.x change is kept:*
