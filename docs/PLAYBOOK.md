@@ -53,10 +53,10 @@ How every change gets to the live app, how we check it, and how we undo it. Foll
 7. Tier B/C: rollback rehearsed (`git revert` on a scratch branch builds and passes e2e; data steps proven in PGlite).
 
 **Merging and deploying**
-8. Tag the rollback point *before* merging: `git tag -a vX.Y.Z-pre -m "before X.Y.Z" origin/main && git push origin vX.Y.Z-pre` (or confirm the previous release tag exists).
+8. Mark the rollback point *before* merging: push a release branch at the current live commit, `git push origin origin/main:refs/heads/release/vA.B.C` (A.B.C = the version live now), or confirm it exists. *(Release branches instead of git tags: the build environment's proxy refuses tag pushes. A branch marks a commit just as well.)*
 9. Tier B: take a snapshot: `select backup.take_snapshot();` (record the `taken_at`: `select max(taken_at) from backup.snapshot;`).
 10. Merge the PR (merge commit, not squash, so one `git revert -m 1` undoes it). Apply an approved migration *after* the snapshot and *before* or with the merge, as the PR says.
-11. Tag the release: `git tag -a vX.Y.Z -m "X.Y.Z" <merge sha> && git push origin vX.Y.Z`.
+11. Mark the release: `git push origin <merge sha>:refs/heads/release/vX.Y.Z`.
 
 **After deploying (about 1–2 minutes for Pages)**
 12. Smoke test on the live site (§5). If it fails → §6.
@@ -65,7 +65,7 @@ How every change gets to the live app, how we check it, and how we undo it. Foll
 
 ## 5. Smoke test (live site, 5 minutes)
 
-1. Open the live app in a fresh tab (or hard-refresh). **More → Settings** shows the new version; the page source shows the new `?v=`.
+1. Open the live app in a fresh tab (or hard-refresh). the version line at the bottom of Settings ("Woodhouse Lifts X.Y.Z · What's new") shows the new version (or open `app.js?v=N` and read `APP_VERSION`); the page source shows the new `?v=`.
 2. No errors in the browser console on Home, a workout, the builder and Settings.
 3. Open today's workout: suggestions appear, the first set is visible, a weight can be typed.
 4. On a preview or test meso only: tick a set, open the rating sheet, use **All normal**, then undo or delete the test set. *Never log test sets into a real user's training.*
@@ -86,10 +86,10 @@ git checkout main && git pull
 git revert -m 1 <merge-sha>          # undoes the whole release as one new commit
 # bump APP_VERSION patch + every ?v= to a NEW number (never reuse a number, so phones fetch fresh files)
 git commit -am "Roll back X.Y.Z: <reason>" && git push
-git tag -a vX.Y.Z-rollback -m "rolled back" HEAD && git push origin vX.Y.Z-rollback
+git push origin HEAD:refs/heads/release/vX.Y.Z-rolled-back
 ```
 - Pages redeploys in about a minute. Run the smoke test (§5) against the old behavior.
-- Alternative when several releases must go: `git checkout vA.B.C -- .` (restore the files of a known-good tag), bump `?v=`, commit, push.
+- Alternative when several releases must go: `git checkout vA.B.C -- .` (restore the files of a known-good release branch, e.g. `git checkout origin/release/v1.11.0 -- .`), bump `?v=`, commit, push.
 - **Phones:** the `?v=` bump makes browsers load the new files. *When a service worker ships (planned PR 4) it must be network-first with an update banner and a kill switch* (a `sw.js` that unregisters itself), so a rollback always reaches installed apps.
 - Re-apply later by reverting the revert, after the fix.
 
@@ -139,3 +139,9 @@ Each release entry ends with one line, e.g.:
 - Before the first service worker release (PR 4): rehearse an app rollback on a scratch branch with the service worker installed, including the kill switch.
 - Monthly: confirm the weekly snapshot ran (`select max(taken_at) from backup.snapshot;` is less than 8 days old).
 - When adding a table: add it to `backup.take_snapshot`, to the restore script's table list (parents first), and to the drill.
+
+## 10. Release log
+
+| Version | Released | Merge | Rollback point | Pre-release snapshot | Smoke test |
+|---|---|---|---|---|---|
+| 1.11.1 | 2026-11-23 03:25 UTC | `936ef4b` (PR #2) | `release/v1.11.0` = `d7e3e11` | 2026-11-23 03:24:06 UTC (11 tables, 14,286 sets) | Live files 1.11.1, `?v=31`, new doc link; app loads with no errors; security advisors unchanged. Signed-in steps 3–5: Anthony to check on his phone. |

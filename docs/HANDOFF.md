@@ -4,9 +4,9 @@
 
 ---
 
-## 0. Status (2026-11-22)
+## 0. Status (2026-11-23)
 
-Live: **1.11.0**. Open PRs: **#2** (1.11.1, engine fixes + this playbook) and **#1** (1.12.0, design foundations; rebase after #2, `?v=32`). Release order, one at a time with a smoke test between: 1.11.1 → 1.12.0 → body-area protection (uses `profiles.avoid_tags`, no migration) → workout screen → home/library/mesos → install/offline/service worker (rehearse the kill switch first) → onboarding → code quality (module split, CI, linter, one version number, pinned supabase-js). Every release follows `docs/PLAYBOOK.md`. User-specific status (accounts, pending data fixes) lives only in the private Drive copy of this page, never in this public repo.
+Live: **1.11.1** (released by the playbook; rollback point `release/v1.11.0`). Next: **PR #1** (1.12.0, design foundations; rebase on 1.11.1, `?v=32`), then body-area protection (uses `profiles.avoid_tags`, no migration) → workout screen → home/library/mesos → install/offline/service worker (rehearse the kill switch first) → onboarding → code quality (module split, CI, linter, one version number, pinned supabase-js). Every release follows `docs/PLAYBOOK.md`; the release log is its §10. User-specific status (accounts, pending data fixes) lives only in the private Drive copy of this page, never in this public repo.
 
 ## 1. What it is
 
