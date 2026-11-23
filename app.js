@@ -1,8 +1,8 @@
 // v1.12.1: pinned to one reviewed release, so the code users get only changes with a commit here (outside audit, finding 4).
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.2/+esm';
-import * as L from './logic.js?v=43';
-import * as LEARN from './learn.js?v=43';
-import * as MD from './md.js?v=43';
+import * as L from './logic.js?v=44';
+import * as LEARN from './learn.js?v=44';
+import * as MD from './md.js?v=44';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -19,7 +19,7 @@ let authReturn = (() => {
   return null;
 })();
 let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
-export const APP_VERSION = '1.14.1'; // keep in sync with CHANGELOG.md
+export const APP_VERSION = '1.15.0'; // keep in sync with CHANGELOG.md
 const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
 // v1.11.4: the training rules are a page inside the app (#/logic), built from this repo's docs/training-logic.md.
 // The app never links to anyone's Google Drive.
@@ -385,11 +385,12 @@ async function loadExercises(force = false) {
 }
 
 // ---------- router ----------
+let lastScreen = '';
 const routes = {
   '': renderHome, mesos: renderMesos, train: renderMesos, new: renderBuilder, meso: renderMeso, workout: renderWorkout,
   explore: renderExplore, history: renderHistory, progress: renderProgress, volume: renderVolume,
   cardio: renderCardio, library: renderLibrary, exercises: () => renderLibrary('exercises'), templates: () => renderLibrary('templates'),
-  settings: renderSettings, learn: renderLearn, stats: renderStats, logic: renderLogic,
+  settings: renderSettings, learn: renderLearn, stats: renderStats, logic: renderLogic, feedback: renderFeedback,
 };
 async function route() {
   closeSheet();
@@ -406,6 +407,7 @@ async function route() {
   if (Object.keys(qLoad()).length || oLoad().length) { syncBadge(); syncAll(); }
   if (!profile) profile = (await sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle()).data;
   const [name, ...args] = location.hash.replace(/^#\/?/, '').split('/');
+  if (name !== 'feedback') lastScreen = name || 'home';
   window.scrollTo(0, 0);
   // Show a loading state only if the screen takes a moment (no flash on fast loads); errors offer a retry.
   const slow = setTimeout(() => { app.setAttribute('aria-busy', 'true'); app.innerHTML = '<div class="loading" role="status">Loading…</div>'; }, 250);
@@ -1383,6 +1385,7 @@ async function renderWorkout(dayId, mode) {
         ${lastOfMuscle[ex.muscle_group] === we.id ? `<div data-rate="${esc(ex.muscle_group)}">${rateLine(ex.muscle_group, feedback[ex.muscle_group])}</div>` : ''}
       </div>`;
     }).join('')}
+    ${!day.completed_at && !preview ? `<button class="block add-ex" id="addEx">${ic('plus')} Add an exercise</button>` : ''}
     <button class="primary block" id="finish">${day.completed_at ? 'Done' : 'Finish workout'}</button>
     ${!day.completed_at ? '<div class="spacer"></div><button class="ghost block" id="skipDay">Skip this workout</button>' : ''}`;
 
@@ -1759,12 +1762,19 @@ async function renderWorkout(dayId, mode) {
         ${logged ? `<p class="small warn-text">${logged} logged set${logged > 1 ? 's' : ''} of ${esc(we.exercises.name)} will be removed from today.</p>` : ''}
         <button class="primary block" data-scope="today">Just today</button>
         <button class="block mt6" data-scope="future">Today and every later week (this day)</button>
-        <p class="muted tiny">The new exercise starts fresh: no history means you pick the weight the first time, then it progresses normally.</p></div>`,
+        <p class="muted tiny">The new exercise starts fresh: no history means you pick the weight the first time, then it progresses normally.</p></div>
+      ${!logged && wes.length > 1 ? `<div class="sheet-foot"><button class="ghost block danger-text" id="rpRemove">Remove ${esc(we.exercises.name)} from today</button></div>` : ''}`,
       panel => {
         const list = panel.querySelector('#rpList');
         panel.querySelector('#rpSearch').oninput = e => { const q = e.target.value.toLowerCase(); list.querySelectorAll('[data-rp]').forEach(x => x.hidden = !x.textContent.toLowerCase().includes(q)); };
         list.querySelectorAll('[data-rp]').forEach(x => x.onclick = () => { pick = ok.find(e => e.id === x.dataset.rp);
           list.querySelectorAll('[data-rp]').forEach(y => y.classList.toggle('on', y === x)); panel.querySelector('#rpName').textContent = pick.name; panel.querySelector('#rpScope').hidden = false; });
+        const rm = panel.querySelector('#rpRemove'); if (rm) rm.onclick = async () => {
+          if (!confirm(`Remove ${we.exercises.name} from today? Later weeks keep it.`)) return;
+          const q = qLoad(); Object.keys(q).filter(k => k.startsWith(we.id + ':')).forEach(k => delete q[k]); qStore(q); syncBadge();
+          check(await sb.from('workout_exercises').delete().eq('id', we.id));
+          closeSheet(); toast(`Removed ${we.exercises.name} from today`); renderWorkout(dayId);
+        };
         panel.querySelectorAll('[data-scope]').forEach(x => x.onclick = async () => {
           if (!pick) return;
           if (logged) check(await sb.from('sets').delete().eq('workout_exercise_id', we.id));
@@ -1784,6 +1794,68 @@ async function renderWorkout(dayId, mode) {
         });
       });
   });
+  // v1.15.0: add an exercise in the middle of a meso — just today, or today and every later week of this day.
+  // Same filters as Replace (excluded, equipment, injured areas). Target effort follows the meso's week.
+  const addBtn = $('#addEx'); if (addBtn) addBtn.onclick = async () => {
+    const [lib, prefs] = await Promise.all([loadExercises(), loadPrefs()]);
+    const P2 = L.applyPreferences(lib, { prefs, equipment: profile?.equipment || null, avoidTags: profile?.avoid_tags || [] });
+    const have = new Set(wes.map(w => w.exercise_id));
+    const groupsAll = [...L.MUSCLES, 'Cardio'];
+    let muscle = wes.find(w => !isCardio(w))?.exercises.muscle_group || 'Chest', pick = null, sets = 3;
+    const listFor = m => (m === 'Cardio' ? P2.library.filter(e => e.load_type === 'cardio') : L.candidatesFor(m, P2.library, P2.favorites).filter(e => e.load_type !== 'cardio'))
+      .filter(e => !have.has(e.id));
+    openSheet(`<h3>Add an exercise</h3>
+      <p class="muted small">Hidden: exercises you've excluded, ones that don't fit your equipment, and ones for areas you're going easy on.</p>
+      <label for="axMuscle">Muscle</label><select id="axMuscle">${groupsAll.map(m => `<option ${m === muscle ? 'selected' : ''}>${m}</option>`).join('')}</select>
+      <input id="axSearch" class="mt6" placeholder="Search" aria-label="Search exercises" autocomplete="off">
+      <div id="axList" class="rp-list"></div>
+      <div id="axScope" hidden>
+        <p class="small">Add <b id="axName"></b>:</p>
+        <div class="row inc-row"><label for="axSets">Sets</label><select id="axSets">${[1, 2, 3, 4, 5].map(n => `<option ${n === sets ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
+        <button class="primary block" data-ax="today">Just today</button>
+        <button class="block mt6" data-ax="future">Today and every later week (this day)</button>
+        <p class="muted tiny">It starts fresh: you pick the weight the first time, then it progresses like the rest. Light weeks get half the sets.</p></div>`,
+      panel => {
+        const list = panel.querySelector('#axList'), search = panel.querySelector('#axSearch');
+        const draw = () => { const q = search.value.toLowerCase(), opts = listFor(muscle);
+          list.innerHTML = opts.map(e => `<button class="list-btn${pick?.id === e.id ? ' on' : ''}" data-ax-id="${e.id}" ${e.name.toLowerCase().includes(q) ? '' : 'hidden'}><div class="grow"><b>${esc(e.name)}</b> <span class="muted tiny">${esc(e.equipment || '')}${P2.favorites.has(e.id) ? ' · ★' : ''}</span></div></button>`).join('')
+            || `<p class="muted">No ${esc(muscle)} exercises left to add.</p>`;
+          list.querySelectorAll('[data-ax-id]').forEach(x => x.onclick = () => { pick = opts.find(e => e.id === x.dataset.axId);
+            list.querySelectorAll('[data-ax-id]').forEach(y => y.classList.toggle('on', y === x));
+            panel.querySelector('#axName').textContent = pick.name; panel.querySelector('#axScope').hidden = false; }); };
+        panel.querySelector('#axMuscle').onchange = e => { muscle = e.target.value; pick = null; panel.querySelector('#axScope').hidden = true; draw(); };
+        search.oninput = draw;
+        panel.querySelector('#axSets').onchange = e => { sets = Number(e.target.value); };
+        draw();
+        panel.querySelectorAll('[data-ax]').forEach(x => x.onclick = async () => {
+          if (!pick) return; x.disabled = true;
+          const kind = pick.kind, goalName = meso.goal;
+          // Respect the meso's "keep main lifts ≥1 rep short of failure" choice: if a main lift here sits above
+          // this week's normal target, the meso was built with it on.
+          const minOne = kind === 'compound' && wes.some(z => z.exercises.kind === 'compound' && z.target_rir > L.targetRir(day.week, meso.weeks, goalName, 'compound').rir);
+          const rirAt = w => { const r = L.targetRir(w, meso.weeks, goalName, kind);
+            return r.deload ? r : { deload: false, rir: minOne ? Math.max(1, r.rir) : r.rir }; };
+          const row = (dId, w, pos) => { const r = rirAt(w); return { workout_day_id: dId, exercise_id: pick.id, position: pos, target_sets: r.deload ? L.deloadSets(sets) : sets, target_rir: r.rir }; };
+          const pos = Math.max(0, ...wes.map(w => w.position || 0)) + 1;
+          try {
+            check(await sb.from('workout_exercises').insert(row(day.id, day.week, pos)));
+            let n = 0;
+            if (x.dataset.ax === 'future') {
+              const later = all.filter(d => d.week > day.week && d.day_index === day.day_index && !d.completed_at && !d.skipped_at);
+              if (later.length) {
+                const cur = check(await sb.from('workout_exercises').select('workout_day_id, exercise_id, position').in('workout_day_id', later.map(d => d.id)));
+                const rows = later.filter(d => !cur.some(c => c.workout_day_id === d.id && c.exercise_id === pick.id))
+                  .map(d => row(d.id, d.week, Math.max(0, ...cur.filter(c => c.workout_day_id === d.id).map(c => c.position || 0)) + 1));
+                if (rows.length) check(await sb.from('workout_exercises').insert(rows));
+                n = rows.length;
+              }
+            }
+            closeSheet(); toast(`Added ${pick.name}${x.dataset.ax === 'future' ? ` today + ${n} later week${n === 1 ? '' : 's'}` : ' for today'}`, false, 3500);
+            renderWorkout(dayId);
+          } catch (e) { x.disabled = false; toast(navigator.onLine ? 'Couldn’t add it — try again' : 'You’re offline — adding an exercise needs a connection', true); }
+        });
+      });
+  };
   wes.forEach(refreshTrend);
   if (preview) {   // look, don't touch: nothing can be logged until the day is started
     $$('.card[data-we] input, .card[data-we] button:not([data-info]):not(.lift-flag), #finish, #skipDay, [data-edit]').forEach(el => { el.disabled = true; });
@@ -1925,11 +1997,48 @@ function renderExplore() {
     ['#/volume', 'bars', 'Muscle volume', 'Weekly sets per muscle vs. the range that builds muscle'],
     ['#/cardio', 'heart', 'Cardio', 'Minutes, intensity and load by week'],
     ['#/settings', 'sliders', 'Settings', 'Injuries & sore spots, equipment, theme, units, bodyweight, sign out'],
+    ['#/feedback', 'star', 'Send feedback', 'Rate the app, report a bug or suggest an idea'],
   ];
   app.innerHTML = items.map(([h, i, t, d]) => `<button class="list-btn" data-go="${h}"><span class="list-ico">${ic(i)}</span>
     <div class="grow"><b>${t}</b><div class="muted small">${d}</div></div>›</button>`).join('') +
     `<div class="card small muted">How the app decides weights, sets and RIR: <a href="#/logic">How it works — training logic &amp; evidence</a></div>`;
   $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
+}
+
+// ---------- feedback (v1.15.0) ----------
+// A star rating and/or a note, kept private to you; the app owner reads them in the database. Insert-only.
+async function renderFeedback() {
+  setHeader('Send feedback', '#/explore', 'explore');
+  let rating = null, kind = 'idea';
+  const KINDS = [['idea', 'Idea'], ['bug', 'Something’s wrong'], ['praise', 'Praise'], ['other', 'Other']];
+  const past = await sb.from('app_feedback').select('rating, kind, message, app_version, created_at').order('created_at', { ascending: false }).limit(10);
+  const ready = !past.error;
+  app.innerHTML = `<div class="card">
+      <h3>How’s the app working for you?</h3>
+      <div class="stars" role="group" aria-label="Rating, 1 to 5 stars">${[1, 2, 3, 4, 5].map(n => `<button type="button" data-star="${n}" aria-pressed="false" aria-label="${n} star${n > 1 ? 's' : ''}">★</button>`).join('')}</div>
+      <div class="lbl">What’s it about?</div>
+      <div class="seg c2" id="fbKind" role="group" aria-label="What it's about">${KINDS.map(([k, t]) => `<button type="button" data-kind="${k}" aria-pressed="${k === kind}" class="${k === kind ? 'on' : ''}">${t}</button>`).join('')}</div>
+      <label for="fbMsg" class="mt6">Tell us more <span class="muted tiny">(optional if you picked stars)</span></label>
+      <textarea id="fbMsg" rows="5" maxlength="2000" placeholder="What happened, what you expected, or what you'd like…"></textarea>
+      <div class="muted tiny" id="fbCount">0 / 2000</div>
+      <button class="primary block mt6" id="fbSend" disabled>Send</button>
+      <p class="muted tiny">Goes to the app owner with the app version and the screen you came from. No health notes needed — keep it about the app.</p>
+    </div>
+    ${ready ? (past.data.length ? `<div class="card"><h3>What you’ve sent</h3>${past.data.map(f => `<div class="fb-item"><div class="small"><b>${f.rating ? '★'.repeat(f.rating) : ''}</b> <span class="pill tiny-pill">${esc((KINDS.find(k => k[0] === f.kind) || [, f.kind])[1])}</span> <span class="muted tiny">${new Date(f.created_at).toLocaleDateString()}${f.app_version ? ' · v' + esc(f.app_version) : ''}</span></div>${f.message ? `<div class="small">${esc(f.message)}</div>` : ''}</div>`).join('')}</div>` : '')
+      : '<div class="card warn small">Feedback isn’t switched on yet — check back after the next update.</div>'}`;
+  const send = $('#fbSend'), msg = $('#fbMsg');
+  const sync = () => { send.disabled = !ready || !(rating || msg.value.trim()); $('#fbCount').textContent = `${msg.value.length} / 2000`; };
+  $$('[data-star]').forEach(b => b.onclick = () => { const n = Number(b.dataset.star); rating = rating === n ? null : n;
+    $$('[data-star]').forEach(x => x.setAttribute('aria-pressed', String(rating != null && Number(x.dataset.star) <= rating))); sync(); });
+  $$('[data-kind]').forEach(b => b.onclick = () => { kind = b.dataset.kind;
+    $$('[data-kind]').forEach(x => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-pressed', String(on)); }); });
+  msg.oninput = sync; sync();
+  send.onclick = async () => {
+    send.disabled = true;
+    const r = await sb.from('app_feedback').insert({ rating, kind, message: msg.value.trim() || null, app_version: APP_VERSION, screen: (lastScreen || '').slice(0, 80) || null });
+    if (r.error) { sync(); return toast(navigator.onLine ? 'Couldn’t send — try again' : 'You’re offline — send it when you’re back online', true); }
+    toast('Thanks — feedback sent'); renderFeedback();
+  };
 }
 
 // ---------- Home drill-downs (#/stats/<kind>/<arg>) ----------

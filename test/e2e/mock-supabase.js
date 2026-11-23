@@ -23,7 +23,7 @@ const wkKey = (() => { const x = new Date(); x.setHours(0,0,0,0); x.setDate(x.ge
 const mk = (id, name, vals) => vals.map((e, i) => ({ exercise_id: id, name, session_id: id + 's' + i, done_at: new Date(Date.UTC(2026, 8, 28 + i * 7, 18)).toISOString(), best_e1rm: e, top_weight: Math.round(e / 1.4), top_reps: 10, n_sets: 3, rn: vals.length - i, prior_best: null }));
 const fixtures = {
   'rpc:lift_recent': [...mk('e5', 'Hack Squat', [300, 310, 311, 309, 310.5]), ...mk('e1', 'Incline Dumbbell Press', [100, 110, 105, 106])],
-  exercise_prefs: [],
+  exercise_prefs: [], app_feedback: [],
   'rpc:create_mesocycle': 'm1',
   'rpc:dashboard_stats': { tz: 'UTC', weeks: { [wkKey]: 42 }, workouts: 3, sets: 9, prs: [{ name: 'Hack Squat', pct: 2.4, date: now }], movers: [{ name: 'Hack Squat', pct: 5.4 }, { name: 'Leg Extension', pct: -1.2 }] },
   'rpc:strength_summary': [{ exercise_id: 'e5', name: 'Hack Squat', muscle_group: 'Quads', sessions: 3, first_e1rm: 245, last_e1rm: 258, last_at: now }],
@@ -37,7 +37,7 @@ const fixtures = {
     plan: [{ label: 'Workout 1', slots: [{ muscle: 'Quads', exerciseId: 'e5', sets: 2 }, { muscle: 'Cardio', exerciseId: 'c1', sets: 1 }] }, { label: 'Workout 2', slots: [{ muscle: 'Chest', exerciseId: 'e1', sets: 2 }] }] }],
 };
 function builder(table) {
-  let single = false, maybe = false, payload = null, inIds = null, statusIn = null, lim = null;
+  let single = false, maybe = false, payload = null, inIds = null, statusIn = null, lim = null, del = false, eqs = [];
   const b = new Proxy({}, { get(_, k) {
     if (k === 'then') return (res, rej) => {
       let data = fixtures[table] || [];
@@ -47,6 +47,8 @@ function builder(table) {
       if (table === 'workout_exercises' && inIds && inIds.some(id => /s\d+$/.test(id))) data = inIds.map(id => ({ id, exercises: { load_type: 'weighted' }, workout_days: { week: +id.match(/s(\d+)$/)[1] + 1, mesocycle_id: 'm0', mesocycles: { name: 'Test Meso', weeks: 8 } } }));
       if (window.__OFFLINE) return Promise.resolve({ data: null, error: { message: 'TypeError: Failed to fetch' } }).then(res, rej);   // test hook: no signal at all
       if (payload && window.__FAIL_NET) return Promise.resolve({ data: null, error: { message: 'TypeError: Failed to fetch' } }).then(res, rej);
+      if (del) { (window.__deletes = window.__deletes || []).push([table, eqs]); return Promise.resolve({ data: null, error: null }).then(res, rej); }
+      if (table === 'app_feedback' && window.__NO_FEEDBACK) return Promise.resolve({ data: null, error: { message: 'relation "public.app_feedback" does not exist' } }).then(res, rej);
       if (payload) { (window.__writes = window.__writes || []).push([table, payload]);
         const ms = window.__DELAY ? window.__DELAY(table, payload) : 0;   // test hook: slow / out-of-order responses
         const land = () => { (window.__landed = window.__landed || []).push([table, payload]); return { data: payload, error: null }; };
@@ -56,7 +58,9 @@ function builder(table) {
       return Promise.resolve({ data, error: null }).then(res, rej);
     };
     if (k === 'single') return () => { single = true; return b; };
-    if (k === 'upsert' || k === 'insert' || k === 'update') return (p) => { payload = Array.isArray(p) ? p[0] : p; return b; };
+    if (k === 'upsert' || k === 'insert' || k === 'update') return (p) => { payload = Array.isArray(p) ? p[0] : p; (window.__rows = window.__rows || []).push([table, k, p]); return b; };
+    if (k === 'delete') return () => { del = true; return b; };
+    if (k === 'eq') return (col, v) => { eqs.push([col, v]); return b; };
     if (k === 'limit') return n => { lim = n; return b; };
     if (k === 'maybeSingle') return () => { maybe = true; return b; };
     if (k === 'in') return (col, vals) => { if (col === 'id') inIds = vals; if (col === 'status') statusIn = vals; return b; };

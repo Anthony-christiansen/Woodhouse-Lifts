@@ -174,5 +174,18 @@ export async function runChecks(db) {
   await assert.rejects(as(db, B, `insert into public.exercise_feedback (workout_exercise_id, workload, joint_pain) values ($1, 0, 0)`, [we2]), /violates|foreign key|row-level/i, 'B cannot rate A\'s exercise');
   await assert.rejects(as(db, A, `insert into public.exercise_feedback (workout_exercise_id, workload) values ($1, 7)`, [we2]), /check|duplicate|unique/i);
   console.log('EXERCISE FEEDBACK: RLS + one per exercise OK');
+  // ---- app_feedback (v1.15.0): add + read own only; no edits/deletes; needs a rating or a note
+  await as(db, A, `insert into public.app_feedback (rating, kind, message, app_version) values (5, 'praise', 'nice', '1.15.0')`);
+  await as(db, A, `insert into public.app_feedback (kind, message) values ('bug', 'rir arrow')`);
+  assert.equal((await as(db, A, `select * from public.app_feedback`)).length, 2, 'A sees own feedback');
+  assert.equal((await as(db, B, `select * from public.app_feedback`)).length, 0, 'B sees none of A\'s feedback');
+  await assert.rejects(as(db, A, `insert into public.app_feedback (kind) values ('idea')`), /check/i, 'empty feedback refused');
+  await assert.rejects(as(db, A, `insert into public.app_feedback (rating) values (9)`), /check/i, 'rating 1-5');
+  await assert.rejects(as(db, A, `insert into public.app_feedback (rating, kind) values (3, 'spam')`), /check/i, 'kind list');
+  const ida = (await as(db, A, `select id from public.app_feedback limit 1`))[0].id;
+  await assert.rejects(as(db, A, `update public.app_feedback set rating = 1 where id = $1`, [ida]), /permission|denied/i, 'no edits');
+  await assert.rejects(as(db, A, `delete from public.app_feedback where id = $1`, [ida]), /permission|denied/i, 'no deletes');
+  await assert.rejects(as(db, B, `insert into public.app_feedback (user_id, rating) values ($1, 1)`, [A]), /row-level|violates/i, 'B cannot post as A');
+  console.log('APP FEEDBACK: own rows, insert-only OK');
   console.log('ALL DB TESTS PASSED');
 }

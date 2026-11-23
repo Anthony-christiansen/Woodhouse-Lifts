@@ -528,6 +528,15 @@ Tap **⇄** on an exercise in a workout → pick another exercise for the same m
 
 Logged sets of the old exercise on today's workout are removed (you're told first). The new exercise starts fresh: the first time you pick the weight, then it progresses normally.
 
+### 5.3a-2 Adding or removing an exercise mid-meso (v1.15.0)
+
+**+ Add an exercise** (above Finish) → pick a muscle, an exercise and 1–5 sets → choose **Just today** or **Today and every later week (this day)**. The same filters as Replace apply (excluded, equipment, injury areas), and exercises already in today's workout aren't offered.
+- Target effort is the meso's normal target for that week (§3). If the meso was built with "main lifts ≥1 rep short of failure", an added main lift keeps that floor.
+- The light (deload) week gets half the sets, rounded up (the same rule as §5).
+- It starts fresh like a replacement: you pick the weight the first time, then it progresses normally. Its sets count toward the muscle's weekly volume like any other.
+
+**Remove … from today** (in the ⇄ sheet) appears only when the exercise has no logged sets. It removes it from this workout only; later weeks keep it.
+
 ### 5.3b Actual RIR (optional)
 
 Under each exercise: **"set 1 RIR"**. Leave it on *target* and the app assumes you finished set 1 at the prescribed RIR. Pick a number (0–5+) when you know you were closer to — or further from — failure; next week's targets and strength estimates then use what you actually did. Sets without a recorded RIR are stored as "assumed on target" (empty), never as if measured.
