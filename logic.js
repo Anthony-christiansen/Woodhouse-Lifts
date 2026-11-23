@@ -397,7 +397,7 @@ export function liftStatus(sessions, priorBest = null, { name = 'this lift', rir
  * IS the plan. A strength estimate that includes RIR stays flat when you do exactly that, so it must not be used to
  * call a lift "stalled". Instead:
  *   - Within the current meso: compare PERFORMANCE (load × reps, no RIR credit) week over week, by meso week.
- *   - Across mesos: compare the same meso week (same target RIR), e.g. AC VII week 4 vs AC VI week 4.
+ *   - Across mesos: compare the same meso week (same target RIR), e.g. Meso B week 4 vs Meso A week 4.
  *   - PR: the RIR-adjusted estimate beats every earlier one by > 1% (a true strength record).
  * entries: [{ meso, mesoName, week, e (RIR-adjusted), raw (no RIR), top: { weight, reps } }] in time order, one per
  * meso week (best by raw), deload weeks already removed.
@@ -554,7 +554,7 @@ export function increment(ex, unit) {
   return t[ex?.equipment] ?? t.other;
 }
 /**
- * Doc §4.6 — how much weight to add in one progression step. From Anthony's logged history (2,376 week-to-week
+ * Doc §4.6 — how much weight to add in one progression step. From one lifter's logged history (2,376 week-to-week
  * changes, 2023–2026): when the weight went up by ≤ 4% he kept his reps 94–97% of the time; above 4% he kept
  * them only 27–39% of the time. So a step is about 2.5% of the load, rounded DOWN to the gym's increment, at least
  * one increment, never more than 5 lb (2.5 kg), and never more than the lifter's own usual jump for that lift.
@@ -616,13 +616,13 @@ export function progressionSpeed(fb) {
   if (fb.workload === 3) return { speed: 'hold', why: 'you rated last time "Too much"' };
   if (fb.workload === 2) return { speed: 'slow', why: 'you pushed your limit last time' };
   // Faster (a bigger-than-normal weight jump) only when the workload was too easy AND the muscle never got sore
-  // and no joint pain at all — otherwise one normal step (v1.9.1, Anthony's rule).
+  // and no joint pain at all — otherwise one normal step (v1.9.1, the owner's rule).
   if (fb.workload === 0 && (fb.joint_pain ?? 0) === 0 && fb.soreness === 0) return { speed: 'fast', why: 'last time felt easy and you never got sore' };
   return { speed: 'normal', why: null };
 }
 /**
  * Doc §4.5 — injury guardrails, applied to every suggestion after the progression rules:
- *  - Weekly load cap: at most +5% over last week's weight for that set (ACSM allows 2–10%; Anthony's own history
+ *  - Weekly load cap: at most +5% over last week's weight for that set (ACSM allows 2–10%; one lifter's own history
  *    shows reps hold at ≤4% jumps and fall apart above it), or one load step when a single step is bigger (light lifts).
  *  - Meso ceiling: at most +20% over the lift's week-1 weight in this meso; past that, reps go up instead.
  *  - "Faster" is switched off at 0 RIR (failure weeks), on spinal-loading (axial) lifts, and with any joint pain.

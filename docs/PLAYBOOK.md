@@ -1,6 +1,6 @@
 # Woodhouse Lifts — Release & Rollback Playbook
 
-How every change gets to the live app, how we check it, and how we undo it. Follow it for every release, every database change and every one-off data fix. If something here and a chat instruction disagree, stop and ask Anthony.
+How every change gets to the live app, how we check it, and how we undo it. Follow it for every release, every database change and every one-off data fix. If something here and a chat instruction disagree, stop and ask the owner.
 
 - Live app: https://anthony-christiansen.github.io/Woodhouse-Lifts/ (GitHub Pages, deploys from `main`)
 - Code: `Anthony-christiansen/Woodhouse-Lifts` · Database: Supabase project `dnknmtzcmmdepwheagmq`
@@ -17,16 +17,17 @@ How every change gets to the live app, how we check it, and how we undo it. Foll
 5. **Roll back first, debug second.** If logging sets or saving data is broken, revert, *then* find the cause.
 6. **The database only grows.** Migrations add tables, columns and functions. Nothing is dropped or renamed in the same release as the code that stops using it (expand → release → contract later). This is what makes an app rollback safe: the old app still works against the newer database.
 7. **No surprise data changes.** Real users' data is never changed without a snapshot first and a written way back.
+8. **Nothing personal in the public repo.** The repo is public (it hosts the live app). No names, emails, account names, health notes, locations, user/set ids or anyone's training logs, in code, docs, tests, screenshots, commit messages or PR text. Use "the owner", "a second user", `@example.com` and made-up data. Personal context goes only in the private Drive copies. `node test/privacy.check.mjs` guards emails and ids; names and details are on you.
 
 ## 2. Who approves what
 
 | Change | Needs | Notes |
 |---|---|---|
-| App code (frontend) release | Anthony says to merge the PR | Deploys automatically when merged. |
-| Database migration | Anthony's explicit **"approved"** for that migration | Plus a pre-migration snapshot and a written `down` script. |
-| One-off data fix on production (delete typos, re-import) | Anthony's explicit OK for that fix | Snapshot first; keep the inverse SQL. |
-| Rollback of a bad app release | Pre-approved: do it, then tell Anthony | Reverting is always allowed. |
-| Restoring data from a snapshot | Anthony's OK, except to undo a data fix we just made | Preview first. |
+| App code (frontend) release | The owner says to merge the PR | Deploys automatically when merged. |
+| Database migration | The owner's explicit **"approved"** for that migration | Plus a pre-migration snapshot and a written `down` script. |
+| One-off data fix on production (delete typos, re-import) | The owner's explicit OK for that fix | Snapshot first; keep the inverse SQL. |
+| Rollback of a bad app release | Pre-approved: do it, then tell the owner | Reverting is always allowed. |
+| Restoring data from a snapshot | The owner's OK, except to undo a data fix we just made | Preview first. |
 | Secrets / service-role keys | Never | Never shown, typed or committed. |
 
 ## 3. Risk tiers
@@ -46,6 +47,7 @@ How every change gets to the live app, how we check it, and how we undo it. Foll
    - `node test/logic.test.mjs` (engine + 6-week simulation)
    - `node test/db.test.mjs` (fresh database from all migrations; needs `npm i @electric-sql/pglite` in `test/`)
    - `node test/restore.drill.mjs` (rollback drill, §6.3)
+   - `node test/privacy.check.mjs` (no real emails or ids in the public repo, §1.8)
    - `for f in test/e2e/*.py; do python3 "$f" | tail -1; done` (real Chromium against a mocked Supabase)
 4. Version bumped: `APP_VERSION` in `app.js`, `?v=` on **every** import (`index.html` → `app.js`/`styles.css`, `app.js` → `logic.js`/`learn.js`). Everything uses one number.
 5. Docs: `CHANGELOG.md` entry **with a "Rollback" line** (§7), `docs/training-logic.md` for rule changes, `docs/HANDOFF.md` version/status.
@@ -61,7 +63,7 @@ How every change gets to the live app, how we check it, and how we undo it. Foll
 **After deploying (about 1–2 minutes for Pages)**
 12. Smoke test on the live site (§5). If it fails → §6.
 13. Drive: copy the current docs into **Archive — earlier versions** with the version in the title, then update the current docs. Update the in-app Training Logic link if its doc changed.
-14. Post the result (version live, smoke test passed, snapshot time if any) on the PR and to Anthony.
+14. Post the result (version live, smoke test passed, snapshot time if any) on the PR and to the owner.
 
 ## 5. Smoke test (live site, 5 minutes)
 
@@ -121,7 +123,7 @@ Snapshots: `backup.snapshot` (all 11 user tables as JSON). Weekly automatic (Sun
 
 For any change to existing rows on production (typo removal, imports, backfills):
 1. Write the exact SQL in the PR or chat, with a **preview** `select` that shows exactly the rows affected (ids + values).
-2. Get Anthony's OK for that SQL.
+2. Get The owner's OK for that SQL.
 3. `select backup.take_snapshot();`
 4. Run it with `returning *` and keep the output. That output is the inverse: re-insert it to undo.
 5. Verify with the preview `select` (now empty or changed as intended), and update counts in the docs if they're quoted.
@@ -144,4 +146,5 @@ Each release entry ends with one line, e.g.:
 
 | Version | Released | Merge | Rollback point | Pre-release snapshot | Smoke test |
 |---|---|---|---|---|---|
-| 1.11.1 | 2026-11-23 03:25 UTC | `936ef4b` (PR #2) | `release/v1.11.0` = `d7e3e11` | 2026-11-23 03:24:06 UTC (11 tables, 14,286 sets) | Live files 1.11.1, `?v=31`, new doc link; app loads with no errors; security advisors unchanged. Signed-in steps 3–5: Anthony to check on his phone. |
+| 1.11.2 | 2026-11-23 03:43 UTC | `fcfda31` (PR #3) | `release/v1.11.1` = `936ef4b` | not needed (tier A) | Live files 1.11.2, `?v=32`, new doc link; app loads with no errors. |
+| 1.11.1 | 2026-11-23 03:25 UTC | `936ef4b` (PR #2) | `release/v1.11.0` = `d7e3e11` | 2026-11-23 03:24:06 UTC (11 tables, 14,286 sets) | Live files 1.11.1, `?v=31`, new doc link; app loads with no errors; security advisors unchanged. Signed-in steps 3–5: the owner to check on their phone. |

@@ -33,7 +33,7 @@ begin
 end $$;
 revoke all on function backup.take_snapshot(interval) from public, anon, authenticated;
 
--- Sundays 09:15 UTC (early Sunday morning in Utah).
+-- Sundays 09:15 UTC (early Sunday morning in US time zones).
 select cron.unschedule(jobid) from cron.job where jobname = 'weekly-snapshot';
 select cron.schedule('weekly-snapshot', '15 9 * * 0', $$select backup.take_snapshot()$$);
 

@@ -328,7 +328,7 @@ console.log('GUARDRAIL TESTS PASSED');
   const ex = { load_type: 'weighted' };
   const mk = (meso, rows) => rows.map(([week, w, r, rir], i) => ({ meso, mesoName: meso, week, date: `2026-${meso === 'VI' ? '09' : '10'}-${String(10 + i * 5).padStart(2, '0')}`,
     e: L.e1rm({ weight: w, reps: r, rir }, ex), raw: L.e1rm({ weight: w, reps: r, rir: 0 }, ex), top: { weight: w, reps: r } }));
-  // Anthony's real bent-over row: +1 rep a week as RIR drops 3→0, both mesos
+  // A real logged bent-over row: +1 rep a week as RIR drops 3→0, both mesos
   const row = [...mk('VI', [[1, 65, 11, 3], [2, 65, 12, 2], [3, 70, 10, 1], [4, 70, 11, 0]]), ...mk('VII', [[1, 70, 9, 3], [2, 70, 10, 2], [3, 70, 11, 1], [4, 70, 12, 0]])];
   const old = L.liftStatus(row.filter(x => x.meso === 'VII').map(x => ({ e: x.e, date: x.date })), null);
   assert.equal(old.status, 'stalled', 'the OLD rule called this stalled — the bug');
@@ -346,12 +346,12 @@ console.log('GUARDRAIL TESTS PASSED');
   const nw = L.mesoStatus([...mk('VI', [[1, 65, 11, 3], [4, 70, 11, 0]]), ...mk('VII', [[1, 70, 8, 3]])]);
   assert.equal(nw.status, 'new'); assert.ok(nw.vs && nw.vs.week === 1);
   // PRs counted inside one meso on the RIR-adjusted estimate
-  assert.equal(L.prsInMeso(row, null, 'VII').count, 1, 'AC VII week 1 (70×9 @3) beat AC VI best (70×11 @0) on the RIR-adjusted estimate');
+  assert.equal(L.prsInMeso(row, null, 'VII').count, 1, 'Meso B week 1 (70×9 @3) beat Meso A best (70×11 @0) on the RIR-adjusted estimate');
   assert.equal(L.prsInMeso([...row, ...mk('VII', [[5, 80, 12, 0]])], null, 'VII').count, 2);
   console.log('MESO STATUS TESTS PASSED');
 }
 
-// --- Load vs rep progression (doc §4.0), from Anthony's AC VII ---
+// --- Load vs rep progression (doc §4.0), from a real logged meso ---
 {
   const sled = { name: 'Sled push', load_type: 'weighted', equipment: 'Barbell', rep_min: 5, rep_max: 30 };
   const m = L.progressionMode([{ weight: 305, reps: 27 }, { weight: 315, reps: 27 }], sled, 'lb');
@@ -541,7 +541,7 @@ console.log('GUARDRAIL TESTS PASSED');
   assert.equal(L.setAdjustment({ R: 0, L: 0, J: 0, P: 1, F: null }).delta, 1, 'no performance → +1 max');
   assert.equal(L.setAdjustment({ R: 0, L: 0, J: 0, P: 1, F: 0 }).delta, 2);
 
-  // RP comparison (Haylee wk 3, deadlift): a capped "re-set" must re-solve reps for the capped weight.
+  // RP comparison (a real meso's wk 3, deadlift): a capped "re-set" must re-solve reps for the capped weight.
   const dl = { name: 'Deadlift', load_type: 'weighted', equipment: 'Barbell', kind: 'compound', rep_min: 3, rep_max: 8, tags: ['axial'] };
   const s = L.suggestSet({ prev: { weight: 95, reps: 12, rir: 1 }, ex: dl, targetRir: 0, prevTargetRir: 1, unit: 'lb',
     mode: L.progressionMode([{ weight: 105, reps: 7 }, { weight: 95, reps: 12 }], dl, 'lb'), speed: { speed: 'normal' }, mesoStart: 105 });
