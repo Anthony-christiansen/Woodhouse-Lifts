@@ -1,8 +1,8 @@
 // v1.12.1: pinned to one reviewed release, so the code users get only changes with a commit here (outside audit, finding 4).
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.2/+esm';
-import * as L from './logic.js?v=49';
-import * as LEARN from './learn.js?v=49';
-import * as MD from './md.js?v=49';
+import * as L from './logic.js?v=50';
+import * as LEARN from './learn.js?v=50';
+import * as MD from './md.js?v=50';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -19,7 +19,7 @@ let authReturn = (() => {
   return null;
 })();
 let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
-export const APP_VERSION = '1.18.0'; // keep in sync with CHANGELOG.md
+export const APP_VERSION = '1.19.0'; // keep in sync with CHANGELOG.md
 const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
 // v1.11.4: the training rules are a page inside the app (#/logic), built from this repo's docs/training-logic.md.
 // The app never links to anyone's Google Drive.
@@ -445,11 +445,12 @@ const routes = {
   '': renderHome, mesos: renderMesos, train: renderMesos, new: renderBuilder, meso: renderMeso, workout: renderWorkout,
   explore: renderExplore, history: renderHistory, progress: renderProgress, volume: renderVolume,
   cardio: renderCardio, library: renderLibrary, exercises: () => renderLibrary('exercises'), templates: () => renderLibrary('templates'),
-  settings: renderSettings, learn: renderLearn, stats: renderStats, logic: renderLogic, feedback: renderFeedback,
+  settings: renderSettings, learn: renderLearn, stats: renderStats, logic: renderLogic, feedback: renderFeedback, summary: renderSummary,
 };
 async function route() {
   closeSheet();
   const { data } = await sb.auth.getSession(); session = data.session; // waits for supabase-js to read the link's tokens
+  routedUid = session?.user?.id ?? null;
   if (authReturn) {
     const r = authReturn; authReturn = null;
     history.replaceState(null, '', location.pathname + '#/'); // drop tokens/errors from the address bar
@@ -476,9 +477,14 @@ async function route() {
   } finally { clearTimeout(slow); app.removeAttribute('aria-busy'); }
 }
 window.addEventListener('hashchange', route);
-sb.auth.onAuthStateChange(evt => {
-  if (evt === 'PASSWORD_RECOVERY') awaitingNewPassword = true;
-  if (evt === 'SIGNED_IN' || evt === 'SIGNED_OUT' || evt === 'PASSWORD_RECOVERY') { profile = null; route(); }
+// v1.19.0: supabase-js also reports SIGNED_IN when the app comes back into view or refreshes its session. Redraw
+// only when who is signed in actually changes — redrawing on every one of those reloaded the screen mid-workout.
+let routedUid = undefined;
+sb.auth.onAuthStateChange((evt, sess) => {
+  if (evt === 'PASSWORD_RECOVERY') { awaitingNewPassword = true; profile = null; return route(); }
+  const uid = sess?.user?.id ?? null;
+  if (evt === 'SIGNED_OUT' || (evt === 'SIGNED_IN' && uid !== routedUid)) { routedUid = uid; profile = null; route(); }
+  else if (sess) session = sess;   // token refresh / same user: keep the fresh session, leave the screen alone
 });
 
 // ---------- auth ----------
@@ -768,7 +774,10 @@ async function renderHome() {
   const mesoLifts = meso ? check(await sb.from('workout_exercises').select('exercise_id, exercises!inner(name, load_type), workout_days!inner(mesocycle_id)')
     .eq('workout_days.mesocycle_id', meso.id)) : [];
   const liftIds = [...new Set(mesoLifts.filter(x => x.exercises.load_type !== 'cardio').map(x => x.exercise_id))];
-  const [cSess, cSets, stats, warnings, mesoCount, insights, fatigue, late] = await Promise.all([
+  // v1.19.0: "Sets this week" follows the same training week as "Workouts this week" when a meso is running
+  // (it used to count the calendar week, so the two cards could describe different weeks).
+  const wkSetsQ = meso && wk.length ? sb.from('workout_exercises').select('target_sets, exercises(load_type), sets(completed_at, set_type)').in('workout_day_id', wk.map(d => d.id)) : null;
+  const [cSess, cSets, stats, warnings, mesoCount, insights, fatigue, late, wkSets] = await Promise.all([
     cardioSince(isoDay(eightAgo)), workoutCardioSince(eightAgo.toISOString()),
     sb.rpc('dashboard_stats', { p_tz: tz }).then(check),
     meso ? slipFor(meso) : Promise.resolve([]),
@@ -776,7 +785,11 @@ async function renderHome() {
     liftInsights(liftIds, { meso: meso?.id || null }),
     fatigueFor(meso, curWeek),
     meso ? lateSets(meso) : 0,
+    wkSetsQ ? wkSetsQ.then(r => r.error ? null : r.data) : null,
   ]);
+  const wkLifts = wkSets?.filter(x => x.exercises?.load_type !== 'cardio') || [];
+  const wkDone = wkLifts.reduce((a, x) => a + x.sets.filter(z => z.completed_at && z.set_type !== 'warmup').length, 0);
+  const wkPlanned = wkLifts.reduce((a, x) => a + (x.target_sets || 0), 0);
   const showFatigue = fatigue.suggest && !live && !(() => { try { return localStorage.getItem(fatigueKey(meso, curWeek)); } catch { return null; } })();
   const lifts = Object.values(insights).sort((a, b) => STATUS_ORDER[a.status.status] - STATUS_ORDER[b.status.status] || a.name.localeCompare(b.name));
   const mesoPrs = lifts.filter(x => x.prs.count).map(x => ({ id: x.id, name: x.name, pct: x.prs.last.pct, week: x.prs.last.week, n: x.prs.count }))
@@ -810,6 +823,10 @@ async function renderHome() {
         <div class="muted small">${r.deload ? 'Light (deload) week — half the sets, easy effort' : `This week: ${effortText(r.rir)}`}</div>
         <div class="spacer"></div><button class="primary block" data-go="#/workout">Start workout</button>
         ${wk.filter(d => !d.completed_at && !d.skipped_at).length > 1 ? `<button class="ghost block mt6" id="pickDay">Do a different day this week ›</button>` : ''}</div>`
+      : !meso && !mesoCount ? `<div class="card info" id="welcome"><h3>Welcome ${ic('smile', 'accent')}</h3>
+        <div class="small">Your first plan takes about a minute: how many days you train, how long, your goal and experience, and any sore spots. The app suggests a plan — you can change anything before you start.</div>
+        <ol class="small welcome-steps"><li>Build a mesocycle (a 3–8 week block)</li><li>Do the workouts — log weight and reps</li><li>Rate how each muscle felt — the plan adjusts week to week</li></ol>
+        <button class="primary block" data-go="#/new">Build my first plan</button></div>`
       : `<div class="card"><h3>${meso ? `Mesocycle finished ${ic('party', 'accent')}` : 'No active mesocycle'}</h3>
         <p class="muted">Start from a base template or one of your saved ones.</p>
         <div class="grid2"><button class="primary" data-go="#/new">+ New mesocycle</button><button data-go="#/templates">Templates</button></div></div>`}
@@ -825,8 +842,9 @@ async function renderHome() {
         <div class="muted tiny mt4">${doneDays}/${days.length} workouts · week ${curWeek} of ${meso.weeks}</div>
         ${warnings.length ? `<div class="meso-note">${ic('alert')} ${warnings.length} thing${warnings.length > 1 ? 's' : ''} to check on this meso ›</div>` : doneDays ? `<div class="meso-note ok">${ic('check')} Reps, sets and recovery on track</div>` : ''}</div>` : ''}
     <div class="grid2 stat-grid">
-      <button class="card stat drill" data-go="${meso ? `#/stats/workouts/${curWeek}` : '#/history'}"><span class="muted small">Workouts this week</span><span class="big">${wk.filter(d => d.completed_at).length}/${wk.length || 0}</span><span class="chev">›</span></button>
-      <button class="card stat drill" data-go="#/stats/sets/${isoDay(ws)}"><span class="muted small">Sets this week</span><span class="big">${setsPerWeek[7]}</span><span class="chev">›</span></button>
+      <button class="card stat drill" data-go="${meso ? `#/stats/workouts/${curWeek}` : '#/history'}"><span class="muted small">${meso ? `Workouts · week ${curWeek}` : 'Workouts this week'}</span><span class="big">${wk.filter(d => d.completed_at).length}/${wk.length || 0}</span><span class="chev">›</span></button>
+      ${meso && wkSets ? `<button class="card stat drill" data-go="#/stats/workouts/${curWeek}"><span class="muted small">Sets · week ${curWeek}</span><span class="big">${wkDone}/${wkPlanned}</span><span class="chev">›</span></button>`
+        : `<button class="card stat drill" data-go="#/stats/sets/${isoDay(ws)}"><span class="muted small">Sets this week</span><span class="big">${setsPerWeek[7]}</span><span class="chev">›</span></button>`}
       <button class="card stat drill" data-go="#/stats/cardio/${isoDay(ws)}"><span class="muted small">Cardio this week</span><span class="big">${fmt(cMin)}<span class="muted small"> min</span></span><span class="muted tiny">load ${fmt(cLoad)}</span><span class="chev">›</span></button>
       <button class="card stat drill" data-go="#/stats/prs"><span class="muted small">${meso ? 'PRs this meso' : 'PRs (14 days)'}</span><span class="big">${prCount}</span><span class="chev">›</span></button>
     </div>
@@ -894,16 +912,21 @@ async function renderMesos() {
 
 // v1.16.0 (audit T1): templates that train a growing muscle once a week are offered, ranked after the 2× ones, and say so.
 const onceNote = t => t.once?.length ? `<div class="tiny warn-text">Once a week: ${esc(t.once.join(', '))}. Works at the same weekly sets; splitting them over two days is the usual default.</div>` : '';
+// v1.19.0 (audit U3): starting effort = what you last picked, else what your experience suggests, else Standard.
+const lsGet0 = k => { try { return localStorage.getItem(k); } catch { return null; } };
+const lsSet0 = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+const startEffort = () => lsGet0('wl_effort_mode') ? L.effortOf(lsGet0('wl_effort_mode')) : L.EXPERIENCE[L.experienceOf(lsGet0('wl_experience'))]?.effort || 'standard';
+const equipText = () => profile?.equipment?.length ? profile.equipment.join(', ') : 'a full gym';
 // ---------- mesocycle builder ----------
 let builder = null;
 function freshBuilder() {
   return { step: 1, name: '', weeks: 5, days: 4, focus: 'whole', preset: 'balanced', start: 'suggested', goal: 'hypertrophy', priorities: L.templatePriorities('whole'), plan: [],
-    minutes: Number(localStorage.getItem('wl_session_minutes')) || 75, effort: L.effortOf(localStorage.getItem('wl_effort_mode')), lastMeso: undefined };
+    minutes: Number(localStorage.getItem('wl_session_minutes')) || 75, effort: startEffort(), exp: L.experienceOf(lsGet0('wl_experience')), lastMeso: undefined };
 }
 function builderFromTemplate(t) {
   const b = { step: 2, start: 'scratch', nameTouched: true, weeksTouched: true, name: t.name.replace(/ \(from .*\)$/, ''), weeks: t.weeks, days: t.days_per_week, focus: t.focus, goal: L.goalOf(t.goal),
     priorities: Object.keys(t.priorities || {}).length ? Object.fromEntries(Object.entries(t.priorities).map(([m, p]) => [m, L.normPriority(p, t.focus)])) : L.templatePriorities(t.focus),
-    minutes: Number(localStorage.getItem('wl_session_minutes')) || 75, effort: L.effortOf(localStorage.getItem('wl_effort_mode')),
+    minutes: Number(localStorage.getItem('wl_session_minutes')) || 75, effort: startEffort(), exp: L.experienceOf(lsGet0('wl_experience')),
     plan: t.plan.map(d => ({ label: d.label, slots: d.slots.map(x => ({ ...x })) })) };
   b.preset = L.matchPreset(b.priorities) || L.presetOfFocus(b.focus); b.adjusted = !L.matchPreset(b.priorities) && !!b.preset;
   return b;
@@ -976,6 +999,10 @@ async function renderBuilder() {
         <label id="lGoal">Goal</label>
         <div class="seg c3" role="radiogroup" aria-labelledby="lGoal">${Object.entries(L.GOALS).map(([k, g]) => `<button type="button" role="radio" aria-checked="${S.goal === k}" data-goal="${k}" class="${S.goal === k ? 'on' : ''}" aria-label="${esc(g.name)}">${esc(g.short || g.name)}</button>`).join('')}</div>
         <div class="muted tiny" style="margin-top:6px">${esc(G.blurb)} <a href="#/learn/${L.goalOf(S.goal)}">More ›</a></div>
+        <label id="lExp">Experience</label>
+        <div class="seg c3" role="radiogroup" aria-labelledby="lExp">${Object.entries(L.EXPERIENCE).map(([k, x]) => `<button type="button" role="radio" aria-checked="${S.exp === k}" data-exp="${k}" class="${S.exp === k ? 'on' : ''}" aria-label="${esc(x.name)}">${esc(x.short)}</button>`).join('')}</div>
+        ${S.exp ? `<div class="muted tiny" style="margin-top:6px">${esc(L.EXPERIENCE[S.exp].blurb)}</div>` : '<div class="muted tiny" style="margin-top:6px">Sets how hard the plan starts. Change it any time.</div>'}
+        <div class="muted tiny mt8">Equipment: <b>${esc(equipText())}</b> · <a href="#/settings">change in Settings</a></div>
       </div>
       <div class="card" id="injCard"><div class="row"><b class="grow" id="lInj">Any injuries or sore spots?</b></div>
         <div class="seg c2 mini mt8" role="radiogroup" aria-labelledby="lInj">
@@ -993,9 +1020,10 @@ async function renderBuilder() {
       <div class="card"><div class="step-h"><span class="step-n">3</span><b>Name &amp; length</b></div>
         <div class="row"><div class="grow" style="flex:2"><label for="name">Name</label><input id="name" value="${esc(S.name)}" placeholder="e.g. Whole Body Meso 3"></div>
           <div class="grow"><label for="weeks">Weeks</label><select id="weeks">${[3, 4, 5, 6, 7, 8].map(n => `<option ${n === S.weeks ? 'selected' : ''}>${n}</option>`).join('')}</select></div></div>
+        <details class="adv mt8" id="advEffort" ${S.exp === 'experienced' || S.effortOpen ? 'open' : ''}><summary class="small"><b>Advanced:</b> how hard — now <b>${esc(L.EFFORT_MODES[S.effort].name)}</b></summary>
         <div class="lbl">How hard (reps short of failure)</div>
         <div class="seg c3" role="group" aria-label="How hard">${Object.entries(L.EFFORT_MODES).map(([k, m]) => `<button type="button" data-effort="${k}" aria-pressed="${S.effort === k}" class="${S.effort === k ? 'on' : ''}">${esc(m.name)}</button>`).join('')}</div>
-        <div class="muted tiny mt6">${esc(L.EFFORT_MODES[S.effort].blurb)} Main lifts by week: <b>${Array.from({ length: S.weeks }, (_, i) => { const r = L.effortRir(i + 1, S.weeks, S.goal, 'compound', S.effort); return r.deload ? 'light' : r.rir; }).join(' → ')}</b>; other lifts: <b>${Array.from({ length: S.weeks }, (_, i) => { const r = L.effortRir(i + 1, S.weeks, S.goal, 'isolation', S.effort); return r.deload ? 'light' : r.rir; }).join(' → ')}</b>. The last week is a light week.</div>
+        <div class="muted tiny mt6">${esc(L.EFFORT_MODES[S.effort].blurb)} Main lifts by week: <b>${Array.from({ length: S.weeks }, (_, i) => { const r = L.effortRir(i + 1, S.weeks, S.goal, 'compound', S.effort); return r.deload ? 'light' : r.rir; }).join(' → ')}</b>; other lifts: <b>${Array.from({ length: S.weeks }, (_, i) => { const r = L.effortRir(i + 1, S.weeks, S.goal, 'isolation', S.effort); return r.deload ? 'light' : r.rir; }).join(' → ')}</b>. The last week is a light week.</div></details>
       </div>
       <details class="card prio-box" id="prioBox" ${S.prioOpen || S.start === 'scratch' ? 'open' : ''}><summary><b>Adjust muscles</b>&nbsp; <span class="muted small">${S.start === 'scratch' ? 'set each muscle' : `optional · now: ${esc(presetName())}`}</span></summary>
         <ul class="tight small prio-key"><li><b>Emphasize</b> — your top priority: most sets, adds more when you recover well (pick up to ${L.MAX_EMPHASIZE}).</li>
@@ -1031,7 +1059,11 @@ async function renderBuilder() {
     $$('[data-split]').forEach(b => b.onclick = () => { S.split = b.dataset.split; S.plan = []; step1(); });
     $('#name').oninput = e => { S.name = e.target.value; S.nameTouched = true; };
     $('#weeks').onchange = e => { S.weeks = +e.target.value; S.weeksTouched = true; step1(); };
-    $$('[data-effort]').forEach(b => b.onclick = () => { S.effort = b.dataset.effort; try { localStorage.setItem('wl_effort_mode', S.effort); } catch {} step1(); });
+    $$('[data-effort]').forEach(b => b.onclick = () => { S.effort = b.dataset.effort; S.effortOpen = true; lsSet0('wl_effort_mode', S.effort); step1(); });
+    $$('[data-exp]').forEach(b => b.onclick = () => { S.exp = b.dataset.exp; lsSet0('wl_experience', S.exp);
+      if (!lsGet0('wl_effort_mode')) S.effort = L.EXPERIENCE[S.exp].effort;   // an effort you picked yourself always wins
+      step1(); });
+    { const d = $('#advEffort'); if (d) d.ontoggle = () => { S.effortOpen = d.open; }; }
     $('#prioBox').ontoggle = e => { S.prioOpen = e.target.open; };
     $$('[data-p]').forEach(b => b.onclick = () => {
       S.priorities = { ...S.priorities, [b.dataset.m]: b.dataset.p };
@@ -2095,7 +2127,7 @@ async function renderWorkout(dayId, mode) {
       const i = w.sets.findIndex(x => x.set_index === p.set_index); if (i >= 0) w.sets[i] = { ...w.sets[i], ...p }; else w.sets.push({ ...p }); }));
     if (offline || waiting.some(p => fresh.some(w => w.id === p.workout_exercise_id))) toast('No signal — finishing with what’s saved on your phone; it all syncs automatically.');
     fresh.forEach(w => w.sets.forEach(x => { x.weight = W(x.weight); }));
-    const bw = bwD();
+    const bw = bwD(), perfByMuscle = {};
     for (const m of muscles) {
       // v1.18.0 (audit T3): only like-with-like counts (same lift, best sets within 5 reps); otherwise "no comparison".
       const trends = fresh.filter(w => w.exercises.muscle_group === m).map(w => {
@@ -2103,14 +2135,30 @@ async function renderWorkout(dayId, mode) {
         return p ? L.comparableTrend(w.sets.filter(s => s.completed_at).map(s => ({ ...s, rir: s.rir ?? w.target_rir })), p.sets.map(s => ({ ...s, rir: s.rir ?? p.rir })), w.exercises, bw) : null;
       });
       const perf = L.combineTrends(trends);
+      perfByMuscle[m] = perf;
       if (await durableWrite({ kind: 'upsert', table: 'muscle_feedback', values: { workout_day_id: dayId, muscle_group: m, performance: perf }, onConflict: 'workout_day_id,muscle_group' }) === 'failed') { $('#finish').disabled = false; return; }
     }
     const done = await durableWrite({ kind: 'update', table: 'workout_days', values: { completed_at: new Date().toISOString() }, eq: { id: dayId } });
     if (done === 'failed') { $('#finish').disabled = false; return; }
     const left = openDays(all).filter(d => d.id !== dayId);
     if (!left.length) await durableWrite({ kind: 'update', table: 'mesocycles', values: { status: 'completed' }, eq: { id: meso.id } });
-    toast(done === 'queued' ? 'Workout saved on your phone — it syncs when you’re back online' : 'Workout saved', false, done === 'queued' ? 4000 : 1800);
-    go(left.length ? '#/' : '#/meso/' + meso.id);
+    // v1.19.0 (audit U5): a short summary — what you did vs the plan, best sets vs last time, ratings, sync, next step.
+    const next = [...left].sort((a, b) => a.week - b.week || a.day_index - b.day_index)[0];
+    const fill = (ss, r) => ss.map(x => ({ ...x, rir: x.rir ?? r }));
+    const pick = (arr, ex) => arr.reduce((b, x) => { const e = L.e1rm(x, ex, bw); return e != null && (!b || e > b.e) ? { x, e } : b; }, null);
+    const summary = { at: Date.now(), dayId, mesoId: meso.id, title: `Week ${day.week} · ${dayName(day)}`, queued: done === 'queued',
+      next: next ? { id: next.id, title: `Week ${next.week} · ${dayName(next)}` } : null, mesoName: meso.name,
+      lifts: fresh.filter(w => !isCardio(w)).map(w => {
+        const ss = fill(w.sets.filter(x => x.completed_at), w.target_rir), p = prev[w.exercise_id];
+        const cur = pick(ss, w.exercises), old = p ? pick(fill(p.sets, p.rir), w.exercises) : null;
+        return { name: w.exercises.name, done: ss.length, planned: w.target_sets || 0,
+          best: cur ? { w: cur.x.weight, r: cur.x.reps } : null, last: old ? { w: old.x.weight, r: old.x.reps } : null,
+          trend: p ? L.comparableTrend(ss, fill(p.sets, p.rir), w.exercises, bw) : null };
+      }),
+      cardio: fresh.filter(w => isCardio(w)).map(w => ({ name: w.exercises.name, min: w.sets.filter(x => x.completed_at).reduce((a, x) => a + (Number(x.duration_min) || 0), 0) })).filter(c => c.min),
+      muscles: muscles.map(m => ({ m, perf: perfByMuscle[m] ?? null })) };
+    try { sessionStorage.setItem('wl_summary', JSON.stringify(summary)); } catch {}
+    go('#/summary');
   };
 }
 
@@ -2205,6 +2253,36 @@ function renderExplore() {
     <div class="grow"><b>${t}</b><div class="muted small">${d}</div></div>›</button>`).join('') +
     `<div class="card small muted">How the app decides weights, sets and RIR: <a href="#/logic">How it works — training logic &amp; evidence</a></div>`;
   $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
+}
+
+// ---------- post-workout summary (v1.19.0, audit U5) ----------
+function renderSummary() {
+  let S = null; try { S = JSON.parse(sessionStorage.getItem('wl_summary') || 'null'); } catch {}
+  if (!S) return go('#/');
+  setHeader('Workout done', '#/', 'home');
+  const done = S.lifts.reduce((a, l) => a + l.done, 0), planned = S.lifts.reduce((a, l) => a + l.planned, 0);
+  const fmt = x => x ? (Number(x.w) ? `${+x.w}×${x.r}` : `${x.r} reps`) : '—';
+  const arrow = t => t === 1 ? '<span class="trend up" role="img" aria-label="better than last time">▲</span>' : t === 0 ? '<span class="trend flat" role="img" aria-label="about the same as last time">▬</span>'
+    : t === -1 ? '<span class="trend down" role="img" aria-label="below last time">▼</span>' : '<span class="trend na" role="img" aria-label="no fair comparison yet">·</span>';
+  const perfWord = v => v === 1 ? 'up' : v === 0 ? 'about the same' : v === -1 ? 'down' : 'no comparison yet';
+  const waiting = pendingHere() > 0;
+  app.innerHTML = `
+    <div class="card"><div class="muted small">${esc(S.mesoName)}</div><h3 class="sum-title">${esc(S.title)} ${ic('check', 'accent')}</h3>
+      <div class="sum-stats"><div><b>${done}</b><span class="muted tiny">of ${planned} sets</span></div>
+        <div><b>${S.lifts.filter(l => l.done).length}</b><span class="muted tiny">exercises</span></div>
+        <div><b>${S.lifts.filter(l => l.trend === 1).length}</b><span class="muted tiny">beat last time</span></div></div>
+      <div class="small ${waiting ? 'warn-text' : 'muted'}" id="sumSync">${waiting ? `${ic('alert')} Saved on this phone — it syncs when you’re back online. Keep the app open until it does.` : `${ic('check')} Saved and synced.`}</div></div>
+    <div class="card"><h3>Your lifts</h3>
+      ${S.lifts.map(l => `<div class="sum-row"><div class="grow"><b>${esc(l.name)}</b><div class="muted tiny">${l.done}/${l.planned} sets${l.done < l.planned ? ' · fewer than planned' : ''}</div></div>
+        <div class="sum-best small">${l.best ? `${arrow(l.trend)} ${fmt(l.best)}` : ''}<div class="muted tiny">${l.last ? `last time ${fmt(l.last)}` : l.done ? 'first time' : 'not done'}</div></div></div>`).join('')}
+      ${S.cardio.map(c => `<div class="sum-row"><div class="grow"><b>${esc(c.name)}</b></div><div class="small">${c.min} min</div></div>`).join('')}
+      <div class="muted tiny mt6">▲ ▬ ▼ compare your best set with last time’s by estimated strength — an estimate, and only when the reps are similar (· = no fair comparison yet).</div></div>
+    <div class="card"><h3>What happens next</h3>
+      <div class="small">Ratings saved. Performance: ${S.muscles.map(x => `${esc(x.m)} ${perfWord(x.perf)}`).join(' · ') || '—'}.</div>
+      <div class="muted tiny mt6">Next time you train these you’ll be asked how they recovered — that sets next week’s sets. One session never changes them on its own.</div>
+      ${S.next ? `<button class="primary block mt10" data-go="#/">Next up: ${esc(S.next.title)}</button>` : `<button class="primary block mt10" data-go="#/meso/${esc(S.mesoId)}">Meso finished — see it and run it again</button>`}
+      <button class="ghost block mt6" data-go="#/history">See history</button></div>`;
+  $$('[data-go]').forEach(b => b.onclick = () => { try { sessionStorage.removeItem('wl_summary'); } catch {} go(b.dataset.go); });
 }
 
 // ---------- feedback (v1.15.0) ----------

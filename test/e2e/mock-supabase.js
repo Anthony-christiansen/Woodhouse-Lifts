@@ -81,5 +81,5 @@ function builder(table) {
 }
 export function createClient() {
   return { from: builder, rpc: (fn, args) => { window.__lastRpc = { fn, args }; (window.__rpcs = window.__rpcs || []).push({ fn, args }); if (fn === 'create_mesocycle') (window.__creates = window.__creates || []).push(args); if (fn === 'light_week_preview' && window.__PREVIEW_SEQ?.length) return Promise.resolve({ data: window.__PREVIEW_SEQ.shift(), error: null }); const err = window.__RPC_ERR?.[fn]; if (err) return Promise.resolve({ data: null, error: err }); return builder('rpc:' + fn); }, auth: { getSession: async () => ({ data: { session: { user: { id: 'u1', email: 'alex@example.com' } } } }),
-    onAuthStateChange() {}, signOut: async () => {} } };
+    onAuthStateChange(cb) { window.__authEmit = (evt, uid = 'u1') => cb(evt, uid ? { user: { id: uid, email: 'alex@example.com' } } : null); }, signOut: async () => {} } };
 }

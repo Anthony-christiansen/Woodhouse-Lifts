@@ -533,6 +533,13 @@ export const EFFORT_MODES = {
   conservative: { name: 'Conservative', blurb: 'Main lifts stop ≥2 reps short, everything else ≥1. Good for beginners or lower-fatigue training.', floor: { compound: 2, isolation: 1 } },
 };
 export const effortOf = m => (EFFORT_MODES[m] ? m : 'standard');
+/** v1.19.0 (audit U3): training experience only picks the starting effort style; you can change it any time. */
+export const EXPERIENCE = {
+  new: { name: 'New to lifting', short: 'New', effort: 'conservative', blurb: 'Under a year of regular lifting. Starts Conservative: every set stops a rep or two short of failure.' },
+  some: { name: 'Some experience', short: 'Some', effort: 'main1', blurb: 'A year or more. Main lifts stop at least 1 rep short; other lifts can go closer.' },
+  experienced: { name: 'Experienced', short: 'Experienced', effort: 'standard', blurb: 'Years of hard training and good at judging reps left. The full RP-style ramp.' },
+};
+export const experienceOf = x => (EXPERIENCE[x] ? x : null);
 export function effortRir(week, weeks, goal, kind, mode = 'standard') {
   const r = targetRir(week, weeks, goal, kind);
   if (r.deload) return r;

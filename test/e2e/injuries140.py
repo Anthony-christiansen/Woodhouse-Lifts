@@ -51,6 +51,7 @@ async def main():
         ok('No (after confirming) clears them', w and w.get('avoid_tags')==[] and await pg.locator('#injCard [data-area]').count()==0, w)
         await pg.click('[data-inj="yes"]'); await pg.wait_for_timeout(200); await pg.click('#injCard [data-area="lower_back"]'); await pg.wait_for_timeout(500)
         # v1.16.0: the old "main lifts ≥1" switch is now one of three effort styles
+        await pg.evaluate("document.getElementById('advEffort').open = true"); await pg.wait_for_timeout(100)
         await pg.click('[data-effort="main1"]'); await pg.wait_for_timeout(200)
         ok('effort style picks and shows on', await pg.get_attribute('[data-effort="main1"]','aria-pressed')=='true' and await pg.locator('[data-effort][aria-pressed="true"]').count()==1)
         t=await pg.inner_text('main')
