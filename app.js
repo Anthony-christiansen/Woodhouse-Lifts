@@ -1,15 +1,12 @@
-// v1.12.1: pinned to one reviewed release, so the code users get only changes with a commit here (outside audit, finding 4).
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.2/+esm';
-import * as L from './logic.js?v=52';
-import * as LEARN from './learn.js?v=52';
-import * as MD from './md.js?v=52';
-import { ICONS, ic } from './icons.js?v=52';
-import { esc, fmtNum, fmt, today, dayName, order, weekStart, isoDay } from './format.js?v=52';
-import { toast, linkLabels, openSheet, closeSheet } from './ui.js?v=52';
+// v1.12.1: supabase-js is pinned to one reviewed release (outside audit, finding 4) — see net.js.
+import * as L from './logic.js?v=53';
+import * as LEARN from './learn.js?v=53';
+import * as MD from './md.js?v=53';
+import { ICONS, ic } from './icons.js?v=53';
+import { esc, fmtNum, fmt, today, dayName, order, weekStart, isoDay } from './format.js?v=53';
+import { toast, linkLabels, openSheet, closeSheet } from './ui.js?v=53';
+import { sb, session, setSession, OKEY, QKEY, durableWrite, flushOps, flushQueue, flushing, inOrder, isNetErr, isPermanentErr, lastSent, loadIncrements, lsGet, lsSet, memStore, newVer, oKey, oLoad, oStore, opFailed, opQuery, opsFlushing, overlayDays, pendingOps, qAddFailed, qFailed, qFailedKey, qKey, qLoad, qLoadFor, qMigrateLegacy, qStore, qStoreFor, riskWarned, sameVersion, saveSet, sendQueued, setChains, setKey, storageAtRisk, stripLocal, syncAll, syncBadge, verSeq, warnAtRisk } from './net.js?v=53';
 
-// Public by design: access is enforced by row-level security in the database.
-const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
-  { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
 // Where confirmation emails send people back to (must be in Supabase Auth → URL Configuration → Redirect URLs).
 const SITE_URL = 'https://anthony-christiansen.github.io/Woodhouse-Lifts/';
 // Capture what the confirmation link put in the URL before the router or supabase-js touch it.
@@ -22,7 +19,7 @@ let authReturn = (() => {
   return null;
 })();
 let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
-export const APP_VERSION = '1.20.1'; // keep in sync with CHANGELOG.md
+export const APP_VERSION = '1.20.2'; // keep in sync with CHANGELOG.md
 const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
 // v1.11.4: the training rules are a page inside the app (#/logic), built from this repo's docs/training-logic.md.
 // The app never links to anyone's Google Drive.
@@ -61,7 +58,7 @@ const gearBtn = document.getElementById('gearBtn');
 const themeBtn = document.getElementById('themeBtn');
 themeBtn.onclick = () => setTheme(isDark() ? 'light' : 'dark');
 const sheet = document.getElementById('sheet');
-let session = null, profile = null, exCache = null;
+let profile = null, exCache = null;   // session lives in net.js (setSession)
 
 // ---------- helpers ----------
 const $ = sel => app.querySelector(sel);
@@ -106,176 +103,6 @@ const needKeys = m => rateKeys(m).filter(k => k !== 'pump');
 const OPTIONAL = { pump: true };
 const segHtml = (key, val, attrs = '') => `<div class="seg">${RATINGS[key].opts.map((o, i) =>
   `<button type="button" ${attrs} data-k="${key}" data-v="${i}" class="${val === i ? 'on' : ''}">${o}</button>`).join('')}</div>`;
-
-// ---------- reliable set saving ----------
-// Every set save is an idempotent upsert keyed by (workout_exercise_id, set_index), so the database can never
-// hold a duplicate set. If the network drops (gym basements), the save is kept on the phone and retried
-// automatically — when the connection returns, when the app comes back to the foreground, and every 20 s.
-// The queue is per account (review #2): switching accounts on the same phone can't send one person's sets as another's.
-// v1.15.1 (audit S1): if the phone refuses to store the offline copy (storage full, blocked, private mode), the copy
-// is kept in memory for this session instead and the app says plainly that closing it would lose those changes —
-// it never claims "saved on your phone" when it isn't.
-const memStore = new Map(); let storageAtRisk = false;
-const lsGet = k => memStore.has(k) ? memStore.get(k) : localStorage.getItem(k);
-function lsSet(k, v) {
-  try { localStorage.setItem(k, v); memStore.delete(k); return true; }
-  catch { memStore.set(k, v); if (!storageAtRisk) { storageAtRisk = true; setTimeout(syncBadge); } return false; }
-}
-const QKEY = 'wl_pending_sets_v1';
-const qKey = () => session?.user?.id ? `${QKEY}:${session.user.id}` : null;
-const qLoad = () => { const k = qKey(); if (!k) return {}; try { return JSON.parse(lsGet(k) || '{}'); } catch { return {}; } };
-const qStore = q => { const k = qKey(); if (!k) return; lsSet(k, JSON.stringify(q)); };
-// Sets the server rejected for good (not a network problem) are kept here instead of being thrown away.
-const qFailedKey = () => session?.user?.id ? `${QKEY}:failed:${session.user.id}` : null;
-const qFailed = () => { const k = qFailedKey(); try { return k ? JSON.parse(lsGet(k) || '[]') : []; } catch { return []; } };
-const qAddFailed = (p, msg) => { const k = qFailedKey(); if (!k) return; lsSet(k, JSON.stringify([...qFailed(), { ...p, _error: msg, _at: new Date().toISOString() }].slice(-50))); };
-// One-time move of the old shared queue (before 1.8.0) into the signed-in account's queue; the database's row-level
-// security rejects anything that isn't this user's, and those land in the failed list rather than being lost.
-function qMigrateLegacy() {
-  try { const old = localStorage.getItem(QKEY); if (!old || !qKey()) return;
-    const q = { ...JSON.parse(old), ...qLoad() }; qStore(q); localStorage.removeItem(QKEY); } catch {}
-}
-// Smallest weight jumps per equipment (doc §4.6) — kept on this phone; defaults are 2.5 lb / 1.25 kg, dumbbells 5 lb / 2 kg.
-const loadIncrements = () => { try { return JSON.parse(localStorage.getItem('wl_increments') || '{}'); } catch { return {}; } };
-L.setIncrements(loadIncrements());
-// Permanent = the database refused the row (constraint, permission); anything else (network, 5xx, timeouts) is retried.
-const isPermanentErr = e => /^(22|23|42)/.test(e?.code || '') || e?.code === 'PGRST116';
-const isNetErr = e => !navigator.onLine || /failed to fetch|network|load failed|timeout|fetch/i.test(e?.message || '');
-const setKey = p => p.workout_exercise_id + ':' + p.set_index;
-// v1.12.1 (outside audit, finding 2): no stale writes.
-//  - Write-ahead: every edit is stored on the phone (with a version) BEFORE it is sent, so closing the app mid-save
-//    loses nothing.
-//  - One write at a time per set: saves and offline retries for the same set go out in order, so an older value can
-//    never land on the server after a newer one.
-//  - A save only clears the phone copy if that copy is still the version it sent; a newer edit made meanwhile stays
-//    queued and is sent next.
-//  - The account is fixed per write: if you switch accounts mid-save, the other account's queue is never touched.
-let verSeq = 0;
-const newVer = () => `${Date.now().toString(36)}.${(++verSeq).toString(36)}.${Math.random().toString(36).slice(2, 6)}`;
-const stripLocal = p => { const { _v, _queued, ...row } = p; return row; };
-const sameVersion = (a, b) => !!a && !!b && (a._v ?? JSON.stringify(a)) === (b._v ?? JSON.stringify(b));
-const qLoadFor = k => { try { return k ? JSON.parse(lsGet(k) || '{}') : {}; } catch { return {}; } };
-const qStoreFor = (k, q) => { if (!k) return true; return lsSet(k, JSON.stringify(q)); };
-const setChains = new Map();
-function inOrder(key, fn) {           // runs fn after every earlier write for this set has finished
-  const next = (setChains.get(key) || Promise.resolve()).catch(() => {}).then(fn);
-  setChains.set(key, next);
-  next.finally(() => { if (setChains.get(key) === next) setChains.delete(key); }).catch(() => {});
-  return next;
-}
-// Sends the phone copy of one set (whatever is newest when its turn comes). Result: 'saved' | 'queued' | 'failed' | 'gone'.
-function sendQueued(k, qk, uid) {
-  return inOrder(qk + '|' + k, async () => {
-    const cur = qLoadFor(qk)[k];
-    if (!cur) return 'gone';                                         // removed meanwhile (set deleted)
-    if (session?.user?.id !== uid) return 'queued';                  // account switched: leave it for its owner
-    const { error } = await sb.from('sets').upsert(stripLocal(cur), { onConflict: 'workout_exercise_id,set_index' });
-    if (session?.user?.id !== uid) return 'queued';
-    if (!error) { const q = qLoadFor(qk); if (sameVersion(q[k], cur)) { delete q[k]; qStoreFor(qk, q); } return 'saved'; }
-    if (!isPermanentErr(error)) return 'queued';                     // network or server hiccup → keep & retry
-    const q = qLoadFor(qk); if (sameVersion(q[k], cur)) { delete q[k]; qStoreFor(qk, q); qAddFailed(stripLocal(cur), error.message); }
-    return Object.assign(new String('failed'), { message: error.message });
-  });
-}
-const lastSent = new Map();   // newest value of every set edited in this app session (for finishing with no signal)
-async function saveSet(payload) {
-  const qk = qKey(), uid = session?.user?.id, k = setKey(payload);
-  lastSent.set(k, { ...payload });
-  if (!qk) return 'failed';
-  const q = qLoadFor(qk); q[k] = { ...payload, _v: newVer() }; qStoreFor(qk, q);   // on the phone first
-  const res = await sendQueued(k, qk, uid);
-  syncBadge();
-  if (String(res) === 'failed') { toast(`Couldn’t save that set: ${res.message}`, true); return 'failed'; }
-  if (res === 'queued' && storageAtRisk) warnAtRisk();
-  return res === 'queued' ? 'queued' : 'saved';
-}
-let flushing = false;
-async function flushQueue() {
-  if (flushing || !session) return;
-  flushing = true;
-  const qk = qKey(), uid = session.user.id;
-  try {
-    for (const k of Object.keys(qLoadFor(qk))) {
-      const res = await sendQueued(k, qk, uid);
-      if (String(res) === 'failed') toast(`A saved-offline set was refused by the server and kept aside: ${res.message}`, true);
-      if (res === 'queued') break;                                   // still offline: try again later
-    }
-  } finally { flushing = false; syncBadge(); }
-  const left = Object.keys(qLoad()).length;
-  document.querySelectorAll('.set.queued').forEach(r => { if (!qLoad()[r.dataset.key]) { r.classList.remove('queued'); r.classList.add('saved-flash'); } });
-  return left;
-}
-function syncBadge() {
-  const qk = qKey(), sets = Object.keys(qLoad()).filter(k => !setChains.has(qk + '|' + k)).length;   // in-flight saves aren't "waiting"
-  const ops = opsFlushing ? 0 : oLoad().length, n = sets + ops;
-  let b = document.getElementById('syncBadge');
-  document.body.classList.toggle('has-sync', !!n);   // v1.12.3: room at the bottom so the badge never covers a button
-  if (!n) { b?.remove(); return; }
-  if (!b) { b = document.createElement('button'); b.id = 'syncBadge'; b.className = 'sync-badge'; b.onclick = () => syncAll(); document.body.appendChild(b); }
-  b.textContent = `⟳ ${[sets ? `${sets} set${sets > 1 ? 's' : ''}` : '', ops ? `${ops} change${ops > 1 ? 's' : ''}` : ''].filter(Boolean).join(' + ')} waiting to sync${storageAtRisk ? ' — NOT saved on this phone, keep the app open' : ''} — tap to retry`;
-  b.classList.toggle('risk', storageAtRisk);
-  b.setAttribute('aria-live', 'polite');
-}
-// ---------- durable writes for ratings and finishing a workout (v1.12.3, outside audit finding 3) ----------
-// Each change is kept on the phone (in order) before it is sent, then sent one at a time, oldest first, after any
-// waiting sets. Every change is idempotent (an upsert on its natural key, or an update to fixed values), so a retry
-// after a dropped connection can never apply it twice. With no signal, a workout can be rated and finished; it all
-// syncs by itself when the connection is back. Refused changes are kept aside, never silently dropped.
-const OKEY = 'wl_pending_ops_v1';
-const oKey = () => session?.user?.id ? `${OKEY}:${session.user.id}` : null;
-const oLoad = (k = oKey()) => { try { return k ? JSON.parse(lsGet(k) || '[]') : []; } catch { return []; } };
-const oStore = (k, a) => { if (!k) return true; return lsSet(k, JSON.stringify(a)); };
-const opFailed = new Set();
-function opQuery(op) {
-  if (op.kind === 'upsert') return sb.from(op.table).upsert(op.values, { onConflict: op.onConflict });
-  let q = sb.from(op.table).update(op.values);
-  for (const [c, v] of Object.entries(op.eq || {})) q = q.eq(c, v);
-  return q;
-}
-let opsFlushing = null;
-function flushOps() {
-  if (opsFlushing) return opsFlushing;
-  opsFlushing = (async () => {
-    const k = oKey(), uid = session?.user?.id; if (!k) return 'none';
-    for (;;) {
-      const op = oLoad(k)[0]; if (!op) return 'done';
-      if (session?.user?.id !== uid) return 'queued';
-      const { error } = await opQuery(op);
-      if (session?.user?.id !== uid) return 'queued';
-      if (!error) { oStore(k, oLoad(k).filter(x => x.id !== op.id)); continue; }
-      if (!isPermanentErr(error)) return 'queued';               // no signal: keep everything, in order
-      oStore(k, oLoad(k).filter(x => x.id !== op.id)); opFailed.add(op.id); qAddFailed({ op }, error.message);
-      toast(`A change saved on your phone was refused by the server and kept aside: ${error.message}`, true);
-    }
-  })().finally(() => { opsFlushing = null; syncBadge(); });
-  return opsFlushing;
-}
-async function syncAll() { await flushQueue(); return flushOps(); }
-let riskWarned = 0;
-function warnAtRisk() {   // at most once a minute
-  if (Date.now() - riskWarned < 60000) return; riskWarned = Date.now();
-  toast('No signal, and this phone won’t let the app keep an offline copy. Keep the app open until it syncs, or the unsynced changes are lost.', true, 8000);
-}
-// Returns 'saved' (on the server), 'queued' (kept on the phone, will sync) or 'failed' (refused; kept aside).
-async function durableWrite(op) {
-  const k = oKey(); if (!k) return 'failed';
-  op = { id: newVer(), at: new Date().toISOString(), ...op };
-  oStore(k, [...oLoad(k), op]);
-  if (!Object.keys(qLoad()).length || await flushQueue() === 0) await flushOps();
-  if (opFailed.has(op.id)) return 'failed';
-  const left = oLoad(k).some(x => x.id === op.id);
-  if (left && storageAtRisk) warnAtRisk();
-  return left ? 'queued' : 'saved';
-}
-// Pending changes overlay what the server returned, so a page loaded before they sync still shows them.
-const pendingOps = (table, match) => oLoad().filter(o => o.table === table && match(o));
-function overlayDays(days) {
-  for (const d of days) for (const o of pendingOps('workout_days', o => o.eq?.id === d.id)) Object.assign(d, o.values);
-  return days;
-}
-window.addEventListener('online', () => syncAll());
-document.addEventListener('visibilitychange', () => { if (!document.hidden) syncAll(); });
-setInterval(() => { if (Object.keys(qLoad()).length || oLoad().length) syncAll(); }, 20000);
 
 // ---------- per-lift insights (doc §6.1) ----------
 // For a list of exercise ids: recent sessions + earlier best (lift_recent), tagged with meso and meso week, then the
@@ -336,7 +163,7 @@ const routes = {
 };
 async function route() {
   closeSheet(); document.body.classList.remove('has-next');
-  const { data } = await sb.auth.getSession(); session = data.session; // waits for supabase-js to read the link's tokens
+  const { data } = await sb.auth.getSession(); setSession(data.session); // waits for supabase-js to read the link's tokens
   routedUid = session?.user?.id ?? null;
   if (authReturn) {
     const r = authReturn; authReturn = null;
@@ -371,7 +198,7 @@ sb.auth.onAuthStateChange((evt, sess) => {
   if (evt === 'PASSWORD_RECOVERY') { awaitingNewPassword = true; profile = null; return route(); }
   const uid = sess?.user?.id ?? null;
   if (evt === 'SIGNED_OUT' || (evt === 'SIGNED_IN' && uid !== routedUid)) { routedUid = uid; profile = null; route(); }
-  else if (sess) session = sess;   // token refresh / same user: keep the fresh session, leave the screen alone
+  else if (sess) setSession(sess);   // token refresh / same user: keep the fresh session, leave the screen alone
 });
 
 // ---------- auth ----------
