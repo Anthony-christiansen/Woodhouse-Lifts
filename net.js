@@ -1,8 +1,8 @@
 // Woodhouse Lifts — Supabase client and the offline-safe sync queue (moved out of app.js in 1.20.2, unchanged).
 // Owns the signed-in session the queue keys on; app.js sets it with setSession() and reads it (live binding).
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.2/+esm';
-import * as L from './logic.js?v=58';
-import { toast } from './ui.js?v=58';
+import * as L from './logic.js?v=59';
+import { toast } from './ui.js?v=59';
 
 // Public by design: access is enforced by row-level security in the database.
 export const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -31,7 +31,7 @@ export const qStore = q => { const k = qKey(); if (!k) return; lsSet(k, JSON.str
 // Sets the server rejected for good (not a network problem) are kept here instead of being thrown away.
 export const qFailedKey = () => session?.user?.id ? `${QKEY}:failed:${session.user.id}` : null;
 export const qFailed = () => { const k = qFailedKey(); try { return k ? JSON.parse(lsGet(k) || '[]') : []; } catch { return []; } };
-// v1.20.7: a refused set is listed once (its latest values) — a set refused on change and again on ✓ isn't two problems.
+// v1.20.8: a refused set is listed once (its latest values) — a set refused on change and again on ✓ isn't two problems.
 export const qAddFailed = (p, msg) => { const k = qFailedKey(); if (!k) return;
   const same = f => !p.op && !f.op && f.workout_exercise_id === p.workout_exercise_id && f.set_index === p.set_index;
   lsSet(k, JSON.stringify([...qFailed().filter(f => !same(f)), { ...p, _error: msg, _at: new Date().toISOString() }].slice(-50))); };
@@ -118,12 +118,12 @@ export function syncBadge() {
   document.body.classList.toggle('has-sync', !!n);   // v1.12.3: room at the bottom so the badge never covers a button
   if (!n) { b?.remove(); return; }
   if (!b) { b = document.createElement('button'); b.id = 'syncBadge'; b.className = 'sync-badge'; b.onclick = () => syncAll(); document.body.appendChild(b); }
-  const memory = saveState().state === 'memory';   // v1.20.7: the same answer the summary gives
+  const memory = saveState().state === 'memory';   // v1.20.8: the same answer the summary gives
   b.textContent = `⟳ ${[sets ? `${sets} set${sets > 1 ? 's' : ''}` : '', ops ? `${ops} change${ops > 1 ? 's' : ''}` : ''].filter(Boolean).join(' + ')} waiting to sync${memory ? ' — NOT saved on this phone, keep the app open' : ''} — tap to retry`;
   b.classList.toggle('risk', memory);
   b.setAttribute('aria-live', 'polite');
 }
-// v1.20.7 (audit 1.20.4 finding 1): ONE answer to "is my workout safe?", used by the summary, the sync badge and
+// v1.20.8 (audit 1.20.4 finding 1): ONE answer to "is my workout safe?", used by the summary, the sync badge and
 // Settings, so they can never disagree. States, most urgent first:
 //   refused  — the server refused something since `since` (kept aside; Settings → Sync problems lists it)
 //   memory   — waiting to sync AND this phone wouldn't store the copy: closing the app loses it

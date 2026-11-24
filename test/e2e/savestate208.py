@@ -1,4 +1,4 @@
-# v1.20.7 (audit 1.20.4 finding 1) — the summary, the sync badge and Settings give ONE honest answer about saving:
+# v1.20.8 (audit 1.20.4 finding 1) — the summary, the sync badge and Settings give ONE honest answer about saving:
 # memory-only (phone refused the offline copy) · saving (in flight) · on this phone · synced · refused (with a fix path).
 import os, json
 HERE=os.path.dirname(os.path.abspath(__file__)); ROOT=os.path.abspath(os.path.join(HERE,'..','..'))
@@ -107,6 +107,6 @@ async def main():
     srv.terminate()
     fails=[r for r in R if r[0]=='FAIL']
     for r in R: print(*r)
-    print(f'SAVESTATE207 {"PASSED" if not fails else "FAILED"} ({len(R)-len(fails)}/{len(R)})')
+    print(f'SAVESTATE208 {"PASSED" if not fails else "FAILED"} ({len(R)-len(fails)}/{len(R)})')
     sys.exit(1 if fails else 0)
 asyncio.run(main())

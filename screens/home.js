@@ -1,11 +1,11 @@
 // Woodhouse Lifts — home (dashboard), explore, post-workout summary (v1.19.0, audit U5), feedback (v1.15.0), Home drill-downs (#/stats/<kind>/<arg>) (moved out of app.js in 1.20.3, code unchanged).
-import * as L from '../logic.js?v=58';
-import { ic } from '../icons.js?v=58';
-import { esc, fmt, dayName, weekStart, isoDay } from '../format.js?v=58';
-import { toast, openSheet, closeSheet } from '../ui.js?v=58';
-import { profile } from '../state.js?v=58';
-import { sb, saveState } from '../net.js?v=58';
-import { $, $$, APP_VERSION, STATUS_ORDER, W, activeMeso, app, cardioItems, cardioSince, check, effortText, fatigueFor, fatigueKey, fetchAll, go, lastScreen, lateCard, lateSets, liftInsights, mesoDays, openDays, pendingHere, setHeader, slipFor, startLightWeek, statusPill, wireLate, workoutCardioSince } from '../app.js?v=58';
+import * as L from '../logic.js?v=59';
+import { ic } from '../icons.js?v=59';
+import { esc, fmt, dayName, weekStart, isoDay } from '../format.js?v=59';
+import { toast, openSheet, closeSheet } from '../ui.js?v=59';
+import { profile } from '../state.js?v=59';
+import { sb, saveState } from '../net.js?v=59';
+import { $, $$, APP_VERSION, STATUS_ORDER, W, activeMeso, app, cardioItems, cardioSince, check, effortText, fatigueFor, fatigueKey, fetchAll, go, lastScreen, lateCard, lateSets, liftInsights, mesoDays, openDays, pendingHere, setHeader, slipFor, startLightWeek, statusPill, wireLate, workoutCardioSince } from '../app.js?v=59';
 
 // ---------- home (dashboard) ----------
 export async function renderHome() {
@@ -185,7 +185,7 @@ export function renderSummary() {
   const perfWord = x => x.perf === 1 ? 'up' : x.perf === -1 ? 'below last time' : x.perf == null ? 'no comparison yet'
     : S.lifts.some(l => l.muscle === x.m && onPlan(l)) ? 'on plan' : 'holding steady';
   const good = S.lifts.filter(l => l.trend === 1 || onPlan(l)).length;
-  // v1.20.7 (audit finding 1): the save line comes from net.js saveState() — the same answer as the sync badge — and
+  // v1.20.8 (audit finding 1): the save line comes from net.js saveState() — the same answer as the sync badge — and
   // updates live, so it never says "synced" while a save is still on its way, or "on this phone" when it's only in memory.
   const syncLine = () => { const st = saveState({ since: S.since || null }), n = st.waiting;
     const what = `${n} change${n === 1 ? '' : 's'}`;

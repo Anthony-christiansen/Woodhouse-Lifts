@@ -30,7 +30,7 @@ Versions follow **MAJOR.MINOR.PATCH**:
 **Underneath**
 - `net.js`: `saveState({ since })` gives refused › memory › saving › device › synced from the per-account queues, the in-flight chains and the refused list. Also `clearFailed()`. `qAddFailed` keeps one entry per set.
 - The summary stores `since` (the workout's start), so an old refusal doesn't colour today's summary.
-- Tests: `savestate207.py` (13 checks) covers synced, in flight then landed, offline on the phone, a quota-blocked phone offline (summary and badge) then back online, refused with Settings and clear, and old refusals ignored. The mock gained a `__REFUSE` hook.
+- Tests: `savestate208.py` (13 checks) covers synced, in flight then landed, offline on the phone, a quota-blocked phone offline (summary and badge) then back online, refused with Settings and clear, and old refusals ignored. The mock gained a `__REFUSE` hook.
 - Rollback: `release/v1.20.7`. No database change.
 
 ## 1.20.7 — 2026-11-24 · Fix: a rating pop-up could get stuck (owner report)

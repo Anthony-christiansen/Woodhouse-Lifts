@@ -1,11 +1,11 @@
 // Woodhouse Lifts — recovery follow-ups (doc §3, §5), workout logger, cardio (moved out of app.js in 1.20.3, code unchanged).
-import * as L from '../logic.js?v=58';
-import { ic } from '../icons.js?v=58';
-import { esc, fmtNum, fmt, today, dayName, weekStart, isoDay } from '../format.js?v=58';
-import { toast, openSheet, closeSheet } from '../ui.js?v=58';
-import { profile, setBuilder } from '../state.js?v=58';
-import { sb, durableWrite, flushQueue, isNetErr, lastSent, overlayDays, pendingOps, qLoad, qStore, saveSet, setKey, storageAtRisk, syncBadge } from '../net.js?v=58';
-import { $, $$, OPTIONAL, RATINGS, W, activeMeso, app, bwD, cardioItems, cardioSince, check, effortShort, effortText, fetchAll, go, haptic, liftInsights, loadExercises, loadPrefs, mesoDays, needKeys, openDays, rateKeys, segHtml, setHeader, sheet, slipFor, statusPill, toLb, unit, warnList, workoutCardioSince } from '../app.js?v=58';
+import * as L from '../logic.js?v=59';
+import { ic } from '../icons.js?v=59';
+import { esc, fmtNum, fmt, today, dayName, weekStart, isoDay } from '../format.js?v=59';
+import { toast, openSheet, closeSheet } from '../ui.js?v=59';
+import { profile, setBuilder } from '../state.js?v=59';
+import { sb, durableWrite, flushQueue, isNetErr, lastSent, overlayDays, pendingOps, qLoad, qStore, saveSet, setKey, storageAtRisk, syncBadge } from '../net.js?v=59';
+import { $, $$, OPTIONAL, RATINGS, W, activeMeso, app, bwD, cardioItems, cardioSince, check, effortShort, effortText, fetchAll, go, haptic, liftInsights, loadExercises, loadPrefs, mesoDays, needKeys, openDays, rateKeys, segHtml, setHeader, sheet, slipFor, statusPill, toLb, unit, warnList, workoutCardioSince } from '../app.js?v=59';
 
 // ---------- recovery follow-ups (doc §3, §5) ----------
 export async function pendingRecovery(day, muscles) {
