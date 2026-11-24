@@ -911,7 +911,7 @@ export async function renderWorkout(dayId, mode) {
     const next = [...left].sort((a, b) => a.week - b.week || a.day_index - b.day_index)[0];
     const fill = (ss, r) => ss.map(x => ({ ...x, rir: x.rir ?? r }));
     const pick = (arr, ex) => arr.reduce((b, x) => { const e = L.e1rm(x, ex, bw); return e != null && (!b || e > b.e) ? { x, e } : b; }, null);
-    const summary = { at: Date.now(), dayId, mesoId: meso.id, title: `Week ${day.week} · ${dayName(day)}`, queued: done === 'queued',
+    const summary = { at: Date.now(), since: day.started_at || new Date(Date.now() - 4 * 3600e3).toISOString(), dayId, mesoId: meso.id, title: `Week ${day.week} · ${dayName(day)}`, queued: done === 'queued',
       next: next ? { id: next.id, title: `Week ${next.week} · ${dayName(next)}` } : null, mesoName: meso.name,
       lifts: fresh.filter(w => !isCardio(w)).map(w => {
         const ss = fill(w.sets.filter(x => x.completed_at), w.target_rir), p = prev[w.exercise_id];

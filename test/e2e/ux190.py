@@ -51,6 +51,7 @@ async def main():
         await pg.goto(B+'#/workout/d21'); await pg.wait_for_timeout(1100)
         await pg.evaluate("window.__FAIL_NET = true; sessionStorage.setItem('failnet', '1')")
         await finish(pg)
+        await pg.wait_for_timeout(1500)   # 1.20.7: the line updates itself once the retry on opening the page settles
         t=await pg.inner_text('main') if '#/summary' in pg.url else ''
         ok('offline: summary is honest about sync', 'Saved on this phone' in t and 'Saved and synced' not in t, t[:300])
         # --- Home: sets card follows the meso week (lines up with workouts); no redraw on token refresh / refocus

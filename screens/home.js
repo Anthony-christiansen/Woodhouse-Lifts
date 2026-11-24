@@ -4,7 +4,7 @@ import { ic } from '../icons.js?v=58';
 import { esc, fmt, dayName, weekStart, isoDay } from '../format.js?v=58';
 import { toast, openSheet, closeSheet } from '../ui.js?v=58';
 import { profile } from '../state.js?v=58';
-import { sb } from '../net.js?v=58';
+import { sb, saveState } from '../net.js?v=58';
 import { $, $$, APP_VERSION, STATUS_ORDER, W, activeMeso, app, cardioItems, cardioSince, check, effortText, fatigueFor, fatigueKey, fetchAll, go, lastScreen, lateCard, lateSets, liftInsights, mesoDays, openDays, pendingHere, setHeader, slipFor, startLightWeek, statusPill, wireLate, workoutCardioSince } from '../app.js?v=58';
 
 // ---------- home (dashboard) ----------
@@ -185,13 +185,21 @@ export function renderSummary() {
   const perfWord = x => x.perf === 1 ? 'up' : x.perf === -1 ? 'below last time' : x.perf == null ? 'no comparison yet'
     : S.lifts.some(l => l.muscle === x.m && onPlan(l)) ? 'on plan' : 'holding steady';
   const good = S.lifts.filter(l => l.trend === 1 || onPlan(l)).length;
-  const waiting = pendingHere() > 0;
+  // v1.20.7 (audit finding 1): the save line comes from net.js saveState() — the same answer as the sync badge — and
+  // updates live, so it never says "synced" while a save is still on its way, or "on this phone" when it's only in memory.
+  const syncLine = () => { const st = saveState({ since: S.since || null }), n = st.waiting;
+    const what = `${n} change${n === 1 ? '' : 's'}`;
+    return st.state === 'refused' ? { cls: 'warn-text', html: `${ic('alert')} ${st.refused} change${st.refused === 1 ? ' was' : 's were'} refused by the server and kept aside on this phone, not lost. <a href="#/settings" id="sumFix">See what and fix it</a>.` }
+      : st.state === 'memory' ? { cls: 'warn-text', html: `${ic('alert')} <b>Not saved on this phone yet.</b> This phone won’t keep an offline copy, so ${what} only exist${n === 1 ? 's' : ''} while the app is open. Keep it open until this says synced.` }
+      : st.state === 'saving' ? { cls: 'muted', html: `${ic('refresh')} Saving… a copy is already on this phone.` }
+      : st.state === 'device' ? { cls: 'muted', html: `${ic('check')} Saved on this phone — ${what} sync by themselves when you’re back online.` }
+      : { cls: 'muted', html: `${ic('check')} Saved and synced.` }; };
   app.innerHTML = `
     <div class="card"><div class="muted small">${esc(S.mesoName)}</div><h3 class="sum-title">${esc(S.title)} ${ic('check', 'accent')}</h3>
       <div class="sum-stats"><div><b>${done}</b><span class="muted tiny">of ${planned} sets</span></div>
         <div><b>${S.lifts.filter(l => l.done).length}</b><span class="muted tiny">exercises</span></div>
         <div><b>${good}</b><span class="muted tiny">on plan or better</span></div></div>
-      <div class="small ${waiting ? 'warn-text' : 'muted'}" id="sumSync">${waiting ? `${ic('alert')} Saved on this phone — it syncs when you’re back online. Keep the app open until it does.` : `${ic('check')} Saved and synced.`}</div></div>
+      ${(l => `<div class="small ${l.cls}" id="sumSync" role="status" aria-live="polite">${l.html}</div>`)(syncLine())}</div>
     <div class="card"><h3>Your lifts</h3>
       ${S.lifts.map(l => `<div class="sum-row"><div class="grow"><b>${esc(l.name)}</b><div class="muted tiny">${l.done}/${l.planned} sets${l.done < l.planned ? ' · fewer than planned' : ''}</div></div>
         <div class="sum-best small">${l.best ? `${arrow(l)} ${fmt(l.best)}` : ''}<div class="muted tiny">${l.last ? `last time ${fmt(l.last)}` : l.done ? 'first time' : 'not done'}</div>${note(l)}</div></div>`).join('')}
@@ -203,6 +211,8 @@ export function renderSummary() {
       ${S.next ? `<button class="primary block mt10" data-go="#/">Next up: ${esc(S.next.title)}</button>` : `<button class="primary block mt10" data-go="#/meso/${esc(S.mesoId)}">Meso finished — see it and run it again</button>`}
       <button class="ghost block mt6" data-go="#/history">See history</button></div>`;
   $$('[data-go]').forEach(b => b.onclick = () => { try { sessionStorage.removeItem('wl_summary'); } catch {} go(b.dataset.go); });
+  const tick = setInterval(() => { const el = document.getElementById('sumSync'); if (!el) return clearInterval(tick);
+    const l = syncLine(); if (el.innerHTML !== l.html) { el.className = `small ${l.cls}`; el.innerHTML = l.html; } }, 1000);
 }
 
 // ---------- feedback (v1.15.0) ----------
