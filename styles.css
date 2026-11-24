@@ -121,6 +121,7 @@ label, .lbl { display: block; font-size: var(--fs-xs); color: var(--muted); marg
 .pill.warn { background: var(--warn-bg); color: var(--warn); }
 .pill.bad { background: var(--bad-bg); color: var(--bad); }
 .pill.info { background: var(--info-bg); color: var(--info); }
+.pill.plan { background: var(--good-fill); color: var(--accent-text); } /* v1.20.4: on plan (estimate flat because you added the planned rep) */
 .list-btn { width: 100%; text-align: left; justify-content: flex-start; background: var(--surface-1); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 14px; margin-bottom: 10px; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -502,6 +503,7 @@ input[type=checkbox], input[type=radio] { -webkit-appearance: auto; appearance: 
 .sum-row { display: flex; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--border); } .sum-row:first-of-type { border-top: 0; }
 .sum-best { text-align: right; }
 .trend { display: inline-block; width: 1.1em; text-align: center; } .trend.up { color: var(--accent); } .trend.down { color: var(--warn); } .trend.flat, .trend.na { color: var(--muted); }
+h3 > .trend { display: inline; width: auto; } /* v1.20.4: the exercise-header pill moves to the next line when long, instead of overflowing a 1.1em box */
 .adv > summary { cursor: pointer; padding: 12px 0; min-height: 44px; }
 .welcome-steps { padding-left: 20px; margin: 8px 0 12px; } .welcome-steps li { margin: 3px 0; }
 

@@ -762,6 +762,27 @@ export function performanceTrend(cur, prev) {
   const r = (cur - prev) / prev;
   return r > 0.01 ? 1 : r < -0.01 ? -1 : 0;
 }
+// v1.20.4: what changed in plain numbers between two sessions of one lift, set by set in order — for the pill
+// that says "On plan" when the strength estimate is flat because you added exactly the planned rep(s) at one less
+// rep in the tank. Returns { reps: per-set change if every set changed the same, else null; repsTotal; weight:
+// change on set 1 } or null when there's nothing to match.
+export function rawChange(curSets, prevSets) {
+  const n = Math.min(curSets?.length || 0, prevSets?.length || 0); if (!n) return null;
+  const d = Array.from({ length: n }, (_, i) => (Number(curSets[i].reps) || 0) - (Number(prevSets[i].reps) || 0));
+  const weight = Math.round(((Number(curSets[0].weight) || 0) - (Number(prevSets[0].weight) || 0)) * 100) / 100;
+  return { reps: d.every(x => x === d[0]) ? d[0] : null, repsTotal: d.reduce((a, b) => a + b, 0), weight };
+}
+// "+1 rep/set", "+2.5 lb", "+2.5 lb, −1 rep/set", "+3 reps"; '' when nothing changed.
+export function changeLabel(ch, unit = 'lb') {
+  if (!ch) return '';
+  const sg = x => (x > 0 ? '+' : '−') + Math.abs(x);
+  const parts = [];
+  if (ch.weight) parts.push(`${sg(ch.weight)} ${unit}`);
+  if (ch.reps != null ? ch.reps : ch.repsTotal) {
+    parts.push(ch.reps != null ? `${sg(ch.reps)} rep${Math.abs(ch.reps) === 1 ? '' : 's'}/set` : `${sg(ch.repsTotal)} rep${Math.abs(ch.repsTotal) === 1 ? '' : 's'}`);
+  }
+  return parts.join(', ');
+}
 export function combineTrends(trends) {
   const t = trends.filter(x => x != null);
   if (!t.length) return null;

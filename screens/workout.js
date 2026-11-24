@@ -1,11 +1,11 @@
 // Woodhouse Lifts — recovery follow-ups (doc §3, §5), workout logger, cardio (moved out of app.js in 1.20.3, code unchanged).
-import * as L from '../logic.js?v=54';
-import { ic } from '../icons.js?v=54';
-import { esc, fmtNum, fmt, today, dayName, weekStart, isoDay } from '../format.js?v=54';
-import { toast, openSheet, closeSheet } from '../ui.js?v=54';
-import { profile, setBuilder } from '../state.js?v=54';
-import { sb, durableWrite, flushQueue, isNetErr, lastSent, overlayDays, pendingOps, qLoad, qStore, saveSet, setKey, storageAtRisk, syncBadge } from '../net.js?v=54';
-import { $, $$, OPTIONAL, RATINGS, W, activeMeso, app, bwD, cardioItems, cardioSince, check, effortShort, effortText, fetchAll, go, haptic, liftInsights, loadExercises, loadPrefs, mesoDays, needKeys, openDays, rateKeys, segHtml, setHeader, sheet, slipFor, statusPill, toLb, unit, warnList, workoutCardioSince } from '../app.js?v=54';
+import * as L from '../logic.js?v=55';
+import { ic } from '../icons.js?v=55';
+import { esc, fmtNum, fmt, today, dayName, weekStart, isoDay } from '../format.js?v=55';
+import { toast, openSheet, closeSheet } from '../ui.js?v=55';
+import { profile, setBuilder } from '../state.js?v=55';
+import { sb, durableWrite, flushQueue, isNetErr, lastSent, overlayDays, pendingOps, qLoad, qStore, saveSet, setKey, storageAtRisk, syncBadge } from '../net.js?v=55';
+import { $, $$, OPTIONAL, RATINGS, W, activeMeso, app, bwD, cardioItems, cardioSince, check, effortShort, effortText, fetchAll, go, haptic, liftInsights, loadExercises, loadPrefs, mesoDays, needKeys, openDays, rateKeys, segHtml, setHeader, sheet, slipFor, statusPill, toLb, unit, warnList, workoutCardioSince } from '../app.js?v=55';
 
 // ---------- recovery follow-ups (doc §3, §5) ----------
 export async function pendingRecovery(day, muscles) {
@@ -367,9 +367,14 @@ export async function renderWorkout(dayId, mode) {
     const p = prev[we.exercise_id]; if (!cur.length || !p?.sets.length) return null;
     const a = L.bestE1rm(cur, we.exercises, bwD()), b = L.bestE1rm(p.sets.map(x => ({ ...x, rir: x.rir ?? p.rir })), we.exercises, bwD());
     if (a == null || b == null) return null;
-    return { t: L.performanceTrend(a, b), pct: (a - b) / b * 100, vs: p.carried ? 'last meso' : 'last week' };
+    // v1.20.4: a flat estimate usually means you did exactly the plan (one more rep, one rep closer to failure) — say so.
+    const ch = L.rawChange(cur, p.sets);
+    return { t: L.performanceTrend(a, b), pct: (a - b) / b * 100, vs: p.carried ? 'last meso' : 'last week', change: L.changeLabel(ch, unit()) };
   }
-  const trendHtml = tr => !tr ? '' : `<span class="pill ${tr.t > 0 ? 'on' : tr.t < 0 ? 'bad' : ''}" title="vs ${tr.vs}">${tr.t > 0 ? '▲' : tr.t < 0 ? '▼' : '●'} ${tr.pct > 0 ? '+' : ''}${tr.pct.toFixed(1)}%</span>`;
+  // ▲ beat the plan · ▼ fell short · ● on plan (estimate within ±1%): shows what changed instead of "0.0%".
+  const trendText = tr => tr.t === 0 && tr.change != null ? (tr.change ? `On plan · ${tr.change}` : 'Same as last time')
+    : `${tr.pct > 0 ? '+' : ''}${tr.pct.toFixed(1)}%`;
+  const trendHtml = tr => !tr ? '' : `<span class="pill ${tr.t > 0 ? 'on' : tr.t < 0 ? 'bad' : tr.change ? 'plan' : ''}" title="vs ${tr.vs}${tr.t === 0 && tr.change != null ? ` · strength estimate ${tr.pct > 0 ? '+' : ''}${tr.pct.toFixed(1)}%` : ''}">${tr.t > 0 ? '▲' : tr.t < 0 ? '▼' : '●'} ${trendText(tr)}</span>`;
   const exComplete = we => { const c = app.querySelector(`[data-we="${we.id}"]`); return !!c && [...c.querySelectorAll('.set')].every(r => r.classList.contains('done')); };
   function refreshTrend(we) { const el = app.querySelector(`[data-trend="${we.id}"]`); if (el) el.innerHTML = exComplete(we) ? trendHtml(exerciseTrend(we)) : ''; }
   const isRated = m => !!feedback[m] && needKeys(m).every(k => feedback[m][k] != null);
@@ -560,7 +565,7 @@ export async function renderWorkout(dayId, mode) {
       const behind = markDone && done ? [...row.querySelectorAll('.dir.back')].map(el => el.title).filter(Boolean) : [];
       const setNote = behind.length ? `Set ${row.dataset.idx}: ${behind.join(' · ')}.` : '';
       if (markDone && done && exComplete(we)) { const tr = exerciseTrend(we);
-        const exNote = tr ? `${we.exercises.name}: ${tr.t > 0 ? '▲ up' : tr.t < 0 ? '▼ down' : '● same'} ${tr.pct > 0 ? '+' : ''}${tr.pct.toFixed(1)}% vs ${tr.vs}` : '';
+        const exNote = tr ? `${we.exercises.name}: ${tr.t > 0 ? '▲ up' : tr.t < 0 ? '▼ down' : '●'} ${trendText(tr)} vs ${tr.vs}` : '';
         if ((setNote || exNote) && !muscleComplete(m)) toast([setNote, exNote].filter(Boolean).join(' '), false, setNote ? 4000 : 1800);
         else if (setNote) toast(setNote, false, 4000); }
       else if (setNote) toast(`${setNote} One set under last week is fine — rest a little longer and aim to match it next set.`, false, 4000);
