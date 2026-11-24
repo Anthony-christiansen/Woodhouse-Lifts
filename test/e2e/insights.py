@@ -17,8 +17,10 @@ async def main():
         t=await pg.inner_text('main')
         ok('home: meso lifts card', 'This meso’s lifts' in t)
         rows=await pg.evaluate("[...document.querySelectorAll('.lift-row')].map(b=>b.innerText.replace(/\\n/g,' '))")
-        ok('home: down/stalled first', rows and rows[0].startswith('Incline Dumbbell Press') and 'Down' in rows[0] and 'Flat 2 wks' in rows[1], rows)
-        ok('home: attention note', 'need attention' in t)
+        # v1.20.6: wins first; the two lifts to watch are still listed (last), with forward-looking labels
+        ok('home: lifts to watch listed after the wins', rows and any('Recover first' in r for r in rows[-3:]) and any('Ready for +1 rep' in r for r in rows[-3:]) and not rows[0].startswith('Incline Dumbbell Press'), rows)
+        ok('home: no Down / Dipped / Flat wording', not any(w in ' '.join(rows) for w in ['Down ', 'Dipped', 'Flat 2 wks']), rows)
+        ok('home: attention note, encouraging', 'ready for a little attention' in t and 'need attention' not in t)
         await pg.screenshot(path=HERE+'/shots/home_lifts.png', full_page=True)
         await pg.locator('.lift-row', has_text='Hack Squat').first.click(); await pg.wait_for_timeout(600)
         ok('tap → chart page', '#/progress/e5' in pg.url, pg.url)
