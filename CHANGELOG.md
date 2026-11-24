@@ -12,6 +12,18 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.20.4 — 2026-11-24 · "On plan" instead of 0.0% on the exercise pill
+
+**For people using the app**
+- The pill next to each finished exercise (and in its rating sheet) used to say **● 0.0%** when you did exactly what the plan asked, for example one more rep per set at one rep closer to failure. It now says **● On plan · +1 rep/set**: what actually changed, set by set ("+2.5 lb", "+2.5 lb, −1 rep/set", or "+3 reps" when sets changed by different amounts). With no change at all it says **● Same as last time**. Beating the plan still shows **▲ +x%**, and falling short shows **▼ −x%**.
+- Long pills now move to their own line under the exercise name instead of running off the card.
+
+**Underneath**
+- `logic.js`: `rawChange(cur, prev)` and `changeLabel(change, unit)` (pure). The scoring (`performanceTrend`, ±1%) and everything that uses it (set adjustments, stalls) are unchanged. The estimate is still in the pill's tooltip.
+- `styles.css`: `.pill.plan`; the exercise header's trend slot is no longer a fixed 1.1em box.
+- Tests: engine block V1.20.4 (the owner's Cable Overhead Triceps Extension week 3 → 4: 22.5 × 14/10/10 at 1 RIR → 22.5 × 15/11/11 at 0 RIR = flat estimate, "+1 rep/set"); browser test `pill204.py` (on plan, same, ▲, ▼, tooltip, rating sheet).
+- Rollback: `release/v1.20.3`.
+
 ## 1.20.3 — 2026-11-24 · Code tidy-up, part 3 — screens in their own files (audit PR-D, done)
 
 No change to anything you see or do.

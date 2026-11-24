@@ -1,8 +1,8 @@
 // Woodhouse Lifts — Supabase client and the offline-safe sync queue (moved out of app.js in 1.20.2, unchanged).
 // Owns the signed-in session the queue keys on; app.js sets it with setSession() and reads it (live binding).
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.2/+esm';
-import * as L from './logic.js?v=54';
-import { toast } from './ui.js?v=54';
+import * as L from './logic.js?v=55';
+import { toast } from './ui.js?v=55';
 
 // Public by design: access is enforced by row-level security in the database.
 export const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',

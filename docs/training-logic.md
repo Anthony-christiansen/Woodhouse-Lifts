@@ -70,6 +70,8 @@ Last updated: November 20, 2026. This doc explains how the Woodhouse Lifts app b
 
 The result is scored as **Up** (more than +1%), **Same** (within ±1%) or **Down** (less than −1%). This is the most objective signal the app has, because it's what you actually lifted rather than how you felt.
 
+**What the pill on each exercise says (v1.20.4).** Because the estimate counts the *planned* reps in the tank, doing exactly what the plan asks (one more rep while stopping one rep closer to failure) leaves it unchanged: 22.5 × 14 at 1 RIR and 22.5 × 15 at 0 RIR both come to 22.5 × 1.5. That's progress on plan, not a stall, so a **Same** result is shown as **● On plan** plus what changed in plain numbers, set by set in order: "+1 rep/set", "+2.5 lb", "+2.5 lb, −1 rep/set", or "+3 reps" when the sets changed by different amounts. If nothing changed at all, it says **● Same as last time**. **▲** (beat the plan) and **▼** (fell short) keep the percentage. The estimate's own number stays in the pill's tooltip. Only the wording changed: the scoring and everything that uses it (set adjustments, stalls) are unchanged.
+
 ### 1.8 Deloads
 
 - **A mid-program deload week didn't hurt growth**, though it slightly blunted strength. Coleman et al., 2024, *PeerJ*. [doi:10.7717/peerj.16777](https://doi.org/10.7717/peerj.16777)

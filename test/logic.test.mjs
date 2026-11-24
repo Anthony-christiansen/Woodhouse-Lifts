@@ -973,3 +973,21 @@ console.log('GUARDRAIL TESTS PASSED');
   }
   console.log('V1.18.0 PROGRESSION TESTS PASSED (stall unit, mixed/insufficient comparisons, local vs widespread, unknown names, 10 profiles × 3 priorities × 8 weeks)');
 }
+
+// v1.20.4 — "On plan" pill: the owner's Cable Overhead Triceps Extension, week 3 → week 4 (1 → 0 reps left).
+{
+  const ex = { load_type: 'weighted' };
+  const prev = [{ weight: 22.5, reps: 14, rir: 1 }, { weight: 22.5, reps: 10, rir: 1 }, { weight: 22.5, reps: 10, rir: 1 }];
+  const cur = [{ weight: 22.5, reps: 15, rir: 0 }, { weight: 22.5, reps: 11, rir: 0 }, { weight: 22.5, reps: 11, rir: 0 }];
+  assert.equal(L.performanceTrend(L.bestE1rm(cur, ex), L.bestE1rm(prev, ex)), 0, 'planned +1 rep at one less RIR = flat estimate');
+  assert.equal(L.changeLabel(L.rawChange(cur, prev)), '+1 rep/set');
+  assert.equal(L.changeLabel(L.rawChange(cur, prev), 'kg'), '+1 rep/set');
+  assert.equal(L.changeLabel(L.rawChange([{ weight: 25, reps: 13 }, { weight: 25, reps: 13 }], [{ weight: 22.5, reps: 14 }, { weight: 22.5, reps: 14 }])), '+2.5 lb, −1 rep/set');
+  assert.equal(L.changeLabel(L.rawChange([{ weight: 50, reps: 12 }, { weight: 50, reps: 10 }], [{ weight: 50, reps: 10 }, { weight: 50, reps: 10 }])), '+2 reps', 'uneven changes: total');
+  assert.equal(L.changeLabel(L.rawChange([{ weight: 50, reps: 9 }], [{ weight: 50, reps: 10 }])), '−1 rep/set');
+  assert.equal(L.changeLabel(L.rawChange([{ weight: 50, reps: 10 }], [{ weight: 50, reps: 10 }])), '', 'no change: empty');
+  assert.equal(L.rawChange([], prev), null); assert.equal(L.changeLabel(null), '');
+  // matched by position: an extra set this week doesn't count as a change
+  assert.equal(L.changeLabel(L.rawChange([...cur, { weight: 22.5, reps: 9 }], prev)), '+1 rep/set');
+  console.log('V1.20.4 ON-PLAN PILL TESTS PASSED');
+}
