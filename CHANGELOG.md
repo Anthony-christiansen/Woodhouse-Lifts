@@ -12,6 +12,22 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.20.3 — 2026-11-24 · Code tidy-up, part 3 — screens in their own files (audit PR-D, done)
+
+No change to anything you see or do.
+- `app.js` went from 2,580 to **480 lines**. It now holds only the core: the router, sign-in, shared helpers and queries.
+- The screens moved, code unchanged, into `screens/home.js` (Home, More, summary, feedback, stats), `screens/mesos.js` (meso list, builder, meso page), `screens/workout.js` (workout logger, recovery questions, cardio) and `screens/library.js` (Learn, exercise library, injuries, Settings).
+- `state.js` holds the three things several screens change: your profile, the exercise list and the in-progress meso builder.
+- **How we know nothing changed:**
+  - All 2,516 non-blank lines of the old file appear exactly once in the new files. Nothing was added or lost; the only edits are `export`/`import` lines and the 18 places that now call a setter.
+  - The render snapshot shows all 19 screens identical, and every browser suite passes.
+  - **New permanent check: `test/names.check.sh`** (in CI). It proves every name the app uses exists and every import is really exported, including in code paths no test clicks through. It was proven by planting mistakes, and it fails the build on each one.
+- Test tools: TypeScript 6.0.2 pinned in `test/package.json`, used only as this checker.
+
+**Rollback:** app → `release/v1.20.2`.
+
+---
+
 ## 1.20.2 — 2026-11-24 · Code tidy-up, part 2 (audit PR-D)
 
 No change to anything you see or do.

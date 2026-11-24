@@ -49,7 +49,8 @@ How every change gets to the live app, how we check it, and how we undo it. Foll
    - `node test/restore.drill.mjs` (rollback drill, §6.3)
    - `node test/privacy.check.mjs` (no real emails or ids in the public repo, §1.8)
    - `for f in test/e2e/*.py; do python3 "$f" | tail -1; done` (real Chromium against a mocked Supabase)
-4. Version bumped: `APP_VERSION` in `app.js`, `?v=` on **every** import (`index.html` → `app.js`/`styles.css`, `app.js` → `logic.js`/`learn.js`). Everything uses one number.
+4. Version bumped: `APP_VERSION` in `app.js`, `?v=` on **every** import in every file: `sed -i 's/?v=OLD/?v=NEW/g' index.html *.js screens/*.js`. Everything uses one number. **This matters more since 1.20.3:** the screens import `../app.js?v=N`, so if one file carries a different number the browser loads a *second copy* of app.js and the app breaks in odd ways. After the bump, `grep -rho '?v=[0-9]*' index.html *.js screens/*.js | sort -u` must print exactly one value.
+5. Static name check: `sh test/names.check.sh` passes (CI runs it too).
 5. Docs: `CHANGELOG.md` entry **with a "Rollback" line** (§7), `docs/training-logic.md` for rule changes, `docs/HANDOFF.md` version/status.
 6. PR description: why, what changed, before/after screenshots for visible changes, regression checklist, rollback plan.
 7. Tier B/C: rollback rehearsed (`git revert` on a scratch branch builds and passes e2e; data steps proven in PGlite).
@@ -168,6 +169,7 @@ Each release entry ends with one line, e.g.:
 | Version | Released | Merge | Rollback point | Pre-release snapshot | Smoke test |
 |---|---|---|---|---|---|
 | 1.12.1 | 2026-11-23 05:30 UTC | `037e29a` (PR #8) | `release/v1.12.0` = `aea334a` | 05:30:37 UTC (11 tables) | Migration `feedback_adjustment_scope` applied after the client deploy. Verified on prod with a rolled-back test: wrong-muscle change refused, correct call OK, total sets unchanged. Live app loads real data under the new CSP and pinned supabase-js. This check found the 1.12.2 bug. |
+| 1.12.1 – 1.20.3 | 2026-11-23 → 24 | PRs #8 – #29 | each `release/vX.Y.Z` | before every migration | Listed release by release in the private Drive doc *Start Here* §0 and in `CHANGELOG.md`. |
 | 1.12.0 | 2026-11-23 05:15 UTC | `aea334a` (PR #7) | `release/v1.11.5` = `5dbe0bc` | 05:15:10 UTC | Live files 1.12.0, `?v=36`. Note: requesting `app.js?v=36` before Pages finished deploying cached the old file under the new URL for up to ~10 min, harmless because the old files still work together. **Don't fetch the next `?v=` URL before the deploy lands; check with an extra query string.** |
 | 1.11.5 | 2026-11-23 04:48 UTC | `5dbe0bc` (PR #6) | `release/v1.11.4` = `33682ce` | 04:47 UTC (taken for the data fix below) | Live files 1.11.5, `?v=35`, `fitPlan` served; app loads with no errors. |
 | 1.11.4 | 2026-11-23 04:13 UTC | `33682ce` (PR #5) | `release/v1.11.3` = `75691c0` | not needed (tier A) | Live files 1.11.4, `?v=34`; no Google links in app code; rules page served; app loads. |

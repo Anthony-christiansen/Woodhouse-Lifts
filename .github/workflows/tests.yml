@@ -31,6 +31,8 @@ jobs:
         run: node test/restore.drill.mjs
       - name: Privacy check (no personal data in this public repo)
         run: node test/privacy.check.mjs
+      - name: Static name check (every used name defined, every import exported)
+        run: sh test/names.check.sh
       - name: Real PostgreSQL concurrency tests (early light week)
         # PGlite is one connection; this races two connections on a throwaway PostgreSQL cluster (audit D3).
         run: |
