@@ -1,11 +1,11 @@
 // Woodhouse Lifts — recovery follow-ups (doc §3, §5), workout logger, cardio (moved out of app.js in 1.20.3, code unchanged).
-import * as L from '../logic.js?v=55';
-import { ic } from '../icons.js?v=55';
-import { esc, fmtNum, fmt, today, dayName, weekStart, isoDay } from '../format.js?v=55';
-import { toast, openSheet, closeSheet } from '../ui.js?v=55';
-import { profile, setBuilder } from '../state.js?v=55';
-import { sb, durableWrite, flushQueue, isNetErr, lastSent, overlayDays, pendingOps, qLoad, qStore, saveSet, setKey, storageAtRisk, syncBadge } from '../net.js?v=55';
-import { $, $$, OPTIONAL, RATINGS, W, activeMeso, app, bwD, cardioItems, cardioSince, check, effortShort, effortText, fetchAll, go, haptic, liftInsights, loadExercises, loadPrefs, mesoDays, needKeys, openDays, rateKeys, segHtml, setHeader, sheet, slipFor, statusPill, toLb, unit, warnList, workoutCardioSince } from '../app.js?v=55';
+import * as L from '../logic.js?v=56';
+import { ic } from '../icons.js?v=56';
+import { esc, fmtNum, fmt, today, dayName, weekStart, isoDay } from '../format.js?v=56';
+import { toast, openSheet, closeSheet } from '../ui.js?v=56';
+import { profile, setBuilder } from '../state.js?v=56';
+import { sb, durableWrite, flushQueue, isNetErr, lastSent, overlayDays, pendingOps, qLoad, qStore, saveSet, setKey, storageAtRisk, syncBadge } from '../net.js?v=56';
+import { $, $$, OPTIONAL, RATINGS, W, activeMeso, app, bwD, cardioItems, cardioSince, check, effortShort, effortText, fetchAll, go, haptic, liftInsights, loadExercises, loadPrefs, mesoDays, needKeys, openDays, rateKeys, segHtml, setHeader, sheet, slipFor, statusPill, toLb, unit, warnList, workoutCardioSince } from '../app.js?v=56';
 
 // ---------- recovery follow-ups (doc §3, §5) ----------
 export async function pendingRecovery(day, muscles) {
@@ -146,7 +146,7 @@ export async function renderWorkout(dayId, mode) {
     if (i >= 0) w.sets[i] = row; else w.sets.push(row); }));
   wes.forEach(w => w.sets.sort((a, b) => a.set_index - b.set_index));
   // v1.12.3: a copy in stored units (lb), used if you finish with no signal.
-  const loadedRaw = wes.map(w => ({ id: w.id, exercise_id: w.exercise_id, target_rir: w.target_rir, exercises: w.exercises, sets: w.sets.map(x => ({ ...x })) }));
+  const loadedRaw = wes.map(w => ({ id: w.id, exercise_id: w.exercise_id, target_sets: w.target_sets, target_rir: w.target_rir, exercises: w.exercises, sets: w.sets.map(x => ({ ...x })) }));
   wes.forEach(w => w.sets.forEach(x => { x.weight = W(x.weight); }));
   // The meso's goal sets each exercise's rep range (hypertrophy keeps the exercise's own range).
   const goal = L.goalOf(meso.goal);
@@ -877,7 +877,7 @@ export async function renderWorkout(dayId, mode) {
     await flushQueue();
     // v1.12.3: with no signal, finish from what is on the phone (sets as loaded + every edit since + anything waiting).
     let fresh, offline = false;
-    const r = await sb.from('workout_exercises').select('id, exercise_id, target_rir, exercises(*), sets(*)').eq('workout_day_id', dayId);
+    const r = await sb.from('workout_exercises').select('id, exercise_id, target_sets, target_rir, exercises(*), sets(*)').eq('workout_day_id', dayId);   // target_sets: the summary's "of N sets" (v1.20.5)
     if (!r.error) fresh = r.data;
     else if (isNetErr(r.error)) { offline = true; fresh = loadedRaw.map(w => ({ ...w, sets: w.sets.map(x => ({ ...x })) })); }
     else { $('#finish').disabled = false; return check(r); }
@@ -910,9 +910,13 @@ export async function renderWorkout(dayId, mode) {
       lifts: fresh.filter(w => !isCardio(w)).map(w => {
         const ss = fill(w.sets.filter(x => x.completed_at), w.target_rir), p = prev[w.exercise_id];
         const cur = pick(ss, w.exercises), old = p ? pick(fill(p.sets, p.rir), w.exercises) : null;
-        return { name: w.exercises.name, done: ss.length, planned: w.target_sets || 0,
+        const trend = p ? L.comparableTrend(ss, fill(p.sets, p.rir), w.exercises, bw) : null;
+        // v1.20.5: a flat estimate usually means you did exactly the plan — keep what changed so the summary can say so.
+        const bySet = a => [...a].sort((x, y) => x.set_index - y.set_index);
+        const change = trend === 0 ? L.changeLabel(L.rawChange(bySet(ss), bySet(p.sets)), unit()) : null;
+        return { name: w.exercises.name, muscle: w.exercises.muscle_group, done: ss.length, planned: w.target_sets || 0,
           best: cur ? { w: cur.x.weight, r: cur.x.reps } : null, last: old ? { w: old.x.weight, r: old.x.reps } : null,
-          trend: p ? L.comparableTrend(ss, fill(p.sets, p.rir), w.exercises, bw) : null };
+          trend, change };
       }),
       cardio: fresh.filter(w => isCardio(w)).map(w => ({ name: w.exercises.name, min: w.sets.filter(x => x.completed_at).reduce((a, x) => a + (Number(x.duration_min) || 0), 0) })).filter(c => c.min),
       muscles: muscles.map(m => ({ m, perf: perfByMuscle[m] ?? null })) };

@@ -1,11 +1,11 @@
 // Woodhouse Lifts — home (dashboard), explore, post-workout summary (v1.19.0, audit U5), feedback (v1.15.0), Home drill-downs (#/stats/<kind>/<arg>) (moved out of app.js in 1.20.3, code unchanged).
-import * as L from '../logic.js?v=55';
-import { ic } from '../icons.js?v=55';
-import { esc, fmt, dayName, weekStart, isoDay } from '../format.js?v=55';
-import { toast, openSheet, closeSheet } from '../ui.js?v=55';
-import { profile } from '../state.js?v=55';
-import { sb } from '../net.js?v=55';
-import { $, $$, APP_VERSION, STATUS_ORDER, W, activeMeso, app, cardioItems, cardioSince, check, effortText, fatigueFor, fatigueKey, fetchAll, go, lastScreen, lateCard, lateSets, liftInsights, mesoDays, openDays, pendingHere, setHeader, slipFor, startLightWeek, statusPill, wireLate, workoutCardioSince } from '../app.js?v=55';
+import * as L from '../logic.js?v=56';
+import { ic } from '../icons.js?v=56';
+import { esc, fmt, dayName, weekStart, isoDay } from '../format.js?v=56';
+import { toast, openSheet, closeSheet } from '../ui.js?v=56';
+import { profile } from '../state.js?v=56';
+import { sb } from '../net.js?v=56';
+import { $, $$, APP_VERSION, STATUS_ORDER, W, activeMeso, app, cardioItems, cardioSince, check, effortText, fatigueFor, fatigueKey, fetchAll, go, lastScreen, lateCard, lateSets, liftInsights, mesoDays, openDays, pendingHere, setHeader, slipFor, startLightWeek, statusPill, wireLate, workoutCardioSince } from '../app.js?v=56';
 
 // ---------- home (dashboard) ----------
 export async function renderHome() {
@@ -169,23 +169,32 @@ export function renderSummary() {
   setHeader('Workout done', '#/', 'home');
   const done = S.lifts.reduce((a, l) => a + l.done, 0), planned = S.lifts.reduce((a, l) => a + l.planned, 0);
   const fmt = x => x ? (Number(x.w) ? `${+x.w}×${x.r}` : `${x.r} reps`) : '—';
-  const arrow = t => t === 1 ? '<span class="trend up" role="img" aria-label="better than last time">▲</span>' : t === 0 ? '<span class="trend flat" role="img" aria-label="about the same as last time">▬</span>'
-    : t === -1 ? '<span class="trend down" role="img" aria-label="below last time">▼</span>' : '<span class="trend na" role="img" aria-label="no fair comparison yet">·</span>';
-  const perfWord = v => v === 1 ? 'up' : v === 0 ? 'about the same' : v === -1 ? 'down' : 'no comparison yet';
+  // v1.20.5: "on plan" when the estimate held because you did what the plan asked (e.g. +1 rep at one rep closer to failure).
+  const onPlan = l => l.trend === 0 && !!l.change;
+  const arrow = l => l.trend === 1 ? '<span class="trend up" role="img" aria-label="beat the plan">▲</span>'
+    : onPlan(l) ? '<span class="trend plan" role="img" aria-label="on plan">●</span>'
+    : l.trend === 0 ? '<span class="trend flat" role="img" aria-label="same as last time">▬</span>'
+    : l.trend === -1 ? '<span class="trend down" role="img" aria-label="below last time">▼</span>' : '<span class="trend na" role="img" aria-label="no fair comparison yet">·</span>';
+  const note = l => l.trend === 1 ? '<div class="sum-note up tiny">Beat the plan</div>' : onPlan(l) ? `<div class="sum-note plan tiny">On plan · ${esc(l.change)}</div>`
+    : l.trend === -1 ? '<div class="sum-note down tiny">An off day happens — next week starts from here</div>' : '';
+  // A muscle that held steady because its lifts were on plan reads as on plan, not "about the same".
+  const perfWord = x => x.perf === 1 ? 'up' : x.perf === -1 ? 'below last time' : x.perf == null ? 'no comparison yet'
+    : S.lifts.some(l => l.muscle === x.m && onPlan(l)) ? 'on plan' : 'holding steady';
+  const good = S.lifts.filter(l => l.trend === 1 || onPlan(l)).length;
   const waiting = pendingHere() > 0;
   app.innerHTML = `
     <div class="card"><div class="muted small">${esc(S.mesoName)}</div><h3 class="sum-title">${esc(S.title)} ${ic('check', 'accent')}</h3>
       <div class="sum-stats"><div><b>${done}</b><span class="muted tiny">of ${planned} sets</span></div>
         <div><b>${S.lifts.filter(l => l.done).length}</b><span class="muted tiny">exercises</span></div>
-        <div><b>${S.lifts.filter(l => l.trend === 1).length}</b><span class="muted tiny">beat last time</span></div></div>
+        <div><b>${good}</b><span class="muted tiny">on plan or better</span></div></div>
       <div class="small ${waiting ? 'warn-text' : 'muted'}" id="sumSync">${waiting ? `${ic('alert')} Saved on this phone — it syncs when you’re back online. Keep the app open until it does.` : `${ic('check')} Saved and synced.`}</div></div>
     <div class="card"><h3>Your lifts</h3>
       ${S.lifts.map(l => `<div class="sum-row"><div class="grow"><b>${esc(l.name)}</b><div class="muted tiny">${l.done}/${l.planned} sets${l.done < l.planned ? ' · fewer than planned' : ''}</div></div>
-        <div class="sum-best small">${l.best ? `${arrow(l.trend)} ${fmt(l.best)}` : ''}<div class="muted tiny">${l.last ? `last time ${fmt(l.last)}` : l.done ? 'first time' : 'not done'}</div></div></div>`).join('')}
+        <div class="sum-best small">${l.best ? `${arrow(l)} ${fmt(l.best)}` : ''}<div class="muted tiny">${l.last ? `last time ${fmt(l.last)}` : l.done ? 'first time' : 'not done'}</div>${note(l)}</div></div>`).join('')}
       ${S.cardio.map(c => `<div class="sum-row"><div class="grow"><b>${esc(c.name)}</b></div><div class="small">${c.min} min</div></div>`).join('')}
-      <div class="muted tiny mt6">▲ ▬ ▼ compare your best set with last time’s by estimated strength — an estimate, and only when the reps are similar (· = no fair comparison yet).</div></div>
+      <div class="muted tiny mt6">▲ beat the plan · ● on plan (one more rep or a little more weight, as planned) · ▬ same as last time · ▼ below last time. Compared by estimated strength — an estimate, and only when the reps are similar (· = no fair comparison yet).</div></div>
     <div class="card"><h3>What happens next</h3>
-      <div class="small">Ratings saved. Performance: ${S.muscles.map(x => `${esc(x.m)} ${perfWord(x.perf)}`).join(' · ') || '—'}.</div>
+      <div class="small">Ratings saved. Performance: ${S.muscles.map(x => `${esc(x.m)} ${perfWord(x)}`).join(' · ') || '—'}.</div>
       <div class="muted tiny mt6">Next time you train these you’ll be asked how they recovered — that sets next week’s sets. One session never changes them on its own.</div>
       ${S.next ? `<button class="primary block mt10" data-go="#/">Next up: ${esc(S.next.title)}</button>` : `<button class="primary block mt10" data-go="#/meso/${esc(S.mesoId)}">Meso finished — see it and run it again</button>`}
       <button class="ghost block mt6" data-go="#/history">See history</button></div>`;

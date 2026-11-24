@@ -1,14 +1,14 @@
 // Woodhouse Lifts — Learn, exercise library, injuries & sore spots (shared by Settings and the meso builder), settings (moved out of app.js in 1.20.3, code unchanged).
-import * as L from '../logic.js?v=55';
-import * as LEARN from '../learn.js?v=55';
-import * as MD from '../md.js?v=55';
-import { ic } from '../icons.js?v=55';
-import { esc, fmt, dayName, isoDay } from '../format.js?v=55';
-import { toast } from '../ui.js?v=55';
-import { profile, builder, setProfile, setExCache, setBuilder } from '../state.js?v=55';
-import { sb, session, isNetErr, loadIncrements } from '../net.js?v=55';
-import { $, $$, APP_VERSION, CHANGELOG_URL, W, activeMeso, app, bwD, check, fetchAll, go, liftInsights, loadExercises, loadPrefs, mesoDays, openDays, renderNewPassword, setHeader, setPref, setTheme, statusPill, themePref, toLb, unit } from '../app.js?v=55';
-import { builderFromTemplate, freshBuilder, onceNote } from '../screens/mesos.js?v=55';
+import * as L from '../logic.js?v=56';
+import * as LEARN from '../learn.js?v=56';
+import * as MD from '../md.js?v=56';
+import { ic } from '../icons.js?v=56';
+import { esc, fmt, dayName, isoDay } from '../format.js?v=56';
+import { toast } from '../ui.js?v=56';
+import { profile, builder, setProfile, setExCache, setBuilder } from '../state.js?v=56';
+import { sb, session, isNetErr, loadIncrements } from '../net.js?v=56';
+import { $, $$, APP_VERSION, CHANGELOG_URL, W, activeMeso, app, bwD, check, fetchAll, go, liftInsights, loadExercises, loadPrefs, mesoDays, openDays, renderNewPassword, setHeader, setPref, setTheme, statusPill, themePref, toLb, unit } from '../app.js?v=56';
+import { builderFromTemplate, freshBuilder, onceNote } from '../screens/mesos.js?v=56';
 
 // ---------- Learn ----------
 // v1.11.4 — "How it works": the full training rules and evidence, rendered from docs/training-logic.md (same origin,
