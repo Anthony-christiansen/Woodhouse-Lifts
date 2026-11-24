@@ -1,11 +1,11 @@
 // Woodhouse Lifts — recovery follow-ups (doc §3, §5), workout logger, cardio (moved out of app.js in 1.20.3, code unchanged).
-import * as L from '../logic.js?v=57';
-import { ic } from '../icons.js?v=57';
-import { esc, fmtNum, fmt, today, dayName, weekStart, isoDay } from '../format.js?v=57';
-import { toast, openSheet, closeSheet } from '../ui.js?v=57';
-import { profile, setBuilder } from '../state.js?v=57';
-import { sb, durableWrite, flushQueue, isNetErr, lastSent, overlayDays, pendingOps, qLoad, qStore, saveSet, setKey, storageAtRisk, syncBadge } from '../net.js?v=57';
-import { $, $$, OPTIONAL, RATINGS, W, activeMeso, app, bwD, cardioItems, cardioSince, check, effortShort, effortText, fetchAll, go, haptic, liftInsights, loadExercises, loadPrefs, mesoDays, needKeys, openDays, rateKeys, segHtml, setHeader, sheet, slipFor, statusPill, toLb, unit, warnList, workoutCardioSince } from '../app.js?v=57';
+import * as L from '../logic.js?v=58';
+import { ic } from '../icons.js?v=58';
+import { esc, fmtNum, fmt, today, dayName, weekStart, isoDay } from '../format.js?v=58';
+import { toast, openSheet, closeSheet } from '../ui.js?v=58';
+import { profile, setBuilder } from '../state.js?v=58';
+import { sb, durableWrite, flushQueue, isNetErr, lastSent, overlayDays, pendingOps, qLoad, qStore, saveSet, setKey, storageAtRisk, syncBadge } from '../net.js?v=58';
+import { $, $$, OPTIONAL, RATINGS, W, activeMeso, app, bwD, cardioItems, cardioSince, check, effortShort, effortText, fetchAll, go, haptic, liftInsights, loadExercises, loadPrefs, mesoDays, needKeys, openDays, rateKeys, segHtml, setHeader, sheet, slipFor, statusPill, toLb, unit, warnList, workoutCardioSince } from '../app.js?v=58';
 
 // ---------- recovery follow-ups (doc §3, §5) ----------
 export async function pendingRecovery(day, muscles) {
@@ -352,7 +352,11 @@ export async function renderWorkout(dayId, mode) {
   };
   wireRate();
 
-  const muscleComplete = m => $$(`[data-muscle="${CSS.escape(m)}"] .set`).every(r => r.classList.contains('done'));
+  // v1.20.7 (owner report: a rating pop-up got stuck): a muscle with no sets on screen is never "complete" — before,
+  // an empty list counted as all done, so a save landing after you left the workout asked you to rate every muscle.
+  const muscleComplete = m => { const rows = $$(`[data-muscle="${CSS.escape(m)}"] .set`); return rows.length > 0 && rows.every(r => r.classList.contains('done')); };
+  // ...and rating pop-ups only open while THIS workout is the screen you're on.
+  const onThisWorkout = () => (location.hash.split('/')[2] || '') === String(dayId) && wes.some(w => app.querySelector(`[data-we="${w.id}"]`));
   // Progression indicator per exercise: best estimated strength today vs last time (doc §1.7).
   function exerciseTrend(we) {
     const card = app.querySelector(`[data-we="${we.id}"]`); if (!card) return null;
@@ -400,7 +404,7 @@ export async function renderWorkout(dayId, mode) {
         <div class="muted small">All of today's ${esc(m)} work together — sets next week come from this.${others.length ? ` Also today: ${others.map(w => esc(w.exercises.name)).join(', ')}.` : ''}</div>
         ${rateKeys(m).map(k => `<div class="fb-row" data-row="${k}"><label>${RATINGS[k].label}${OPTIONAL[k] ? ' <span class="muted tiny">(optional)</span>' : ''}</label>${segHtml(k, g[k], 'data-s="m"')}</div>`).join('')}` : ''}
       <div class="spacer"></div><button class="primary block" id="saveExRate">Save</button>
-      ${required ? '' : '<button class="ghost block" id="later">Cancel</button>'}`, panel => {
+      ${required ? '<button class="ghost block" id="later">Not now</button>' : '<button class="ghost block" id="later">Cancel</button>'}`, panel => {
       const pick = (sec, k, v) => {
         (sec === 'e' ? f : g)[k] = v;
         panel.querySelectorAll(`[data-s="${sec}"][data-k="${k}"]`).forEach(x => x.classList.toggle('on', +x.dataset.v === v));
@@ -439,7 +443,7 @@ export async function renderWorkout(dayId, mode) {
         if (withMuscle) { pick('m', 'workload', 1); pick('m', 'joint_pain', 0); }
         save();
       };
-      const later = panel.querySelector('#later'); if (later) later.onclick = closeSheet;
+      const later = panel.querySelector('#later'); if (later) later.onclick = () => { if (required) { notNow.add('ex:' + we.id); if (withMuscle) notNow.add('m:' + m); } closeSheet(); };
       panel.querySelector('#saveExRate').onclick = save;
     }, required);
   }
@@ -459,12 +463,12 @@ export async function renderWorkout(dayId, mode) {
           return `<div class="mover"><span>${esc(w.exercises.name)}${er}</span>${tr ? trendHtml(tr) : `<span class="muted tiny">${exComplete(w) ? 'no history yet' : 'not finished'}</span>`}</div>`; }).join('')}</div>
       ${rateKeys(m).map(k => `<div class="fb-row" data-row="${k}"><label>${RATINGS[k].label}${OPTIONAL[k] ? ' <span class="muted tiny">(optional)</span>' : ''}</label>${segHtml(k, f[k])}</div>`).join('')}
       <div class="spacer"></div><button class="primary block" id="saveRate">Save</button>
-      ${required ? '' : '<button class="ghost block" id="later">Cancel</button>'}`, panel => {
+      ${required ? '<button class="ghost block" id="later">Not now</button>' : '<button class="ghost block" id="later">Cancel</button>'}`, panel => {
       panel.querySelectorAll('[data-k]').forEach(b => b.onclick = () => {
         f[b.dataset.k] = +b.dataset.v;
         panel.querySelectorAll(`[data-k="${b.dataset.k}"]`).forEach(x => x.classList.toggle('on', x === b));
       });
-      const later = panel.querySelector('#later'); if (later) later.onclick = closeSheet;
+      const later = panel.querySelector('#later'); if (later) later.onclick = () => { if (required) notNow.add('m:' + m); closeSheet(); };
       panel.querySelector('#allNormal').onclick = () => {
         [['workload', 1], ['joint_pain', 0]].forEach(([k, v]) => { f[k] = v; panel.querySelectorAll(`[data-k="${k}"]`).forEach(x => x.classList.toggle('on', +x.dataset.v === v)); });
         panel.querySelector('#saveRate').click();
@@ -485,11 +489,13 @@ export async function renderWorkout(dayId, mode) {
     }, required);
   }
   // Any muscle whose sets are all done but isn't rated gets the locked prompt.
+  // "Not now" on a rating pop-up: don't ask again after every set — Finish still asks for anything left unrated.
+  const notNow = new Set();
   function enforceRatings() {
-    if (!sheet.hidden) return;
-    const we = wes.find(w => exComplete(w) && !exRated(w));
+    if (!sheet.hidden || !onThisWorkout()) return;
+    const we = wes.find(w => exComplete(w) && !exRated(w) && !notNow.has('ex:' + w.id));
     if (we) return openExRating(we, true);
-    const m = groups.find(x => muscleComplete(x) && !isRated(x));
+    const m = groups.find(x => muscleComplete(x) && !isRated(x) && !notNow.has('m:' + x));
     if (m) openRating(m, true);
   }
 

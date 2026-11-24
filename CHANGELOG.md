@@ -12,6 +12,20 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.20.7 — 2026-11-24 · Fix: a rating pop-up could get stuck (owner report)
+
+**What happened:** "when providing feedback live the feedback pop-up got stuck — I had to exit and reopen the app."
+- If a set's save finished after you'd left the workout screen (a tab, Home, Go to), the workout ran its "rate the muscles you've finished" check against a screen with no sets on it.
+- With no sets to look at, every unrated muscle counted as finished. So it opened locked rating pop-ups for them one after another, even muscles you hadn't trained yet. A locked pop-up had no way out, and the Cardio one needs a breathing answer that "All normal" doesn't fill.
+- In the owner's workout, Shoulders, Forearms and Abs were rated "All normal" at 1:50 pm, before the wrist curls (2:10) and abs (2:14) were done.
+
+**Fixed**
+- Rating pop-ups only open while that workout is the screen you're on.
+- A muscle with no sets on screen never counts as finished.
+- Every rating pop-up now has **Not now**. It won't ask again after every set, and Finish still asks for anything left unrated, so no rating is skipped by accident.
+
+**Underneath:** `screens/workout.js` gets `onThisWorkout()`, a non-empty `muscleComplete`, and a `notNow` set. New test `stuck207.py` (9 checks) fails on 1.20.6: the pop-up appears on Home and there's no way out. Rollback: `release/v1.20.6`. No database change.
+
 ## 1.20.6 — 2026-11-24 · Home leads with your wins; lifts to watch say what to do next
 
 The owner: "we want to report stuff but we want to keep people excited to see the progress."
