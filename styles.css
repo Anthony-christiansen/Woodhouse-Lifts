@@ -504,3 +504,19 @@ input[type=checkbox], input[type=radio] { -webkit-appearance: auto; appearance: 
 .trend { display: inline-block; width: 1.1em; text-align: center; } .trend.up { color: var(--accent); } .trend.down { color: var(--warn); } .trend.flat, .trend.na { color: var(--muted); }
 .adv > summary { cursor: pointer; padding: 12px 0; min-height: 44px; }
 .welcome-steps { padding-left: 20px; margin: 8px 0 12px; } .welcome-steps li { margin: 3px 0; }
+
+/* v1.20.0 (audit U4) — folded exercises and the Next set bar */
+.fold-line { display: flex; align-items: center; gap: 6px; width: 100%; background: none; border: 0; padding: 6px 0 2px; text-align: left; color: var(--text); font-size: var(--fs-sm); min-height: 44px; }
+.fold-line[hidden] { display: none; }
+.fold-line .fold-show { margin-left: auto; color: var(--accent-text); font-weight: 600; }
+.card[data-we].folded > :not(:first-child):not(.fold-line):not([data-rate]):not([data-exrate]) { display: none; }
+.card[data-we].folded { padding-bottom: 10px; }
+.next-bar { position: fixed; left: 8px; right: 8px; bottom: calc(env(safe-area-inset-bottom) + var(--tabs-h) + 8px); z-index: 9; display: flex; align-items: center; gap: 8px;
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px; padding: 6px 8px 6px 12px; box-shadow: 0 4px 16px rgba(0,0,0,.12); }
+.next-bar[hidden] { display: none; }
+.next-bar .nb-name { font-weight: 600; font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.next-bar .nb-what { color: var(--muted); }
+.next-bar .nb-text { min-width: 0; }
+.next-bar button { min-height: 44px; flex: none; }
+body.has-next { padding-bottom: calc(env(safe-area-inset-bottom) + var(--tabs-h) + 76px); }
+body.has-next .sync-badge { bottom: calc(env(safe-area-inset-bottom) + var(--tabs-h) + 72px); }

@@ -1,8 +1,11 @@
 // v1.12.1: pinned to one reviewed release, so the code users get only changes with a commit here (outside audit, finding 4).
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.2/+esm';
-import * as L from './logic.js?v=50';
-import * as LEARN from './learn.js?v=50';
-import * as MD from './md.js?v=50';
+import * as L from './logic.js?v=52';
+import * as LEARN from './learn.js?v=52';
+import * as MD from './md.js?v=52';
+import { ICONS, ic } from './icons.js?v=52';
+import { esc, fmtNum, fmt, today, dayName, order, weekStart, isoDay } from './format.js?v=52';
+import { toast, linkLabels, openSheet, closeSheet } from './ui.js?v=52';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -19,53 +22,11 @@ let authReturn = (() => {
   return null;
 })();
 let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
-export const APP_VERSION = '1.19.0'; // keep in sync with CHANGELOG.md
+export const APP_VERSION = '1.20.1'; // keep in sync with CHANGELOG.md
 const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
 // v1.11.4: the training rules are a page inside the app (#/logic), built from this repo's docs/training-logic.md.
 // The app never links to anyone's Google Drive.
 
-// ---------- icons (v1.12) ----------
-// One line-icon set (24px grid, 1.75 stroke, round caps) replacing emoji used as icons. ic(name) → inline SVG,
-// decorative (aria-hidden); the button or text next to it carries the accessible name.
-const ICONS = {
-  check: '<path d="M20 6 9 17l-5-5"/>',
-  info: '<circle cx="12" cy="12" r="9"/><path d="M12 16v-4.5M12 8h.01"/>',
-  trophy: '<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/>',
-  heart: '<path d="M19.5 12.6 12 20l-7.5-7.4A4.6 4.6 0 0 1 12 6.6a4.6 4.6 0 0 1 7.5 6z"/>',
-  bars: '<path d="M3 20h18M6 20v-6M11 20V8M16 20v-9M21 20V5" />',
-  x: '<path d="M18 6 6 18M6 6l12 12"/>',
-  star: '<path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/>',
-  flame: '<path d="M12 22a7 7 0 0 0 7-7c0-4.5-3.5-6.5-4.5-10-1.5 2-2 3-3.5 3.8C10.5 7 10 5 10.5 2.5 7 5.5 5 9.5 5 15a7 7 0 0 0 7 7z"/>',
-  pencil: '<path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4z"/>',
-  party: '<path d="M4 20 8.5 8l7.5 7.5z"/><path d="M14 4.5 14.5 6M19.5 9.5l-1.5.5M17.5 6.5 19 5M11 8.5 10 4M15.5 13l4.5 1"/>',
-  alert: '<path d="M12 3.5 2.5 20h19z"/><path d="M12 10v4M12 17h.01"/>',
-  cap: '<path d="m2 9 10-5 10 5-10 5z"/><path d="M6 11v5c0 1.5 3 3 6 3s6-1.5 6-3v-5M22 9v6"/>',
-  trendUp: '<path d="m3 17 6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
-  trendDown: '<path d="m3 7 6 6 4-4 8 8"/><path d="M15 17h6v-6"/>',
-  history: '<path d="M3 12a9 9 0 1 0 2.6-6.4L3 8"/><path d="M3 3v5h5M12 7.5V12l3 2"/>',
-  dumbbell: '<path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/>',
-  smile: '<circle cx="12" cy="12" r="9"/><path d="M8.5 14s1.3 2 3.5 2 3.5-2 3.5-2M9 9.5h.01M15 9.5h.01"/>',
-  refresh: '<path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/><path d="M21 3v5h-5"/>',
-  pin: '<path d="M12 17v5M9 3h6M10 3v7l-3 4h10l-3-4V3"/>',
-  arrowUpRight: '<path d="M7 17 17 7M8 7h9v9"/>',
-  arrowUp: '<path d="M12 20V5M5.5 11.5 12 5l6.5 6.5"/>',
-  pause: '<path d="M9 5v14M15 5v14"/>',
-  eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
-  swap: '<path d="M7 4 3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7"/>',
-  sliders: '<path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/>',
-  person: '<circle cx="12" cy="5" r="2.5"/><path d="M12 8v7M8 22l4-7 4 7M6.5 11h11"/>',
-  zap: '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
-  scale: '<path d="M12 3v18M7 21h10M5 7h14M5 7l-3 7a3 3 0 0 0 6 0zM19 7l-3 7a3 3 0 0 0 6 0z"/>',
-  ban: '<circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/>',
-  calendar: '<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/>',
-  chevron: '<path d="m9 6 6 6-6 6"/>',
-  plus: '<path d="M12 5v14M5 12h14"/>',
-  minus: '<path d="M5 12h14"/>',
-  download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
-  share: '<path d="M12 15V3M7.5 7.5 12 3l4.5 4.5M5 12v7a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19v-7"/>',
-  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
-  moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4 6.5 6.5 0 0 0 20 14.5z"/>',
-};
 // Theme: 'system' (default) follows the phone; 'dark' / 'light' pin it. Applied early by index.html too (no flash).
 const themePref = () => { try { return localStorage.getItem('wl_theme') || 'system'; } catch { return 'system'; } };
 function applyTheme(t = themePref()) {
@@ -91,7 +52,6 @@ function setTheme(t) {
 matchMedia('(prefers-color-scheme: light)').addEventListener?.('change', () => { applyTheme(); syncThemeBtn(); });
 // Small haptic tick on set completion where supported (Android). Never required for anything.
 const haptic = () => { try { if (!matchMedia('(prefers-reduced-motion: reduce)').matches) navigator.vibrate?.(12); } catch {} };
-const ic = (name, cls = '') => `<svg class="ic${cls ? ' ' + cls : ''}" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${ICONS[name] || ''}</svg>`;
 
 const app = document.getElementById('app');
 const titleEl = document.getElementById('title');
@@ -104,27 +64,14 @@ const sheet = document.getElementById('sheet');
 let session = null, profile = null, exCache = null;
 
 // ---------- helpers ----------
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const $ = sel => app.querySelector(sel);
 const $$ = sel => [...app.querySelectorAll(sel)];
 const go = h => { location.hash = h; };
 const unit = () => profile?.unit || 'lb';
 // Weights are stored in lb; W() shows them in the user's unit, toLb() converts what they type back.
 const W = v => L.toUnit(v, unit()), toLb = v => L.fromUnit(v, unit());
-const fmtNum = n => (Math.round(n * 100) / 100).toString();
 const bwD = () => W(profile?.bodyweight); // bodyweight in display units
-const fmt = n => (n == null ? '–' : Number(n) % 1 ? Number(n).toFixed(1) : String(Number(n)));
 // Local calendar date (not UTC — an evening workout behind UTC must not land on tomorrow).
-const today = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
-const dayName = d => d.label || 'Day ' + d.day_index;
-const order = d => d.week * 100 + d.day_index;
-// One toast at a time: a new message replaces the one showing (stacked toasts sat exactly on top of each other,
-// so a second notice could be hidden or vanish early with the first one's timer).
-function toast(msg, err = false, ms = null) {
-  document.querySelectorAll('.toast').forEach(x => x.remove());
-  const t = document.createElement('div'); t.className = 'toast' + (err ? ' err' : ''); t.textContent = msg; t.setAttribute('role', 'status');
-  document.body.appendChild(t); setTimeout(() => t.remove(), ms ?? (err ? 4500 : 1800));
-}
 function check(res) { if (res.error) { console.error(res.error); toast(res.error.message, true); throw res.error; } return res.data; }
 // Supabase returns at most 1,000 rows per request; page through everything. build() must return a fresh, fully ordered query.
 async function fetchAll(build, page = 1000) {
@@ -144,66 +91,6 @@ function setHeader(title, back, tab) {
   themeBtn.hidden = false; syncThemeBtn();
   tabs.querySelectorAll('a').forEach(a => a.classList.toggle('on', a.dataset.tab === tab));
 }
-// v1.13.1 (accessibility): a <label> written just before its field is linked to it (for/id), on every screen and sheet,
-// so screen readers announce each field's name and tapping the label focuses the field.
-let labelSeq = 0;
-function linkLabels(root) {
-  root?.querySelectorAll('.switch input[type=checkbox]:not([role])').forEach(i => i.setAttribute('role', 'switch'));   // announced as on/off
-  root?.querySelectorAll('label:not([for])').forEach(l => {
-    if (l.querySelector('input, select, textarea')) return;              // already wraps its field
-    const c = l.nextElementSibling;
-    if (!c || !/^(INPUT|SELECT|TEXTAREA)$/.test(c.tagName)) return;
-    if (!c.id) c.id = `fld-${++labelSeq}`;
-    l.htmlFor = c.id;
-  });
-}
-new MutationObserver(() => { linkLabels(app); linkLabels(sheet); }).observe(document.body, { childList: true, subtree: true });
-// v1.15.1 (audit S4/S5): the sheet is a real modal dialog — labelled by its heading, the page behind it is inert,
-// focus moves into it, Tab stays inside it, Escape closes it (unless it's a required step), and focus returns to
-// whatever opened it.
-let sheetReturn = null;
-const FOCUSABLE = 'button:not([disabled]):not([hidden]), [href], input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-function openSheet(html, wire, locked = false) {
-  const wasOpen = !sheet.hidden;
-  if (!wasOpen) sheetReturn = document.activeElement;
-  sheet.innerHTML = `<div class="panel" role="dialog" aria-modal="true">${html}</div>`; sheet.hidden = false;
-  const panel = sheet.querySelector('.panel'), h = panel.querySelector('h2, h3');
-  if (h) { h.id = h.id || 'sheetTitle'; panel.setAttribute('aria-labelledby', h.id); } else panel.setAttribute('aria-label', 'Dialog');
-  for (const id of ['app', 'tabs']) document.getElementById(id)?.setAttribute('inert', '');
-  document.querySelector('header')?.setAttribute('inert', '');
-  if (locked) sheet.dataset.lock = '1'; else delete sheet.dataset.lock;
-  sheet.onclick = e => { if (e.target === sheet && !sheet.dataset.lock) closeSheet(); };
-  wire?.(panel);
-  if (!panel.contains(document.activeElement)) {
-    if (h) { h.tabIndex = -1; h.focus({ preventScroll: true }); } else panel.querySelector(FOCUSABLE)?.focus({ preventScroll: true });
-  }
-}
-function closeSheet() {
-  const wasOpen = !sheet.hidden;
-  sheet.hidden = true; sheet.innerHTML = ''; delete sheet.dataset.lock;
-  for (const id of ['app', 'tabs']) document.getElementById(id)?.removeAttribute('inert');
-  document.querySelector('header')?.removeAttribute('inert');
-  if (wasOpen && sheetReturn?.isConnected) sheetReturn.focus({ preventScroll: true });
-  sheetReturn = null;
-}
-// However the sheet gets hidden, the page behind it never stays inert.
-new MutationObserver(() => { if (sheet.hidden) { for (const id of ['app', 'tabs']) document.getElementById(id)?.removeAttribute('inert'); document.querySelector('header')?.removeAttribute('inert'); } })
-  .observe(sheet, { attributes: true, attributeFilter: ['hidden'] });
-document.addEventListener('keydown', e => {
-  if (sheet.hidden) return;
-  if (e.key === 'Escape') {
-    if (sheet.dataset.lock) { toast('Answer this first — it sets up today’s workout'); return; }
-    e.preventDefault(); return closeSheet();
-  }
-  if (e.key !== 'Tab') return;
-  const items = [...sheet.querySelectorAll(FOCUSABLE)].filter(x => x.offsetParent !== null);
-  if (!items.length) return e.preventDefault();
-  const first = items[0], last = items.at(-1);
-  if (e.shiftKey && (document.activeElement === first || !sheet.contains(document.activeElement))) { e.preventDefault(); last.focus(); }
-  else if (!e.shiftKey && (document.activeElement === last || !sheet.contains(document.activeElement))) { e.preventDefault(); first.focus(); }
-});
-function weekStart(d = new Date()) { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; }
-const isoDay = d => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 
 const RATINGS = {
   pump: { label: 'Pump', opts: ['None', 'Mild', 'Good', 'Huge'] },
@@ -448,7 +335,7 @@ const routes = {
   settings: renderSettings, learn: renderLearn, stats: renderStats, logic: renderLogic, feedback: renderFeedback, summary: renderSummary,
 };
 async function route() {
-  closeSheet();
+  closeSheet(); document.body.classList.remove('has-next');
   const { data } = await sb.auth.getSession(); session = data.session; // waits for supabase-js to read the link's tokens
   routedUid = session?.user?.id ?? null;
   if (authReturn) {
@@ -1597,6 +1484,7 @@ async function renderWorkout(dayId, mode) {
         <div class="row"><div class="grow"><h3>${esc(ex.name)} <span class="trend" data-trend="${we.id}"></span></h3>
           <div class="meta">${esc(ex.muscle_group)} · ${we.target_sets} × ${ex.rep_min}–${ex.rep_max} reps · ${deload ? 'light week' : effortShort(we.target_rir)}</div></div>
           ${infoBtn(we)}${!day.completed_at && !preview ? `<button class="ghost sm" data-replace="${we.id}" aria-label="Replace ${esc(ex.name)}" title="Replace exercise">${ic('swap')}</button>` : ''}</div>
+        <button type="button" class="fold-line" data-unfold="${we.id}" aria-expanded="false"></button>
         ${coachLine(we)}
         <div class="sets"><div class="set-head"><div>#</div><div>${wLabel(ex)}</div><div>reps</div><div></div></div>
           ${Array.from({ length: n }, (_, i) => {
@@ -2092,6 +1980,51 @@ async function renderWorkout(dayId, mode) {
       });
   };
   wes.forEach(refreshTrend);
+  // v1.20.0 (audit U4): less scrolling while you log.
+  //  - An exercise whose sets are all done folds to one line ("✓ 3/3 sets · best 70×11 · Show sets"); its ratings stay visible.
+  //  - A "Next set" bar above the tabs shows the next unfinished set (exercise, set, weight × reps) with ✓ Log and Go to.
+  // Display only: logging still goes through each set's own ✓ button, so data, rules and the offline queue are unchanged.
+  const canLog = !preview && !day.completed_at;
+  const fmtSet = r => { const w = r.querySelector('[data-f="weight"]'), n = r.querySelector('[data-f="reps"]');
+    const wv = w?.value || w?.placeholder || '', nv = n?.value || n?.placeholder || '';
+    return `${wv && wv !== '0' ? `${wv} ${unit()} × ` : ''}${nv}${/^\d+(–\d+)?$/.test(nv) ? ' reps' : ''}`; };
+  const foldInfo = card => { const rows = [...card.querySelectorAll('.set')], done = rows.filter(r => r.classList.contains('done'));
+    const best = done.reduce((b, r) => { const w = Number(r.querySelector('[data-f="weight"]')?.value) || 0, n = Number(r.querySelector('[data-f="reps"]')?.value) || 0;
+      const e = (w || 1) * (1 + n / 30); return !b || e > b.e ? { e, w, n } : b; }, null);
+    return { complete: rows.length > 0 && done.length === rows.length, done: done.length, total: rows.length, best }; };
+  const setFold = (card, on) => { card.classList.toggle('folded', on); const b = card.querySelector('.fold-line'); if (!b) return;
+    const f = foldInfo(card); b.setAttribute('aria-expanded', String(!on));
+    b.innerHTML = on ? `${ic('check', 'accent')} ${f.done}/${f.total} sets${f.best ? ` · best ${f.best.w ? `${f.best.w}×` : ''}${f.best.n}` : ''} <span class="fold-show">Show sets</span>` : `<span class="fold-show">Hide sets</span>`;
+    b.hidden = !on && !card.dataset.wasFolded; if (on) card.dataset.wasFolded = '1'; };
+  const nextRow = () => [...app.querySelectorAll('.card[data-we]:not([data-muscle="Cardio"]) .set:not(.done)')].find(r => !r.closest('.folded'));
+  const bar = document.createElement('div'); bar.id = 'nextBar'; bar.className = 'next-bar'; bar.hidden = true; bar.setAttribute('role', 'region'); bar.setAttribute('aria-label', 'Next set');
+  bar.innerHTML = '<div class="grow nb-text"><div class="nb-name"></div><div class="nb-what small"></div></div><button type="button" class="ghost sm" id="nbGo">Go to</button><button type="button" class="primary sm" id="nbLog">✓ Log</button>';
+  if (canLog) app.appendChild(bar);
+  const refreshNext = () => { if (!canLog) return; const r = nextRow(); bar.hidden = !r; document.body.classList.toggle('has-next', !!r); if (!r) return;
+    const card = r.closest('.card[data-we]'), name = card.querySelector('h3')?.childNodes[0]?.textContent.trim() || '';
+    bar.querySelector('.nb-name').textContent = name; bar.querySelector('.nb-what').textContent = `Next: set ${r.dataset.idx} · ${fmtSet(r)}`; bar._row = r; };
+  bar.querySelector('#nbGo').onclick = () => { const r = bar._row; if (!r) return; r.scrollIntoView({ block: 'center', behavior: 'smooth' }); r.querySelector('[data-f="weight"]')?.focus({ preventScroll: true }); };
+  bar.querySelector('#nbLog').onclick = () => { const r = bar._row; if (!r) return; r.scrollIntoView({ block: 'center' }); r.querySelector('.check')?.click(); };
+  app.querySelectorAll('.card[data-we]:not([data-muscle="Cardio"])').forEach(card => {
+    if (foldInfo(card).complete && !preview) setFold(card, true); else { const b = card.querySelector('.fold-line'); if (b) b.hidden = true; }
+    card.querySelector('.fold-line')?.addEventListener('click', () => setFold(card, !card.classList.contains('folded')));
+  });
+  // after a set is logged (or edited), refresh the bar and fold an exercise that just finished
+  const watch = new MutationObserver(muts => {
+    if (!app.contains(bar) && canLog) return watch.disconnect();
+    // fold a finished exercise only once you've moved on — when a set of a *different* exercise is logged — so
+    // fixing a set right after finishing never means reopening the card
+    for (const m of muts) if (m.type === 'attributes' && m.target.classList?.contains('set') && m.target.classList.contains('done')) {
+      const here = m.target.closest('.card[data-we]');
+      app.querySelectorAll('.card[data-we]:not([data-muscle="Cardio"]):not(.folded)').forEach(c => {
+        if (c !== here && !c.dataset.userOpened && foldInfo(c).complete) setFold(c, true); });
+    }
+    refreshNext();
+  });
+  watch.observe(app, { subtree: true, attributes: true, attributeFilter: ['class'] });
+  app.addEventListener('input', e => { if (e.target.matches?.('[data-f]')) refreshNext(); });
+  app.querySelectorAll('.fold-line').forEach(b => b.addEventListener('click', () => { const c = b.closest('.card'); if (!c.classList.contains('folded')) c.dataset.userOpened = '1'; }));
+  refreshNext();
   if (preview) {   // look, don't touch: nothing can be logged until the day is started
     $$('.card[data-we] input, .card[data-we] button:not([data-info]):not(.lift-flag), #finish, #skipDay, [data-edit]').forEach(el => { el.disabled = true; });
     $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));

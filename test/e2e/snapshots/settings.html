@@ -1,0 +1,48 @@
+<div class="card">
+      <div class="muted small">Signed in as</div><div>alex@example.com</div>
+      <label for="name">Name</label><input id="name" autocomplete="name" value="Alex">
+      <div class="row"><div class="grow"><label for="unit">Units</label><select id="unit"><option selected="">lb</option><option>kg</option></select></div>
+        <div class="grow"><label for="bw">Bodyweight (lb)</label><input id="bw" type="number" inputmode="decimal" step="any" value="200"></div></div>
+      <div class="muted tiny mt6">Bodyweight lets pull-ups, dips and push-ups count toward strength trends. Switching units only changes how weights are shown — your history stays the same.</div>
+      <div class="spacer"></div><button class="primary block" id="save">Save</button></div>
+    <div class="card" id="areasCard"><h3>Injuries &amp; sore spots</h3>
+      <div class="muted small">Pick any area you want to go easy on. When the app builds a meso or suggests a swap, it leaves out the exercises that load that area the most and keeps gentler ones. Tap again to turn it off. This is your preference, not medical advice, and the matching is by exercise name, so check anything new.</div>
+      <div class="area-grid" role="group" aria-label="Areas to go easy on"><button type="button" class="area " data-area="neck" aria-pressed="false"><span class="area-top"><b>Neck</b><span class="tick" aria-hidden="true"></span></span>
+      <span class="tiny muted">Off</span></button><button type="button" class="area " data-area="shoulders" aria-pressed="false"><span class="area-top"><b>Shoulders</b><span class="tick" aria-hidden="true"></span></span>
+      <span class="tiny muted">Off</span></button><button type="button" class="area " data-area="chest" aria-pressed="false"><span class="area-top"><b>Chest</b><span class="tick" aria-hidden="true"></span></span>
+      <span class="tiny muted">Off</span></button><button type="button" class="area " data-area="upper_back" aria-pressed="false"><span class="area-top"><b>Upper back</b><span class="tick" aria-hidden="true"></span></span>
+      <span class="tiny muted">Off</span></button><button type="button" class="area " data-area="arms" aria-pressed="false"><span class="area-top"><b>Arms</b><span class="tick" aria-hidden="true"></span></span>
+      <span class="tiny muted">Off</span></button><button type="button" class="area " data-area="elbows_wrists" aria-pressed="false"><span class="area-top"><b>Elbows &amp; wrists</b><span class="tick" aria-hidden="true"></span></span>
+      <span class="tiny muted">Off</span></button><button type="button" class="area " data-area="abs" aria-pressed="false"><span class="area-top"><b>Abs</b><span class="tick" aria-hidden="true"></span></span>
+      <span class="tiny muted">Off</span></button><button type="button" class="area " data-area="lower_back" aria-pressed="false"><span class="area-top"><b>Lower back</b><span class="tick" aria-hidden="true"></span></span>
+      <span class="tiny muted">Off</span></button><button type="button" class="area " data-area="hips" aria-pressed="false"><span class="area-top"><b>Hips</b><span class="tick" aria-hidden="true"></span></span>
+      <span class="tiny muted">Off</span></button><button type="button" class="area " data-area="legs" aria-pressed="false"><span class="area-top"><b>Legs</b><span class="tick" aria-hidden="true"></span></span>
+      <span class="tiny muted">Off</span></button><button type="button" class="area " data-area="knees" aria-pressed="false"><span class="area-top"><b>Knees</b><span class="tick" aria-hidden="true"></span></span>
+      <span class="tiny muted">Off</span></button></div>
+      
+      
+      <div class="muted tiny mt6">Saved to your account as soon as you tap. New mesos and swap suggestions use it; meso days already built aren't changed.</div></div>
+    <div class="card"><h3>Appearance</h3>
+      <div class="seg c3 theme-seg" role="radiogroup" aria-label="Theme"><button type="button" role="radio" data-theme-pick="system" aria-checked="true" class="on">Match phone</button><button type="button" role="radio" data-theme-pick="dark" aria-checked="false" class="">Dark</button><button type="button" role="radio" data-theme-pick="light" aria-checked="false" class="">Normal</button></div>
+      <div class="muted tiny mt6">Saved on this phone. The sun / moon button at the top of every screen switches between Dark and Normal in one tap.</div></div>
+    <div class="card"><h3>Training preferences</h3>
+      <div class="muted small">Used when the app builds a mesocycle for you. These are your choices; you can still add any exercise by hand.</div>
+      <fieldset class="plain"><legend class="small">Equipment I have</legend>
+        <div class="chips"><label class="chip check"><input type="checkbox" name="eq" value="Barbell" checked=""> Barbell</label><label class="chip check"><input type="checkbox" name="eq" value="Dumbbell" checked=""> Dumbbell</label><label class="chip check"><input type="checkbox" name="eq" value="Machine" checked=""> Machine</label><label class="chip check"><input type="checkbox" name="eq" value="Cable" checked=""> Cable</label><label class="chip check"><input type="checkbox" name="eq" value="Smith Machine" checked=""> Smith Machine</label><label class="chip check"><input type="checkbox" name="eq" value="Kettlebell" checked=""> Kettlebell</label><label class="chip check"><input type="checkbox" name="eq" value="Band" checked=""> Band</label></div>
+        <div class="muted tiny">Bodyweight moves are always included.</div></fieldset>
+      <div class="spacer"></div><button class="block" id="savePrefs">Save preferences</button>
+      <button class="ghost block sm" data-go="#/exercises">Favorites &amp; exclusions → Exercise library</button></div>
+    <div class="card"><h3>Smallest weight jumps</h3>
+      <div class="muted small">What your gym can actually load (microplates, dumbbell pairs, pin stacks). Suggestions round to these and add about 2.5% at a time — never more than 5 lb / 2.5 kg in one step.</div>
+      <div class="row inc-row"><label class="grow" for="inc-Machine">Machines (pin / plate)</label>
+          <select id="inc-Machine" data-inc="Machine"><option>1</option><option selected="">2.5</option><option>5</option><option>10</option></select><span class="muted small">lb</span></div><div class="row inc-row"><label class="grow" for="inc-Cable">Cables</label>
+          <select id="inc-Cable" data-inc="Cable"><option>1</option><option selected="">2.5</option><option>5</option><option>10</option></select><span class="muted small">lb</span></div><div class="row inc-row"><label class="grow" for="inc-Barbell">Barbell &amp; sled (per jump, both sides)</label>
+          <select id="inc-Barbell" data-inc="Barbell"><option>1</option><option selected="">2.5</option><option>5</option><option>10</option></select><span class="muted small">lb</span></div><div class="row inc-row"><label class="grow" for="inc-Dumbbell">Dumbbells (next pair up)</label>
+          <select id="inc-Dumbbell" data-inc="Dumbbell"><option>1</option><option>2.5</option><option selected="">5</option><option>10</option></select><span class="muted small">lb</span></div>
+      <button class="block" id="saveInc">Save weight jumps</button></div>
+    <div class="card small"><a href="#/logic">How it works — training logic &amp; evidence</a> <span class="muted">— why the app sets your weights, sets and RIR the way it does.</span></div>
+    <button class="block" id="pw">Change password</button><div class="spacer"></div>
+    <button class="block" id="out">Sign out</button>
+    <p class="muted small center">Install: Safari → Share → Add to Home Screen.</p>
+    <p class="muted tiny center">Woodhouse Lifts X.Y.Z · <a href="https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md" target="_blank" rel="noopener">What’s new</a></p>
+<!--title-->Settings
