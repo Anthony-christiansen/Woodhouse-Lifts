@@ -79,7 +79,8 @@ assert.equal(L.deloadSets(5), 3);
 const ex = { load_type: 'weighted' };
 assert.equal(L.performanceTrend(L.bestE1rm([{ weight: 195, reps: 10, rir: 1 }], ex), L.bestE1rm([{ weight: 185, reps: 10, rir: 2 }], ex)), 1);
 assert.equal(L.performanceTrend(100, 100.5), 0);
-assert.equal(L.combineTrends([1, -1, -1]), -1);
+assert.equal(L.combineTrends([1, -1, -1]), null, 'v1.18: one lift up, others down = mixed, not a trend');
+assert.equal(L.combineTrends([0, -1, -1]), -1);
 console.log('ALL LOGIC TESTS PASSED');
 
 // Slip warnings
@@ -843,7 +844,7 @@ console.log('GUARDRAIL TESTS PASSED');
   assert.equal(L.fatigueCheck(ok, { week: 4, weeks: 6 }).suggest, false, 'normal ratings → no');
   const rough1 = [r(2, 'Chest', 1), r(3, 'Chest', 3), r(3, 'Back', 3), r(3, 'Quads', 1)];
   assert.equal(L.fatigueCheck(rough1, { week: 4, weeks: 6 }).suggest, false, 'one rough week → no');
-  const rough2 = [r(2, 'Quads', 3), r(3, 'Chest', 3), r(3, 'Back', 1, 2), r(3, 'Quads', 1)];
+  const rough2 = [r(2, 'Quads', 3), r(3, 'Chest', 3), r(3, 'Back', 2, 0, -1), r(3, 'Quads', 1)];
   const f = L.fatigueCheck(rough2, { week: 4, weeks: 6 });
   assert.equal(f.suggest, true, 'two muscles now + one before → suggest'); assert.deepEqual(f.muscles.sort(), ['Back', 'Chest']); assert.match(f.why, /week 3/);
   assert.equal(L.fatigueCheck([r(2, 'Chest', 3), r(3, 'Chest', 3)], { week: 4, weeks: 6 }).suggest, false, 'one muscle only → no');
@@ -890,4 +891,85 @@ console.log('GUARDRAIL TESTS PASSED');
   const t3 = L.suggestSet({ prev: { weight: 225, reps: 4, rir: 2 }, ex: hyp, unit: 'lb', targetRir: 2, firstWeek: true });
   assert.ok(t3.weight < 225 && t3.reps >= 8 && t3.reps <= 12, `strength→hyp re-sets lighter into range: ${JSON.stringify(t3)}`);
   console.log('V1.17.0 AUDIT TESTS PASSED (fatigue check, indirect sets, goal checks)');
+}
+
+// --- v1.18.0: audit PR-B (T1 stall unit, T2 local vs widespread, T3 comparability, T4 unknown names, T5 profiles) ---
+{
+  // T1: stalls follow the muscle across all its sessions in the order done — not the weekly day index
+  const S = (day, at, performance, deload = false) => ({ day, at: `2026-11-${String(at).padStart(2, '0')}T18:00:00Z`, performance, deload });
+  assert.equal(L.stallRun([S(1, 1, 0), S(2, 3, 0)]), 2, 'flat on Mon then flat on Thu = 2 in a row');
+  assert.equal(L.stallRun([S(1, 1, 0), S(2, 3, 1), S(1, 8, 0)]), 1, 'improved on the other day in between → run resets');
+  assert.equal(L.stallRun([S(1, 8, 0), S(2, 3, 0), S(1, 1, 0)]), 3, 'order by when it was done, not input order');
+  assert.equal(L.stallRun([S(1, 1, 0), S(1, 5, null), S(1, 8, 0)]), 1, 'a session with no comparison (new/swapped lift) ends the run');
+  assert.equal(L.stallRun([S(1, 1, 0), S(1, 5, 0, true), S(1, 8, 0)]), 2, 'light weeks are skipped, not counted');
+  assert.equal(L.stallRun([S(1, 1, -1), S(2, 3, -1)]), 2);
+  assert.equal(L.stallRun([]), 0);
+  // out-of-order days, two sessions a week, missed week, mixed trajectories → never a spurious +set
+  const base = { R: 0, L: 1, J: 0, P: 2, priority: 'grow' };
+  const trace = sess => sess.map((_, i) => { const run = L.stallRun(sess.slice(0, i + 1)); return L.setAdjustment({ ...base, F: sess[i].performance, stalls: run }).delta; });
+  assert.deepEqual(trace([S(2, 1, 0), S(1, 2, 1), S(2, 8, 0), S(1, 9, 1)]), [0, 0, 0, 0], 'alternating up/flat across days: no adds');
+  assert.deepEqual(trace([S(1, 1, 0), S(1, 15, 0)]), [0, 1], 'missed a week in between: still two comparable sessions in a row');
+  assert.deepEqual(trace([S(1, 1, null), S(1, 8, 0), S(1, 15, 0)]), [0, 0, 1], 'new exercise first: needs two real comparisons');
+  // T3: comparability
+  const exw = { load_type: 'weighted' };
+  assert.equal(L.comparableTrend([{ weight: 200, reps: 5, rir: 2 }], [{ weight: 150, reps: 15, rir: 2 }], exw), null, '5 vs 15 reps: insufficient comparison');
+  assert.equal(L.comparableTrend([{ weight: 190, reps: 10, rir: 2 }], [{ weight: 185, reps: 10, rir: 2 }], exw), 1);
+  assert.equal(L.comparableTrend([{ weight: 185, reps: 10, rir: 2 }], [{ weight: 185, reps: 10, rir: 2 }], exw), 0);
+  assert.equal(L.comparableTrend([], [{ weight: 185, reps: 10, rir: 2 }], exw), null, 'one side empty → null');
+  assert.equal(L.comparableTrend([{ weight: 185.5, reps: 10, rir: 2 }], [{ weight: 185, reps: 10, rir: 2 }], exw), 0, '±1% noise band: flat');
+  const bw = { load_type: 'bodyweight' };
+  assert.equal(L.comparableTrend([{ weight: 25, reps: 8, rir: 2 }], [{ weight: 0, reps: 8, rir: 2 }], bw, null), null, 'bodyweight lift, added load, unknown bodyweight → null');
+  assert.equal(L.comparableTrend([{ weight: 0, reps: 10, rir: 2 }], [{ weight: 0, reps: 8, rir: 2 }], bw, null), 1, 'same added load: reps decide');
+  // T2: local vs widespread
+  const r = (week, muscle, recovery, joint_pain = 0, performance = 0) => ({ week, muscle, recovery, joint_pain, performance });
+  const shoulder = L.fatigueCheck([r(2, 'Shoulders', 1, 3), r(3, 'Shoulders', 1, 3), r(3, 'Chest', 1, 2)], { week: 4, weeks: 6 });
+  assert.equal(shoulder.suggest, false, 'joint pain is never "fatigue"');
+  assert.deepEqual(shoulder.local.joint.sort(), ['Chest', 'Shoulders']); assert.deepEqual(shoulder.local.severeJoint, ['Shoulders']);
+  const oneSore = L.fatigueCheck([r(2, 'Quads', 3), r(3, 'Quads', 3), r(3, 'Chest', 1)], { week: 4, weeks: 6 });
+  assert.equal(oneSore.suggest, false, 'one very sore muscle → that muscle, not the whole program'); assert.deepEqual(oneSore.local.muscle, ['Quads']);
+  const wide = L.fatigueCheck([r(2, 'Back', 2, 0, -1), r(3, 'Chest', 2, 0, -1), r(3, 'Back', 2, 0, -1), r(3, 'Quads', 3)], { week: 4, weeks: 6 });
+  assert.equal(wide.suggest, true, 'widespread: performance down + slow recovery across muscles, two weeks'); assert.doesNotMatch(wide.why, /joint/);
+  assert.equal(L.fatigueCheck([r(2, 'Back', null), r(3, 'Chest', null)], { week: 4, weeks: 6 }).suggest, false, 'missing ratings → no suggestion');
+  const after = L.fatigueCheck([r(2, 'Back', 3), r(3, 'Chest', 3), r(3, 'Back', 3), r(4, 'Chest', 0, 0, 1), r(4, 'Back', 1, 0, 1)], { week: 5, weeks: 7 });
+  assert.equal(after.suggest, false, 'recovered (latest week fine) → no suggestion');
+  // T4: indirect estimate — unknown names are a safe "unknown"; the fraction never changes a prescription
+  for (const name of ['Grandma’s Special', 'Machine Thing 3000', 'Press', 'row']) {
+    const e = { name, muscle_group: 'Calves', kind: 'compound', load_type: 'weighted' };
+    assert.deepEqual(L.indirectShares(e), {}, `unknown/mismatched "${name}" → no credit`); }
+  assert.deepEqual(L.indirectShares({ name: 'Bench Press', muscle_group: 'Chest', kind: 'isolation', load_type: 'weighted' }), {}, 'mislabelled isolation → none');
+  const libT = (await import('./seedlib.mjs')).seedLibrary();
+  const args = { plan: Array.from({ length: 3 }, () => ({ label: 'D', slots: [] })), priorities: L.presetPriorities('balanced'), focus: 'whole', goal: 'hypertrophy', split: 'full_body_split', library: libT, minutes: 75, demote: false };
+  const p0 = JSON.stringify(L.fitPlan(args).days);
+  L.setBreakdown(L.fitPlan(args).days, new Map(libT.map(e => [e.id, e])), 1); L.setBreakdown(L.fitPlan(args).days, new Map(libT.map(e => [e.id, e])), 0);
+  assert.equal(JSON.stringify(L.fitPlan(args).days), p0, 'computing indirect estimates at any fraction leaves the plan unchanged');
+  // T5: longitudinal profiles × 8 weeks — no unsupported escalation
+  const PROFILES = {
+    novice_improving: w => ({ F: 1, R: 0, L: 1, J: 0, P: 2 }),
+    intermediate_plateau: w => ({ F: w >= 3 ? 0 : 1, R: 0, L: 1, J: 0, P: 2 }),
+    experienced_flat: w => ({ F: 0, R: 1, L: 1, J: 0, P: 1 }),
+    high_fatigue: w => ({ F: w >= 2 ? -1 : 0, R: w >= 2 ? 3 : 2, L: 2, J: 0, P: 2 }),
+    joint_issue: w => ({ F: 0, R: 1, L: 1, J: w >= 3 ? 3 : 0, P: 2 }),
+    missed_sessions: w => ({ F: w % 2 ? null : 0, R: 0, L: 1, J: 0, P: 2 }),
+    low_equipment_mixed: w => ({ F: w % 2 ? 1 : 0, R: 0, L: 1, J: 0, P: 2 }),
+    workload_maxed: w => ({ F: 0, R: 1, L: 3, J: 0, P: 2 }),
+    unrated_pump: w => ({ F: 0, R: 0, L: 0, J: 0, P: null }),
+    slow_recovery: w => ({ F: 0, R: 2, L: 1, J: 0, P: 2 }),
+  };
+  for (const [name, at] of Object.entries(PROFILES)) for (const priority of ['grow', 'emphasize', 'maintain']) {
+    let sets = 4, run = 0, added = false; const log = [];
+    for (let w = 1; w <= 8; w++) {
+      const x = at(w); run = x.F == null || x.F > 0 ? 0 : run + 1;
+      const d = L.setAdjustment({ ...x, priority, stalls: run, justAdded: added }).delta;
+      log.push(d); sets = Math.max(1, sets + d); added = d > 0;
+      assert.ok(d <= 2 && !(priority === 'grow' && d > 1), `${name}/${priority} wk${w}: +${d}`);
+      if (d > 0) { assert.ok(x.F != null && x.F <= 0 && run >= 2, `${name}/${priority} wk${w}: add needs a repeated stall`);
+        assert.ok(x.R <= 1 && x.L <= 1 && !(x.J >= 2), `${name}/${priority} wk${w}: add needs good recovery`); }
+      if (priority === 'maintain') assert.ok(d <= 0, `${name}: maintain never adds`);
+    }
+    const adds = log.filter(d => d > 0).length;
+    assert.ok(adds <= 4, `${name}/${priority}: at most every other week (${log})`);
+    if (name === 'novice_improving') assert.equal(adds, 0, 'improving lifter: no extra volume');
+    if (name === 'high_fatigue' || name === 'joint_issue') assert.ok(log.slice(3).every(d => d <= 0), `${name}: no adds once signs appear (${log})`);
+  }
+  console.log('V1.18.0 PROGRESSION TESTS PASSED (stall unit, mixed/insufficient comparisons, local vs widespread, unknown names, 10 profiles × 3 priorities × 8 weeks)');
 }

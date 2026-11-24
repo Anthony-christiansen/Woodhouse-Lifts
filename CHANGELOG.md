@@ -12,6 +12,23 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.18.0 — 2026-11-24 · Smarter stall detection and fatigue signals (audit PR-B: T1–T5)
+
+- **Stalls follow the muscle, in the order you trained (T1).** "Twice in a row" now means this muscle's last two sessions on *any* day, not the same weekday slot. An improvement on any day resets the count.
+- **Like-with-like comparisons only (T3).**
+  - A lift's performance is compared only with the same lift's last session when the best sets are within 5 reps. Otherwise it's "no comparison", which never counts as a stall.
+  - One lift up and another down gives the muscle no rating (mixed signals); before, it counted as flat.
+- **Joint pain isn't fatigue (T2).** The early-light-week suggestion now needs *widespread* signs (very sore, or lifting less with slow recovery, across muscles, two weeks running).
+  - Joint pain stays with that exercise (swap or lighten it), and the card mentions it separately. Pain rated "a lot" adds that it's worth getting checked; no diagnosis is made.
+  - One very sore muscle is left to that muscle's own set reduction.
+- **Indirect estimates (T4):** unknown or mismatched exercise names give no credit ("unknown"). Tests confirm estimates at any fraction never change the plan.
+- **Simulation (T5):** 10 lifter profiles × 3 priorities × 8 weeks run through the set rules. There's no add without a repeated stall and good recovery, no add for an improving lifter, at most one add every other week, and none for Maintain.
+- Docs: training-logic §5 explains the progression unit, comparability, the fatigue split, and which numbers are heuristics.
+
+**Rollback:** app → `release/v1.17.1`. No database change.
+
+---
+
 ## 1.17.1 — 2026-11-24 · Early light week: preview, nothing deleted, undo (audit D1–D3)
 
 From the OpenAI v1.17.0 delta audit's top findings.

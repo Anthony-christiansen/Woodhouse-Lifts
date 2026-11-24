@@ -1,8 +1,8 @@
 // v1.12.1: pinned to one reviewed release, so the code users get only changes with a commit here (outside audit, finding 4).
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.2/+esm';
-import * as L from './logic.js?v=48';
-import * as LEARN from './learn.js?v=48';
-import * as MD from './md.js?v=48';
+import * as L from './logic.js?v=49';
+import * as LEARN from './learn.js?v=49';
+import * as MD from './md.js?v=49';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -19,7 +19,7 @@ let authReturn = (() => {
   return null;
 })();
 let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
-export const APP_VERSION = '1.17.1'; // keep in sync with CHANGELOG.md
+export const APP_VERSION = '1.18.0'; // keep in sync with CHANGELOG.md
 const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
 // v1.11.4: the training rules are a page inside the app (#/logic), built from this repo's docs/training-logic.md.
 // The app never links to anyone's Google Drive.
@@ -817,6 +817,7 @@ async function renderHome() {
     ${showFatigue ? `<div class="card warn" id="fatigueCard"><h3>${ic('alert')} Signs of fatigue — light week now?</h3>
         <div class="small">${esc(fatigue.why)}</div>
         <div class="muted tiny mt6">A light week (half the sets, easy effort) usually lets recovery catch up. This is a rule of thumb from your ratings, not a diagnosis — your call.</div>
+        ${fatigue.local?.joint?.length ? `<div class="muted tiny mt6">Joint discomfort (${esc(fatigue.local.joint.join(', '))}) isn’t counted here — it’s handled on that exercise (swap or lighten it).${fatigue.local.severeJoint?.length ? ' Sharp or lasting pain is worth getting checked.' : ''}</div>` : ''}
         <div class="row mt6"><button class="primary sm" id="fatigueYes">Take the light week now</button><button class="sm" id="fatigueNo">Not now</button></div></div>` : ''}
     ${meso ? `<div class="card drill" tabindex="0" role="link" data-go="#/meso/${meso.id}"><div class="row"><div class="grow"><div class="muted small">Mesocycle</div><b>${esc(meso.name)}</b></div>
         <span class="pill ${r?.deload ? 'warn' : 'on'}">${r ? (r.deload ? 'Light week' : `Week ${curWeek}`) : ''}</span></div>
@@ -1294,14 +1295,15 @@ async function applyAdjustment(fb, R, meso) {
     const priority = rawP ? L.normPriority(rawP, meso.focus) : 'emphasize';
     const bothWeeks = check(await sb.from('workout_exercises').select('id, workout_day_id, exercise_id, target_sets, target_rir, position, exercises!inner(muscle_group), workout_days!inner(week, mesocycle_id)')
       .eq('workout_days.mesocycle_id', meso.id).in('workout_days.week', [src.week - 1, src.week, target.week]).eq('exercises.muscle_group', fb.muscle_group));
-    // v1.16.0 (audit T3): how many sessions in a row (this day, this muscle) performance has been flat or down, and
-    // whether sets were just added — one flat session isn't a plateau, and an increase gets a week to show.
-    const hist = check(await sb.from('muscle_feedback').select('performance, workout_days!inner(week, day_index, mesocycle_id)')
-      .eq('muscle_group', fb.muscle_group).eq('workout_days.mesocycle_id', meso.id).eq('workout_days.day_index', src.day_index).lt('workout_days.week', src.week));
-    const perfByWeek = new Map(hist.map(h => [h.workout_days.week, h.performance]));
-    let stalls = 0;
-    if (fb.performance != null && fb.performance <= 0) { stalls = 1;
-      for (let w = src.week - 1; w >= 1; w--) { const pf = perfByWeek.get(w); if (pf == null || pf > 0 || L.rirForWeek(w, meso.weeks).deload) break; stalls++; } }
+    // v1.16.0 (audit T3) / v1.18.0 (audit T1): how many of this muscle's sessions in a row — on any day, in the order
+    // you did them — had flat or lower comparable performance; and whether sets were just added. One flat session
+    // isn't a plateau, an improvement on any day resets the run, and an increase gets a week to show.
+    const hist = check(await sb.from('muscle_feedback').select('id, performance, workout_days!inner(week, completed_at, mesocycle_id)')
+      .eq('muscle_group', fb.muscle_group).eq('workout_days.mesocycle_id', meso.id).not('workout_days.completed_at', 'is', null));
+    const sessions = hist.filter(h => h.workout_days.completed_at <= (src.completed_at || new Date().toISOString()) || h.id === fb.id)
+      .map(h => ({ at: h.id === fb.id ? (src.completed_at || new Date().toISOString()) : h.workout_days.completed_at, performance: h.id === fb.id ? fb.performance : h.performance, deload: L.rirForWeek(h.workout_days.week, meso.weeks).deload }));
+    if (!hist.some(h => h.id === fb.id)) sessions.push({ at: src.completed_at || new Date().toISOString(), performance: fb.performance, deload: false });
+    const stalls = L.stallRun(sessions);
     const wkTotal = w => bothWeeks.filter(x => x.workout_days.week === w).reduce((a, x) => a + (x.target_sets || 0), 0);
     const justAdded = src.week > 1 && wkTotal(src.week) > wkTotal(src.week - 1);
     const adj = L.setAdjustment({ R, L: fb.workload, J: fb.joint_pain, P: fb.pump, F: fb.performance, priority, stalls, justAdded });
@@ -2095,11 +2097,10 @@ async function renderWorkout(dayId, mode) {
     fresh.forEach(w => w.sets.forEach(x => { x.weight = W(x.weight); }));
     const bw = bwD();
     for (const m of muscles) {
+      // v1.18.0 (audit T3): only like-with-like counts (same lift, best sets within 5 reps); otherwise "no comparison".
       const trends = fresh.filter(w => w.exercises.muscle_group === m).map(w => {
-        const cur = L.bestE1rm(w.sets.filter(s => s.completed_at).map(s => ({ ...s, rir: s.rir ?? w.target_rir })), w.exercises, bw);
         const p = prev[w.exercise_id];
-        const old = p ? L.bestE1rm(p.sets.map(s => ({ ...s, rir: s.rir ?? p.rir })), w.exercises, bw) : null;
-        return L.performanceTrend(cur, old);
+        return p ? L.comparableTrend(w.sets.filter(s => s.completed_at).map(s => ({ ...s, rir: s.rir ?? w.target_rir })), p.sets.map(s => ({ ...s, rir: s.rir ?? p.rir })), w.exercises, bw) : null;
       });
       const perf = L.combineTrends(trends);
       if (await durableWrite({ kind: 'upsert', table: 'muscle_feedback', values: { workout_day_id: dayId, muscle_group: m, performance: perf }, onConflict: 'workout_day_id,muscle_group' }) === 'failed') { $('#finish').disabled = false; return; }

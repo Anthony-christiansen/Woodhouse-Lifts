@@ -13,7 +13,7 @@ SHOTS=os.environ.get('SHOTS')
 FB="""window.__DONE_THROUGH = 2; window.__FB = [
   { muscle_group: 'Quads', soreness: 3, joint_pain: 0, performance: 0, workout_days: { week: 1, mesocycle_id: 'm1' } },
   { muscle_group: 'Chest', soreness: 3, joint_pain: 0, performance: -1, workout_days: { week: 2, mesocycle_id: 'm1' } },
-  { muscle_group: 'Back', soreness: 1, joint_pain: 2, performance: 0, workout_days: { week: 2, mesocycle_id: 'm1' } },
+  { muscle_group: 'Back', soreness: 2, joint_pain: 0, performance: -1, workout_days: { week: 2, mesocycle_id: 'm1' } },
   { muscle_group: 'Quads', soreness: 1, joint_pain: 0, performance: 1, workout_days: { week: 2, mesocycle_id: 'm1' } }];"""
 async def main():
     async with async_playwright() as p:
