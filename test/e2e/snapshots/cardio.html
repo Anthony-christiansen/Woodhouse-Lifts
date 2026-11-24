@@ -1,0 +1,33 @@
+
+    <div class="card"><h3>Log cardio</h3>
+      <form id="f">
+        <div class="row"><div class="grow"><label for="fld-1">Activity</label><select name="activity" id="fld-1"><option>Run</option><option>Walk</option><option>Incline walk</option><option>Bike</option><option>Row</option><option>Elliptical</option><option>Stairmaster</option><option>Swim</option><option>HIIT</option><option>Hike</option><option>Sport</option><option>Other</option></select></div>
+          <div class="w140"><label for="fld-2">Date</label><input type="date" name="date" value="DATE" id="fld-2"></div></div>
+        <div class="row"><div class="grow"><label for="fld-3">Minutes</label><input name="minutes" type="number" inputmode="decimal" step="any" required="" id="fld-3"></div>
+          <div class="grow"><label for="fld-4">Avg HR (optional)</label><input name="hr" type="number" inputmode="numeric" id="fld-4"></div></div>
+        <label>Intensity (session RPE): <b id="rpeLbl">5 · Hard</b></label>
+        <div class="seg c11"><button type="button" data-rpe="0" class="">0</button><button type="button" data-rpe="1" class="">1</button><button type="button" data-rpe="2" class="">2</button><button type="button" data-rpe="3" class="">3</button><button type="button" data-rpe="4" class="">4</button><button type="button" data-rpe="5" class="on">5</button><button type="button" data-rpe="6" class="">6</button><button type="button" data-rpe="7" class="">7</button><button type="button" data-rpe="8" class="">8</button><button type="button" data-rpe="9" class="">9</button><button type="button" data-rpe="10" class="">10</button></div>
+        <div class="row"><div class="grow"><label for="fld-5">Distance (optional)</label><input name="dist" type="number" inputmode="decimal" step="any" id="fld-5"></div>
+          <div class="w90"><label for="fld-6">Unit</label><select name="du" id="fld-6"><option>mi</option><option>km</option><option>m</option></select></div></div>
+        <label for="fld-7">Notes</label><input name="notes" id="fld-7">
+        <div class="spacer"></div><button class="primary block">Save cardio</button>
+      </form></div>
+    <div class="grid2"><div class="card"><div class="muted small">This week</div><div class="big">35<span class="muted small"> min</span></div><div class="muted small">load 140</div></div>
+      <div class="card"><div class="muted small">3-wk avg load</div><div class="big">50</div><div class="muted small">load = RPE × minutes</div></div></div>
+    <div class="card warn small">Cardio load is up more than 50% vs your recent weeks. If leg recovery dips, ease off or swap running for cycling (doc §1.9).</div>
+    <div class="card"><b>Weekly load (8 weeks)</b>
+      <svg class="chart" viewBox="0 0 320 120"><rect class="cbar" x="6" y="110" width="28" height="0" rx="4"></rect>
+          <text x="20" y="119" font-size="9" text-anchor="middle">M/D</text><rect class="cbar" x="46" y="110" width="28" height="0" rx="4"></rect>
+          <text x="60" y="119" font-size="9" text-anchor="middle">M/D</text><rect class="cbar" x="86" y="110" width="28" height="0" rx="4"></rect>
+          <text x="100" y="119" font-size="9" text-anchor="middle">M/D</text><rect class="cbar" x="126" y="110" width="28" height="0" rx="4"></rect>
+          <text x="140" y="119" font-size="9" text-anchor="middle">M/D</text><rect class="cbar" x="166" y="110" width="28" height="0" rx="4"></rect>
+          <text x="180" y="119" font-size="9" text-anchor="middle">M/D</text><rect class="cbar" x="206" y="10" width="28" height="100" rx="4"></rect>
+          <text x="220" y="119" font-size="9" text-anchor="middle">M/D</text><rect class="cbar" x="246" y="110" width="28" height="0" rx="4"></rect>
+          <text x="260" y="119" font-size="9" text-anchor="middle">M/D</text><rect class="cbar now" x="286" y="17" width="28" height="93" rx="4"></rect>
+          <text x="300" y="119" font-size="9" text-anchor="middle">M/D</text></svg></div>
+    <h2>Recent</h2>
+    <div class="card"><table><tbody><tr><th>Date</th><th>Activity</th><th>Min</th><th>RPE</th><th>Load</th><th></th></tr>
+      <tr><td>11-24</td><td>Incline walk <span class="muted tiny">1.8mi</span></td>
+        <td>35</td><td>4</td><td>140</td><td><button class="ghost sm danger" data-del="c1" aria-label="Delete this cardio session"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M18 6 6 18M6 6l12 12"></path></svg></button></td></tr><tr><td>11-12</td><td>Bike</td>
+        <td>25</td><td>6</td><td>150</td><td><button class="ghost sm danger" data-del="c2" aria-label="Delete this cardio session"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M18 6 6 18M6 6l12 12"></path></svg></button></td></tr></tbody></table></div>
+<!--title-->Cardio

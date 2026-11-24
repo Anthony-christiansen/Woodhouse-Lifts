@@ -12,6 +12,17 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.20.1 — 2026-11-24 · Code tidy-up, part 1 (audit PR-D)
+
+No change to anything you see or do. This only moves code between files, so it's easier to maintain.
+- `icons.js` holds the icon set; `format.js` the small formatting helpers (dates, numbers, text escaping); `ui.js` the toast, label linking and the accessible pop-up sheet. `app.js` imports them, and is 116 lines shorter.
+- **New safety net:** `test/e2e/render_snapshot.py` records the exact HTML of 19 screens (mock data) and fails on any difference. It passed byte for byte after the move, and it now runs in CI with every other suite.
+- **Next part (planned):** move the screens (workout, builder, home, stats, settings) and the sync queue into their own files. They share the signed-in user's state, so that needs a small state module first. Same rules: one move at a time, snapshot identical, full suite green.
+
+**Rollback:** app → `release/v1.20.0`.
+
+---
+
 ## 1.20.0 — 2026-11-24 · Less scrolling while you log (audit U4)
 
 - **Finished exercises fold to one line** once you move on to the next exercise: "✓ 3/3 sets · best 70×11 · Show sets". The one you just finished stays open, so you can still fix a set. Your exercise and muscle ratings stay visible on the folded card. **Show sets** opens it again, and a card you've opened stays open. Finished exercises are also folded when you reopen a workout.
