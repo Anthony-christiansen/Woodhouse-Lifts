@@ -59,6 +59,7 @@ async def main():
         ctx,pg,errs=await mk(br, MOCK.replace("equipment: null, avoid_tags: []","equipment: null, avoid_tags: ['axial']"))
         await pg.goto(BASE+'#/new'); await pg.wait_for_timeout(600)
         await pg.click('[data-goal="strength"]'); await pg.wait_for_timeout(100)
+        await pg.evaluate("document.getElementById('advEffort').open = true"); await pg.wait_for_timeout(100)
         t=await pg.inner_text('main')
         ok('builder: strength effort schedule never 0', 'Main lifts by week: 3 → 2 → 1 → 1 → light' in t, t[t.find('Main lifts by'):t.find('Main lifts by')+110])
         await pg.fill('#name','Test strength'); await pg.click('#next'); await pg.wait_for_timeout(400)

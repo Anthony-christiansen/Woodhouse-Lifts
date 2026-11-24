@@ -12,6 +12,27 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.19.0 — 2026-11-24 · Workout summary, easier first setup, and two fixes (week numbers, reloading)
+
+- **After Finish, a summary (U5)** shows:
+  - sets done vs planned, exercises, and how many lifts beat last time;
+  - each lift's best set next to last time's, with ▲ ▬ ▼ (an estimate, compared only when reps are similar; "·" when there's no fair comparison);
+  - per-muscle performance, and what happens next: you rate recovery next time, and nothing changes from one session alone;
+  - an honest sync line ("Saved and synced", or "Saved on this phone — keep the app open");
+  - one next step: the next workout, or the finished meso.
+- **First setup (U3).**
+  - A new user's Home shows a welcome card: what a meso is, the three-step loop, and **Build my first plan**.
+  - The builder asks **Experience** (New / Some / Experienced). It only picks the starting effort style (Conservative / Main lifts ≥1 / Standard), and an effort style you picked yourself always wins.
+  - Effort is tucked under **Advanced** unless you're experienced or have changed it.
+  - The builder shows your equipment, with a link to change it.
+- **Fixed: Home's "Sets this week" didn't line up with "Workouts this week".** Workouts counted the meso's training week; sets counted the calendar week (Mon–Sun). With a meso running, both cards now read **· week N** for the same training week, and sets show done/planned (tap → that week's workouts). Without a meso, the calendar week is used as before.
+- **Fixed: the app redrew ("reloaded") a lot.** The sign-in library re-announces "signed in" when the app comes back into view and when it refreshes its session, and every one redrew the whole screen, mid-workout included. Now it redraws only when the signed-in person actually changes.
+- Tests: `ux190.py` (24 checks); the builder tests open Advanced where they test effort; `design1.py` ignores buttons in closed sections.
+
+**Rollback:** app → `release/v1.18.0`. No database change.
+
+---
+
 ## 1.18.0 — 2026-11-24 · Smarter stall detection and fatigue signals (audit PR-B: T1–T5)
 
 - **Stalls follow the muscle, in the order you trained (T1).** "Twice in a row" now means this muscle's last two sessions on *any* day, not the same weekday slot. An improvement on any day resets the count.

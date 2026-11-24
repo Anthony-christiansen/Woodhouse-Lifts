@@ -20,6 +20,7 @@ async def main():
         # effort style → create payload
         await pg.goto(B+'#/new'); await pg.wait_for_timeout(1000)
         ok('three effort styles, Standard by default', await pg.locator('[data-effort]').count()==3 and await pg.get_attribute('[data-effort="standard"]','aria-pressed')=='true')
+        await pg.evaluate("document.getElementById('advEffort').open = true"); await pg.wait_for_timeout(100)
         await pg.click('[data-effort="conservative"]'); await pg.wait_for_timeout(200)
         t=await pg.inner_text('main')
         ok('Conservative preview never below 2 / 1', 'Main lifts by week: 3 → 2 → 2 → 2 → light' in t and 'other lifts: 3 → 2 → 1 → 1 → light' in t, t[t.find('Main lifts by'):t.find('Main lifts by')+120])

@@ -495,3 +495,12 @@ input[type=checkbox], input[type=radio] { -webkit-appearance: auto; appearance: 
 .lw-sum { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0; }
 .lw-sum > div { background: var(--surface-2); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; }
 .lw-list { padding-left: 18px; margin: 6px 0 10px; } .lw-list li { margin: 4px 0; }
+.sum-title { font-size: var(--fs-lg, 20px); margin: 2px 0 8px; display: flex; align-items: center; gap: 6px; }
+.sum-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 6px 0 10px; }
+.sum-stats > div { background: var(--surface-2); border-radius: 10px; padding: 8px; display: flex; flex-direction: column; align-items: center; }
+.sum-stats b { font-size: 22px; }
+.sum-row { display: flex; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--border); } .sum-row:first-of-type { border-top: 0; }
+.sum-best { text-align: right; }
+.trend { display: inline-block; width: 1.1em; text-align: center; } .trend.up { color: var(--accent); } .trend.down { color: var(--warn); } .trend.flat, .trend.na { color: var(--muted); }
+.adv > summary { cursor: pointer; padding: 12px 0; min-height: 44px; }
+.welcome-steps { padding-left: 20px; margin: 8px 0 12px; } .welcome-steps li { margin: 3px 0; }

@@ -23,7 +23,7 @@ async def main():
             small=await pg.evaluate("""[...document.querySelectorAll('body *')].filter(el=>{const t=[...el.childNodes].some(n=>n.nodeType===3&&n.textContent.trim());
               if(!t||!el.offsetParent) return false; return parseFloat(getComputedStyle(el).fontSize)<12.5}).map(el=>el.tagName+':'+el.textContent.trim().slice(0,20)).slice(0,5)""")
             ok(f'{h}: no text under 13px', not small, small)
-            unlabeled=await pg.evaluate("""[...document.querySelectorAll('button')].filter(b=>b.offsetParent&&!b.innerText.trim()&&!b.getAttribute('aria-label')&&!b.title).map(b=>b.outerHTML.slice(0,80)).slice(0,3)""")
+            unlabeled=await pg.evaluate("""[...document.querySelectorAll('button')].filter(b=>(b.checkVisibility?b.checkVisibility():b.offsetParent)&&!b.innerText.trim()&&!b.getAttribute('aria-label')&&!b.title).map(b=>b.outerHTML.slice(0,80)).slice(0,3)""")
             ok(f'{h}: icon-only buttons have labels', not unlabeled, unlabeled)
         await pg.goto(B+'#/workout/d21'); await pg.wait_for_timeout(900); await pg.evaluate(CLOSE)
         sizes=await pg.evaluate("[...document.querySelectorAll('[data-info],[data-replace]')].map(b=>{const r=b.getBoundingClientRect();return [Math.round(r.width),Math.round(r.height)]})")
