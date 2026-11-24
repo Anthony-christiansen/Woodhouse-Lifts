@@ -12,6 +12,21 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.20.0 — 2026-11-24 · Less scrolling while you log (audit U4)
+
+- **Finished exercises fold to one line** once you move on to the next exercise: "✓ 3/3 sets · best 70×11 · Show sets". The one you just finished stays open, so you can still fix a set. Your exercise and muscle ratings stay visible on the folded card. **Show sets** opens it again, and a card you've opened stays open. Finished exercises are also folded when you reopen a workout.
+- **Next set bar** above the tabs shows the next unfinished set (exercise, set number, weight × reps):
+  - **✓ Log** logs it through that set's own ✓, so it uses the same save path, rules and offline queue;
+  - **Go to** scrolls to the set and puts the cursor on its weight.
+  - It moves on as you go, and it never shows on a preview or a finished day.
+  - The page leaves room for it, so Finish is never hidden.
+- Display only: no change to data, rules or the database.
+- Tests: `workout200.py` (19 checks); every existing workout, offline, rating and accessibility suite passes unchanged.
+
+**Rollback:** app → `release/v1.19.0`.
+
+---
+
 ## 1.19.0 — 2026-11-24 · Workout summary, easier first setup, and two fixes (week numbers, reloading)
 
 - **After Finish, a summary (U5)** shows:

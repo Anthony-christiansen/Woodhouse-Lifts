@@ -1,8 +1,8 @@
 // v1.12.1: pinned to one reviewed release, so the code users get only changes with a commit here (outside audit, finding 4).
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.2/+esm';
-import * as L from './logic.js?v=50';
-import * as LEARN from './learn.js?v=50';
-import * as MD from './md.js?v=50';
+import * as L from './logic.js?v=51';
+import * as LEARN from './learn.js?v=51';
+import * as MD from './md.js?v=51';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -19,7 +19,7 @@ let authReturn = (() => {
   return null;
 })();
 let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
-export const APP_VERSION = '1.19.0'; // keep in sync with CHANGELOG.md
+export const APP_VERSION = '1.20.0'; // keep in sync with CHANGELOG.md
 const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
 // v1.11.4: the training rules are a page inside the app (#/logic), built from this repo's docs/training-logic.md.
 // The app never links to anyone's Google Drive.
@@ -448,7 +448,7 @@ const routes = {
   settings: renderSettings, learn: renderLearn, stats: renderStats, logic: renderLogic, feedback: renderFeedback, summary: renderSummary,
 };
 async function route() {
-  closeSheet();
+  closeSheet(); document.body.classList.remove('has-next');
   const { data } = await sb.auth.getSession(); session = data.session; // waits for supabase-js to read the link's tokens
   routedUid = session?.user?.id ?? null;
   if (authReturn) {
@@ -1597,6 +1597,7 @@ async function renderWorkout(dayId, mode) {
         <div class="row"><div class="grow"><h3>${esc(ex.name)} <span class="trend" data-trend="${we.id}"></span></h3>
           <div class="meta">${esc(ex.muscle_group)} · ${we.target_sets} × ${ex.rep_min}–${ex.rep_max} reps · ${deload ? 'light week' : effortShort(we.target_rir)}</div></div>
           ${infoBtn(we)}${!day.completed_at && !preview ? `<button class="ghost sm" data-replace="${we.id}" aria-label="Replace ${esc(ex.name)}" title="Replace exercise">${ic('swap')}</button>` : ''}</div>
+        <button type="button" class="fold-line" data-unfold="${we.id}" aria-expanded="false"></button>
         ${coachLine(we)}
         <div class="sets"><div class="set-head"><div>#</div><div>${wLabel(ex)}</div><div>reps</div><div></div></div>
           ${Array.from({ length: n }, (_, i) => {
@@ -2092,6 +2093,51 @@ async function renderWorkout(dayId, mode) {
       });
   };
   wes.forEach(refreshTrend);
+  // v1.20.0 (audit U4): less scrolling while you log.
+  //  - An exercise whose sets are all done folds to one line ("✓ 3/3 sets · best 70×11 · Show sets"); its ratings stay visible.
+  //  - A "Next set" bar above the tabs shows the next unfinished set (exercise, set, weight × reps) with ✓ Log and Go to.
+  // Display only: logging still goes through each set's own ✓ button, so data, rules and the offline queue are unchanged.
+  const canLog = !preview && !day.completed_at;
+  const fmtSet = r => { const w = r.querySelector('[data-f="weight"]'), n = r.querySelector('[data-f="reps"]');
+    const wv = w?.value || w?.placeholder || '', nv = n?.value || n?.placeholder || '';
+    return `${wv && wv !== '0' ? `${wv} ${unit()} × ` : ''}${nv}${/^\d+(–\d+)?$/.test(nv) ? ' reps' : ''}`; };
+  const foldInfo = card => { const rows = [...card.querySelectorAll('.set')], done = rows.filter(r => r.classList.contains('done'));
+    const best = done.reduce((b, r) => { const w = Number(r.querySelector('[data-f="weight"]')?.value) || 0, n = Number(r.querySelector('[data-f="reps"]')?.value) || 0;
+      const e = (w || 1) * (1 + n / 30); return !b || e > b.e ? { e, w, n } : b; }, null);
+    return { complete: rows.length > 0 && done.length === rows.length, done: done.length, total: rows.length, best }; };
+  const setFold = (card, on) => { card.classList.toggle('folded', on); const b = card.querySelector('.fold-line'); if (!b) return;
+    const f = foldInfo(card); b.setAttribute('aria-expanded', String(!on));
+    b.innerHTML = on ? `${ic('check', 'accent')} ${f.done}/${f.total} sets${f.best ? ` · best ${f.best.w ? `${f.best.w}×` : ''}${f.best.n}` : ''} <span class="fold-show">Show sets</span>` : `<span class="fold-show">Hide sets</span>`;
+    b.hidden = !on && !card.dataset.wasFolded; if (on) card.dataset.wasFolded = '1'; };
+  const nextRow = () => [...app.querySelectorAll('.card[data-we]:not([data-muscle="Cardio"]) .set:not(.done)')].find(r => !r.closest('.folded'));
+  const bar = document.createElement('div'); bar.id = 'nextBar'; bar.className = 'next-bar'; bar.hidden = true; bar.setAttribute('role', 'region'); bar.setAttribute('aria-label', 'Next set');
+  bar.innerHTML = '<div class="grow nb-text"><div class="nb-name"></div><div class="nb-what small"></div></div><button type="button" class="ghost sm" id="nbGo">Go to</button><button type="button" class="primary sm" id="nbLog">✓ Log</button>';
+  if (canLog) app.appendChild(bar);
+  const refreshNext = () => { if (!canLog) return; const r = nextRow(); bar.hidden = !r; document.body.classList.toggle('has-next', !!r); if (!r) return;
+    const card = r.closest('.card[data-we]'), name = card.querySelector('h3')?.childNodes[0]?.textContent.trim() || '';
+    bar.querySelector('.nb-name').textContent = name; bar.querySelector('.nb-what').textContent = `Next: set ${r.dataset.idx} · ${fmtSet(r)}`; bar._row = r; };
+  bar.querySelector('#nbGo').onclick = () => { const r = bar._row; if (!r) return; r.scrollIntoView({ block: 'center', behavior: 'smooth' }); r.querySelector('[data-f="weight"]')?.focus({ preventScroll: true }); };
+  bar.querySelector('#nbLog').onclick = () => { const r = bar._row; if (!r) return; r.scrollIntoView({ block: 'center' }); r.querySelector('.check')?.click(); };
+  app.querySelectorAll('.card[data-we]:not([data-muscle="Cardio"])').forEach(card => {
+    if (foldInfo(card).complete && !preview) setFold(card, true); else { const b = card.querySelector('.fold-line'); if (b) b.hidden = true; }
+    card.querySelector('.fold-line')?.addEventListener('click', () => setFold(card, !card.classList.contains('folded')));
+  });
+  // after a set is logged (or edited), refresh the bar and fold an exercise that just finished
+  const watch = new MutationObserver(muts => {
+    if (!app.contains(bar) && canLog) return watch.disconnect();
+    // fold a finished exercise only once you've moved on — when a set of a *different* exercise is logged — so
+    // fixing a set right after finishing never means reopening the card
+    for (const m of muts) if (m.type === 'attributes' && m.target.classList?.contains('set') && m.target.classList.contains('done')) {
+      const here = m.target.closest('.card[data-we]');
+      app.querySelectorAll('.card[data-we]:not([data-muscle="Cardio"]):not(.folded)').forEach(c => {
+        if (c !== here && !c.dataset.userOpened && foldInfo(c).complete) setFold(c, true); });
+    }
+    refreshNext();
+  });
+  watch.observe(app, { subtree: true, attributes: true, attributeFilter: ['class'] });
+  app.addEventListener('input', e => { if (e.target.matches?.('[data-f]')) refreshNext(); });
+  app.querySelectorAll('.fold-line').forEach(b => b.addEventListener('click', () => { const c = b.closest('.card'); if (!c.classList.contains('folded')) c.dataset.userOpened = '1'; }));
+  refreshNext();
   if (preview) {   // look, don't touch: nothing can be logged until the day is started
     $$('.card[data-we] input, .card[data-we] button:not([data-info]):not(.lift-flag), #finish, #skipDay, [data-edit]').forEach(el => { el.disabled = true; });
     $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
