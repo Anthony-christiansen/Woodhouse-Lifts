@@ -12,6 +12,23 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.20.2 — 2026-11-24 · Code tidy-up, part 2 (audit PR-D)
+
+No change to anything you see or do.
+- `net.js` now holds the Supabase connection and the whole offline-safe sync queue:
+  - saving sets with versions, in order;
+  - ratings and finishing a workout with no signal;
+  - the sync badge;
+  - the storage-failure fallback.
+- `net.js` owns the signed-in session, so the queue always keys on the right account. `app.js` sets it in its two places with `setSession()`.
+- `app.js` is 173 lines shorter (2,581).
+- The render snapshot caught one mistake during the move (a value not exported), which was fixed before anything shipped. All 19 screens are identical, and the offline, sync, storage-failure and light-week suites pass unchanged.
+- **Still in app.js:** the screens. Moving them needs `profile` and the exercise cache to move into a shared module the same way. That's the next tidy-up step.
+
+**Rollback:** app → `release/v1.20.1`.
+
+---
+
 ## 1.20.1 — 2026-11-24 · Code tidy-up, part 1 (audit PR-D)
 
 No change to anything you see or do. This only moves code between files, so it's easier to maintain.
