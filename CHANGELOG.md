@@ -12,6 +12,30 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.17.1 — 2026-11-24 · Early light week: preview, nothing deleted, undo (audit D1–D3)
+
+From the OpenAI v1.17.0 delta audit's top findings.
+- **Preview before anything changes:** the confirm screen is built by the server and shows:
+  - the meso length before → after, and the light week's workouts;
+  - the later workouts that will be hidden;
+  - the done/skipped/unfinished count for earlier weeks;
+  - a warning to let other phones or tabs sync first (this phone can only check its own).
+  If earlier workouts aren't finished, it says this ends the meso early rather than adding a recovery week.
+- **Nothing is deleted any more.** Later planned workouts are hidden, so a set logged on another phone before it synced still lands and is kept. Home and the meso page then say so: **Restore the full meso** or **Keep the light week**.
+- **Undo:** the meso page has **Undo the early light week** until you log in the light week. It restores the exact length, workouts and targets.
+- **Stale requests are refused, not guessed.** The request carries the preview's revision; a double tap, a second tab or a retry after a timeout gets "changed — nothing was changed".
+- **Timeouts:** if the signal drops after the server applied it, the app re-checks and says it went through.
+- **Hidden workouts:** opened from an old link, they're read-only, with an explanation.
+- **Database:** migration `20261124010000_light_week_revisions` (expand-only: two columns, one flag column, three functions; `start_light_week` no longer deletes). Rollback script: `supabase/ops/rollback_20261124010000_light_week_revisions.sql`.
+- **Tests:**
+  - `test/pg.concurrency.mjs` races two connections on **real PostgreSQL** (double request, set on a hidden day, a day finished in another tab, a refused request), and now runs in CI.
+  - DB: preview counts, stale/duplicate refused with every row unchanged, nothing deleted, late sets kept, exact undo.
+  - `integrity171.py` (25 checks, mock server, including two isolated browser contexts with one offline).
+
+**Rollback:** run the rollback script's step 1 (undo any early light weeks), then app → `release/v1.17.0`.
+
+---
+
 ## 1.17.0 — 2026-11-23 · The three remaining audit items
 
 - **Light week early, when your ratings suggest it (T4).**
