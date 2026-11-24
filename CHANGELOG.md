@@ -12,6 +12,20 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.20.5 — 2026-11-24 · The workout summary says "On plan" too, and counts your sets right
+
+**For people using the app**
+- **After Finish, a lift you did exactly as planned shows a green ● and "On plan · +1 rep/set"** (or "+2.5 lb", etc.) instead of ▬ "about the same". A lift that beat the plan says **Beat the plan**. A lift below last time keeps its ▼ and adds "An off day happens — next week starts from here".
+- The third number at the top is now **on plan or better** (lifts that beat the plan or hit it), instead of only "beat last time".
+- Muscles under "What happens next" read **on plan** when their lifts were on plan, **holding steady** when nothing changed, and **below last time** instead of "down".
+- **Fixed: the summary said "3 of 0 sets" and "0/0 sets".** Finishing never loaded each exercise's planned set count: the server query didn't ask for it, and neither did the copy kept for finishing with no signal. Nobody had finished a workout since the summary shipped (1.19.0), so no one saw it.
+
+**Underneath**
+- `screens/workout.js`: the summary keeps each lift's muscle and `change` (from `rawChange` / `changeLabel`, 1.20.4); the finish query and the offline copy include `target_sets`.
+- `screens/home.js`: summary marks, notes, the count and the muscle words. Scoring is unchanged: muscle performance saved to the database is the same as before.
+- Tests: `summary205.py` (14 checks: a real finish with no signal, every mark, the count, the muscle words, and that the finish query asks for `target_sets`; the mock server returns every column, so that last one checks the code itself).
+- Rollback: `release/v1.20.4`.
+
 ## 1.20.4 — 2026-11-24 · "On plan" instead of 0.0% on the exercise pill
 
 **For people using the app**

@@ -1,16 +1,16 @@
 // v1.12.1: supabase-js is pinned to one reviewed release (outside audit, finding 4) — see net.js.
-import * as L from './logic.js?v=55';
-import * as LEARN from './learn.js?v=55';
-import * as MD from './md.js?v=55';
-import { ICONS, ic } from './icons.js?v=55';
-import { esc, fmtNum, fmt, today, dayName, order, weekStart, isoDay } from './format.js?v=55';
-import { toast, linkLabels, openSheet, closeSheet } from './ui.js?v=55';
-import { profile, exCache, builder, setProfile, setExCache, setBuilder } from './state.js?v=55';
-import { renderExplore, renderFeedback, renderHome, renderStats, renderSummary } from './screens/home.js?v=55';
-import { renderHistory, renderLearn, renderLibrary, renderLogic, renderProgress, renderSettings, renderVolume } from './screens/library.js?v=55';
-import { renderBuilder, renderMeso, renderMesos } from './screens/mesos.js?v=55';
-import { renderCardio, renderWorkout } from './screens/workout.js?v=55';
-import { sb, session, setSession, OKEY, QKEY, durableWrite, flushOps, flushQueue, flushing, inOrder, isNetErr, isPermanentErr, lastSent, loadIncrements, lsGet, lsSet, memStore, newVer, oKey, oLoad, oStore, opFailed, opQuery, opsFlushing, overlayDays, pendingOps, qAddFailed, qFailed, qFailedKey, qKey, qLoad, qLoadFor, qMigrateLegacy, qStore, qStoreFor, riskWarned, sameVersion, saveSet, sendQueued, setChains, setKey, storageAtRisk, stripLocal, syncAll, syncBadge, verSeq, warnAtRisk } from './net.js?v=55';
+import * as L from './logic.js?v=56';
+import * as LEARN from './learn.js?v=56';
+import * as MD from './md.js?v=56';
+import { ICONS, ic } from './icons.js?v=56';
+import { esc, fmtNum, fmt, today, dayName, order, weekStart, isoDay } from './format.js?v=56';
+import { toast, linkLabels, openSheet, closeSheet } from './ui.js?v=56';
+import { profile, exCache, builder, setProfile, setExCache, setBuilder } from './state.js?v=56';
+import { renderExplore, renderFeedback, renderHome, renderStats, renderSummary } from './screens/home.js?v=56';
+import { renderHistory, renderLearn, renderLibrary, renderLogic, renderProgress, renderSettings, renderVolume } from './screens/library.js?v=56';
+import { renderBuilder, renderMeso, renderMesos } from './screens/mesos.js?v=56';
+import { renderCardio, renderWorkout } from './screens/workout.js?v=56';
+import { sb, session, setSession, OKEY, QKEY, durableWrite, flushOps, flushQueue, flushing, inOrder, isNetErr, isPermanentErr, lastSent, loadIncrements, lsGet, lsSet, memStore, newVer, oKey, oLoad, oStore, opFailed, opQuery, opsFlushing, overlayDays, pendingOps, qAddFailed, qFailed, qFailedKey, qKey, qLoad, qLoadFor, qMigrateLegacy, qStore, qStoreFor, riskWarned, sameVersion, saveSet, sendQueued, setChains, setKey, storageAtRisk, stripLocal, syncAll, syncBadge, verSeq, warnAtRisk } from './net.js?v=56';
 
 // Where confirmation emails send people back to (must be in Supabase Auth → URL Configuration → Redirect URLs).
 export const SITE_URL = 'https://anthony-christiansen.github.io/Woodhouse-Lifts/';
@@ -24,7 +24,7 @@ export let authReturn = (() => {
   return null;
 })();
 export let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
-export const APP_VERSION = '1.20.4'; // keep in sync with CHANGELOG.md
+export const APP_VERSION = '1.20.5'; // keep in sync with CHANGELOG.md
 export const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
 // v1.11.4: the training rules are a page inside the app (#/logic), built from this repo's docs/training-logic.md.
 // The app never links to anyone's Google Drive.
