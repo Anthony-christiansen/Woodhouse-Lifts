@@ -12,6 +12,16 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## Ops — 2026-11-24 · Backups include app feedback
+
+- `backup.take_snapshot()` (so the weekly Drive backups too) now includes `app_feedback`; the restore scripts (`restore_user_from_snapshot.sql`, `load_backup_file.mjs`) know the table.
+- The restore drill now also proves the early-light-week columns (`superseded_at`, `revision`, `light_week_undo`) and app feedback come back exactly.
+- Migration `20261124060000_snapshot_app_feedback` (function only, no data change). App unchanged.
+
+**Rollback:** re-run the previous definition from `20261121230000_exercise_feedback.sql` (snapshots then skip `app_feedback`).
+
+---
+
 ## 1.19.0 — 2026-11-24 · Workout summary, easier first setup, and two fixes (week numbers, reloading)
 
 - **After Finish, a summary (U5)** shows:

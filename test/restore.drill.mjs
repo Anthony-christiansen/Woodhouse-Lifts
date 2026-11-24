@@ -6,12 +6,16 @@ import { readFileSync } from 'node:fs';
 import { freshDb } from './dbkit.mjs';
 import { runChecks } from './db.checks.mjs';
 const db = await freshDb(); await runChecks(db);
-const T = ['profiles','exercises','templates','mesocycles','workout_days','workout_exercises','sets','muscle_feedback','exercise_feedback','exercise_prefs','cardio_sessions'];
+const T = ['profiles','exercises','templates','mesocycles','workout_days','workout_exercises','sets','muscle_feedback','exercise_feedback','exercise_prefs','cardio_sessions','app_feedback'];
 const own = t => t === 'profiles' ? 'id' : t === 'exercises' ? 'owner_id' : 'user_id';
 const dump = async uid => { const o = {}; for (const t of T) o[t] = (await db.query(`select to_jsonb(x) j from public.${t} x where ${own(t)} = $1 order by 1::text`, [uid])).rows.map(r => JSON.stringify(r.j)).sort(); return o; };
 const users = (await db.query('select id from public.profiles order by id')).rows.map(r => r.id);
 const [A, B] = users;
-const before = await dump(A), beforeB = await dump(B);
+// v1.19.1: the early-light-week columns and app_feedback must survive a restore too
+await db.query(`update public.workout_days set superseded_at = now() where id = (select id from public.workout_days where user_id = $1 order by week desc limit 1)`, [A]);
+await db.query(`update public.mesocycles set revision = 3, light_week_undo = '{"weeks": 6, "week": 4, "targets": []}' where id = (select id from public.mesocycles where user_id = $1 limit 1)`, [A]);
+const before = await dump(A), beforeB = await dump(B); const before0 = before;
+assert.ok(before0.app_feedback.length > 0 && before0.workout_days.some(r => JSON.parse(r).superseded_at) && before0.mesocycles.some(r => JSON.parse(r).light_week_undo), 'drill covers app_feedback + light-week columns');
 assert.ok(before.sets.length > 0 && before.muscle_feedback.length > 0, 'drill needs data');
 await db.query('select backup.take_snapshot()');
 const ts = (await db.query('select max(taken_at)::text t from backup.snapshot')).rows[0].t;
@@ -19,6 +23,7 @@ const ts = (await db.query('select max(taken_at)::text t from backup.snapshot'))
 await db.query(`update public.sets set reps = reps + 1, weight = weight + 5 where user_id = $1`, [A]);
 await db.query(`delete from public.mesocycles where user_id = $1`, [A]);
 await db.query(`update public.profiles set unit = 'kg' where id = $1`, [A]);
+await db.query(`delete from public.app_feedback where user_id = $1`, [A]);
 const mid = await dump(A);
 assert.equal(mid.sets.length, 0, 'damage applied');
 const tpl = readFileSync(new URL('../supabase/ops/restore_user_from_snapshot.sql', import.meta.url), 'utf8');
