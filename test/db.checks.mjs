@@ -174,6 +174,37 @@ export async function runChecks(db) {
   await assert.rejects(as(db, B, `insert into public.exercise_feedback (workout_exercise_id, workload, joint_pain) values ($1, 0, 0)`, [we2]), /violates|foreign key|row-level/i, 'B cannot rate A\'s exercise');
   await assert.rejects(as(db, A, `insert into public.exercise_feedback (workout_exercise_id, workload) values ($1, 7)`, [we2]), /check|duplicate|unique/i);
   console.log('EXERCISE FEEDBACK: RLS + one per exercise OK');
+  // ---- start_light_week (v1.17.0): early light week, owner only, never touches logged work
+  {
+    const plan6 = k => ({ client_key: k, name: 'Light meso', weeks: 6, days_per_week: 2, focus: 'whole', priorities: {}, started_on: '2026-11-20',
+      days: [1, 2, 3, 4, 5, 6].flatMap(w => [1, 2].map(di => ({ week: w, day_index: di, label: 'Day ' + di,
+        exercises: [{ exercise_id: ex.press.id, target_sets: w === 6 ? 2 : 5, target_rir: w === 6 ? 4 : 3 }, { exercise_id: ex.pull.id, target_sets: 3, target_rir: 2 }] }))) });
+    const [{ create_mesocycle: mL }] = await as(db, A, 'select public.create_mesocycle($1)', [plan6(uuid())]);
+    const day = async (w, di) => (await as(db, A, 'select id from public.workout_days where mesocycle_id = $1 and week = $2 and day_index = $3', [mL, w, di]))[0].id;
+    // only week 1 done → week 2 would be the light week: too early
+    await as(db, A, 'update public.workout_days set completed_at = now() where mesocycle_id = $1 and week = 1', [mL]);
+    await assert.rejects(as(db, A, 'select public.start_light_week($1)', [mL]), /week 3/, 'not before week 3');
+    // weeks 1–2 done, week 3 day 1 has a logged set → light week is week 4
+    await as(db, A, 'update public.workout_days set completed_at = now() where mesocycle_id = $1 and week = 2', [mL]);
+    const we31 = (await as(db, A, 'select id from public.workout_exercises where workout_day_id = $1 and exercise_id = $2', [await day(3, 1), ex.press.id]))[0].id;
+    await as(db, A, `insert into public.sets (workout_exercise_id, set_index, weight, reps, rir, completed_at) values ($1, 1, 100, 10, 2, now())`, [we31]);
+    await assert.rejects(as(db, B, 'select public.start_light_week($1)', [mL]), /not found/i, 'B cannot touch A\'s meso');
+    await db.exec(`set role anon`);
+    try { await assert.rejects(db.query('select public.start_light_week($1)', [mL]), /permission/i, 'anon refused'); } finally { await db.exec('reset role'); }
+    const [{ start_light_week: t }] = await as(db, A, 'select public.start_light_week($1)', [mL]);
+    assert.equal(t, 4, 'first untouched week becomes the light week');
+    assert.equal((await as(db, A, 'select weeks from public.mesocycles where id = $1', [mL]))[0].weeks, 4, 'meso now ends at week 4');
+    assert.equal((await as(db, A, 'select count(*)::int n from public.workout_days where mesocycle_id = $1 and week > 4', [mL]))[0].n, 0, 'later planned weeks removed');
+    const w4 = await as(db, A, `select we.target_sets, we.target_rir, we.exercise_id from public.workout_exercises we join public.workout_days d on d.id = we.workout_day_id where d.mesocycle_id = $1 and d.week = 4`, [mL]);
+    assert.ok(w4.length === 4 && w4.every(x => x.target_rir === 4), 'light week effort');
+    assert.ok(w4.filter(x => x.exercise_id === ex.press.id).every(x => x.target_sets === 3) && w4.filter(x => x.exercise_id === ex.pull.id).every(x => x.target_sets === 2), 'half the sets, rounded up');
+    const w3 = await as(db, A, `select we.target_sets from public.workout_exercises we join public.workout_days d on d.id = we.workout_day_id where d.mesocycle_id = $1 and d.week = 3 and we.exercise_id = $2`, [mL, ex.press.id]);
+    assert.ok(w3.every(x => x.target_sets === 5), 'earlier weeks untouched');
+    assert.equal((await as(db, A, 'select count(*)::int n from public.sets where workout_exercise_id = $1', [we31]))[0].n, 1, 'logged set kept');
+    await assert.rejects(as(db, A, 'select public.start_light_week($1)', [mL]), /already next/, 'can\'t do it twice');
+    await as(db, A, 'delete from public.mesocycles where id = $1', [mL]);
+    console.log('START_LIGHT_WEEK: owner only, first untouched week, half sets, later weeks removed, logged work kept');
+  }
   // ---- app_feedback (v1.15.0): add + read own only; no edits/deletes; needs a rating or a note
   await as(db, A, `insert into public.app_feedback (rating, kind, message, app_version) values (5, 'praise', 'nice', '1.15.0')`);
   await as(db, A, `insert into public.app_feedback (kind, message) values ('bug', 'rir arrow')`);

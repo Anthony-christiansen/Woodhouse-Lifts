@@ -304,6 +304,30 @@ Light weeks are unchanged in every style. Why: closer to failure can help growth
 | +5% weekly / +20% per meso load ceilings; 2-rep cap | **Protective rule** | §4.5. |
 | ±1% "on track / stalled" band on estimated strength | **Heuristic, noisy** | Estimated 1RM from reps + RIR is a training-performance proxy, not muscle growth; high-rep, bodyweight and assisted sets compare less reliably (audit T6). |
 
+### 2.7 The three later audit items (v1.17.0)
+
+**Light week early, when your ratings suggest it (audit T4).** The final light week is still planned in every meso. From week 3, if your ratings show fatigue in **two or more muscles** in the latest rated week (or at least half of 3+ rated muscles), **and** at least one muscle showed it the week before, Home shows *"Signs of fatigue — light week now?"* with the reason.
+- A muscle "shows fatigue" in a week if it was still sore at its next session (recovery 3), had joint pain rated 2+, or performance dropped while recovery was slow (2+).
+- Your choices are **Take the light week now** or **Not now**; Not now hides it until next week.
+- The meso page also has **Take the light week early (week N)** at any time from week 3.
+- Taking it turns the first week with nothing logged into the light week: half the sets rounded up, at least 1, and easy effort. The meso then ends after it. Planned weeks after it that haven't been started are removed, and nothing you've logged is touched. It's one database transaction (`start_light_week`).
+- **Heuristic label:** these thresholds are a rule of thumb from your own ratings, not a diagnosis or a validated fatigue test. The evidence that a deload improves growth is limited (2024 deload RCT); the point is that you choose.
+
+**Indirect sets, as an estimate (audit T9).** Builder step 2 has **Show estimated indirect sets**, off by default. When it's on, each compound lift credits **½ a set** per set to the muscles it clearly also works:
+- presses and dips → triceps and shoulders;
+- overhead press → triceps;
+- rows, pulldowns and pull-ups → biceps;
+- squats, leg presses and lunges → glutes;
+- deadlifts and RDLs → glutes;
+- hip thrusts → ¼ to hamstrings.
+
+These show as "+N" next to the direct count. Targets, colours and every other number still use **direct sets only**, so nothing about the plan changes. The ½ is a sensitivity model (Pelland 2026 counts indirect work fractionally); it is not a measured dose. The engine takes any fraction (0 = direct only, 1 = full credit), and each set is counted once as direct.
+
+**Goals (audit T10).**
+- **General strength:** main lifts 3–6 reps, never to failure, and fewer sets. It isn't a powerlifting peaking program.
+- **Athleticism (experimental):** the app can't measure bar speed or jump height, so it can't tell whether power is improving. The label says so, and the workout tip is to move fast and end the set when speed drops.
+- **Changing goals:** in week 1 of a new meso, if last time was clearly a different rep range (e.g. 185×10 before a 3–6 strength block), the suggestion stays inside the new range (190×6). The note says what weight would match your last effort (≈202.5), so a bigger jump is your call; automatic increases stay ≤ +5 lb / 2.5 kg. Going the other way (225×4 → an 8–12 range) re-sets lighter into the range. Within a meso, the v1.11.1 rule (§4) is unchanged.
+
 ## 3. What you rate, and when
 
 | When | Rating | Scale | What it measures |
