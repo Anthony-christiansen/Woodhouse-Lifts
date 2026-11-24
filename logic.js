@@ -506,9 +506,9 @@ export function rirForWeek(week, weeks) {
 //                accessories 8–12 at ≥2 RIR, ~40% fewer sets (low-volume power work, ACSM 2026).
 export const GOALS = {
   hypertrophy: { name: 'Hypertrophy', blurb: 'Build muscle size. Moderate reps, effort rises to near failure, most sets.', volume: 1 },
-  strength: { name: 'Strength', blurb: 'Lift heavier. Main lifts 3–6 reps, accessories 6–12, never to failure, fewer sets.', volume: 0.75,
+  strength: { name: 'General strength', short: 'Strength', blurb: 'Lift heavier. Main lifts 3–6 reps, accessories 6–12, never to failure, fewer sets. Builds strength through heavier loads; it isn’t a powerlifting peaking program.', volume: 0.75,
     reps: { compound: [3, 6], isolation: [6, 12] }, rirFloor: { compound: 1, isolation: 1 } },
-  athletic: { name: 'Athleticism', blurb: 'Power & speed. Explosive main lifts 3–5 reps far from failure, accessories 8–12, least volume.', volume: 0.6,
+  athletic: { name: 'Athleticism (experimental)', short: 'Athletic*', experimental: true, blurb: 'Power & speed. Explosive main lifts 3–5 reps far from failure, accessories 8–12, least volume. Experimental: the app can’t measure speed or jump height, so it can’t tell whether power is improving — lift each rep as fast as you can with good form, and pair it with your sport’s own training.', volume: 0.6,
     reps: { compound: [3, 5], isolation: [8, 12] }, rirFixed: { compound: 3 }, rirFloor: { isolation: 2 } },
 };
 export const goalOf = g => (GOALS[g] ? g : 'hypertrophy');
@@ -916,9 +916,20 @@ export function suggestSet(args) {
     const m = repsAtLoad({ prev, ex, weight: r.weight, targetRir: args.targetRir, prevTargetRir: args.prevTargetRir });
     r.reps = Math.max(Number(prev.reps), m ? m.lo : Number(prev.reps));
     if (r.note) r.note = r.note.replace(/^Re-set into the rep range( · )?/, '');
-    if (r.reps > (ex?.rep_max ?? 30)) notes.push(`above the ${ex.rep_min}–${ex.rep_max} range — the weight climbs a step a week until it's back in`);
+    if (args.firstWeek && r.reps > (ex?.rep_max ?? 30) && Number(prev.reps) > (ex?.rep_max ?? 30) + 2 && targetRirOk(args.targetRir)) {
+      // v1.17.0 (audit T10, goal transitions): week 1 of a new meso, and last time was clearly a different rep range
+      // (e.g. a hypertrophy meso before this strength one). Within a meso the v1.11.1 rule below still holds. Stay inside the new range — fewer reps at the capped weight — and say what weight
+      // would match last time's effort, so a bigger jump is your call (automatic increases stay ≤ +5 lb / 2.5 kg).
+      const est = e1rm(prev, ex), rm = ex.rep_max, match = est ? Math.floor(est / (1 + (rm + args.targetRir) / 30) / inc) * inc : null;
+      r.reps = rm; notes.length = 0;
+      notes.push(`+${Math.round((r.weight - w0) * 100) / 100} ${unit || 'lb'} · new ${ex.rep_min}–${rm} rep range: ${rm} reps here is easier than last time${match && match > r.weight ? ` — about ${match} ${unit || 'lb'} would match your last effort, if you want to go heavier by hand` : ''}; the weight climbs a step a week`);
+    } else if (r.reps > (ex?.rep_max ?? 30)) notes.push(`above the ${ex.rep_min}–${ex.rep_max} range — the weight climbs a step a week until it's back in`);
   }
   if (prev.reps != null && r.weight >= w0 && r.reps > Number(prev.reps) + GUARD.maxRepJump) r.reps = Number(prev.reps) + GUARD.maxRepJump;
+  return finish(r, notes);
+}
+const targetRirOk = t => t != null && t >= 0;
+function finish(r, notes) {
   if (notes.length) r.note = `${r.note ? r.note + ' · ' : ''}${notes.join(' · ')}`;
   return r;
 }
@@ -1064,6 +1075,64 @@ export function setAdjustment({ R, L, J, P, F, priority = 'emphasize', stalls = 
 }
 
 /** Deload sets = half of the final accumulation week's (already adjusted) sets, rounded up (doc §1.8). */
+/**
+ * v1.17.0 (audit T4): should the light week come early? A heuristic, not a diagnosis — it only ever suggests, and you
+ * decide. Looks at your muscle ratings in the hard weeks so far. A muscle "shows fatigue" in a week if it was still
+ * sore at the next session (recovery 3), had joint pain rated 2+, or performance dropped while recovery was slow.
+ * Suggests a light week when, in the latest rated week, 2+ muscles show it (or at least half of 3+ rated muscles),
+ * and at least one also did the week before — so one rough week isn't enough. Never in weeks 1–2, never when the light
+ * week is already next.
+ * rows: [{ week, muscle, recovery (0–3 | null), joint_pain, performance (−1/0/1 | null) }]
+ */
+const andList = a => a.length < 2 ? a.join('') : `${a.slice(0, -1).join(', ')} and ${a.at(-1)}`;
+export function fatigueCheck(rows, { week, weeks }) {
+  if (!(weeks >= 4) || week < 3 || week >= weeks - 1) return { suggest: false, reason: 'not in the window' };
+  const flag = r => r.recovery === 3 || (r.joint_pain ?? 0) >= 2 || (r.performance === -1 && (r.recovery ?? 0) >= 2);
+  const by = w => { const m = new Map(); for (const r of rows.filter(r => r.week === w)) m.set(r.muscle, (m.get(r.muscle) || false) || flag(r)); return m; };
+  const latestW = Math.max(0, ...rows.filter(r => r.week < weeks).map(r => r.week));
+  if (latestW < 2) return { suggest: false, reason: 'not enough weeks rated' };
+  const cur = by(latestW), prev = by(latestW - 1);
+  const hit = [...cur].filter(([, f]) => f).map(([m]) => m), prevHit = [...prev].filter(([, f]) => f).map(([m]) => m);
+  const broad = hit.length >= 2 || (cur.size >= 3 && hit.length * 2 >= cur.size);
+  const repeat = prevHit.length > 0;
+  return broad && repeat
+    ? { suggest: true, muscles: hit, prevMuscles: prevHit, week: latestW,
+        why: `${andList(hit)} showed fatigue in week ${latestW} (still sore, joint pain, or performance down with slow recovery), and ${andList(prevHit)} did in week ${latestW - 1} too.` }
+    : { suggest: false, reason: broad ? 'only one rough week' : 'fatigue signs limited to one muscle', muscles: hit };
+}
+
+/**
+ * v1.17.0 (audit T9): estimated indirect sets — a sensitivity model, not a physiological dose. Your direct sets stay
+ * the numbers the plan is built on. Each compound lift is credited to the muscles it clearly also works, at
+ * `fraction` of a set (default ½; set 0 to see direct only, 1 for full credit). Pattern → { muscle: share }.
+ */
+export const INDIRECT_RULES = [
+  { test: (n, m) => m === 'Chest' && /press|push.?up|\bdips?\b/.test(n), to: { Triceps: 1, Shoulders: 1 } },
+  { test: (n, m) => m === 'Shoulders' && /press/.test(n) && !/lateral|raise|fly/.test(n), to: { Triceps: 1 } },
+  { test: (n, m) => m === 'Triceps' && /\bdips?\b|close.?grip/.test(n), to: { Chest: 1 } },
+  { test: (n, m) => m === 'Back' && /row|pull.?down|pull.?up|chin.?up|pulldown/.test(n), to: { Biceps: 1 } },
+  { test: (n, m) => m === 'Quads' && /squat|leg press|lunge|split|step.?up|hack/.test(n) && !/sissy/.test(n), to: { Glutes: 1 } },
+  { test: (n, m) => m === 'Hamstrings' && /deadlift|rdl|good ?morning/.test(n), to: { Glutes: 1 } },
+  { test: (n, m) => m === 'Glutes' && /hip thrust|glute bridge/.test(n), to: { Hamstrings: 0.5 } },
+];
+export function indirectShares(e) {
+  if (!e || e.kind !== 'compound' || e.load_type === 'cardio') return {};
+  const n = (e.name || '').toLowerCase(), out = {};
+  for (const r of INDIRECT_RULES) if (r.test(n, e.muscle_group)) for (const [m, v] of Object.entries(r.to)) if (m !== e.muscle_group) out[m] = Math.max(out[m] || 0, v);
+  return out;
+}
+/** Direct and estimated indirect weekly sets per muscle for a plan (days → slots with exerciseId + sets). Each set is counted once. */
+export function setBreakdown(plan, libById, fraction = 0.5) {
+  const out = {}; for (const m of MUSCLES) out[m] = { direct: 0, indirect: 0 };
+  for (const d of plan) for (const s of d.slots) {
+    const sets = Number(s.sets) || 0, e = libById.get ? libById.get(s.exerciseId) : libById[s.exerciseId];
+    if (s.muscle in out) out[s.muscle].direct += sets;
+    for (const [m, v] of Object.entries(indirectShares(e))) if (m in out) out[m].indirect += sets * v * fraction;
+  }
+  for (const m of MUSCLES) out[m].indirect = Math.round(out[m].indirect * 10) / 10;
+  return out;
+}
+
 export const deloadSets = lastWeekSets => Math.max(1, Math.ceil((lastWeekSets || 0) / 2));
 export const SESSION_CAP = 12, WEEKLY_CAP = 22;
 

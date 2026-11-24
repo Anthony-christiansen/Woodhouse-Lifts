@@ -12,6 +12,23 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.17.0 — 2026-11-23 · The three remaining audit items
+
+- **Light week early, when your ratings suggest it (T4).**
+  - From week 3, if two or more muscles show fatigue (still sore, joint pain, or performance down with slow recovery) and it also showed the week before, Home asks **"Signs of fatigue — light week now?"** with the reason. Your choices are **Take the light week now** and **Not now**.
+  - The meso page also has **Take the light week early (week N)**.
+  - Taking it makes the first untouched week a light week (half the sets, easy effort) and ends the meso after it. Later unstarted weeks are removed; logged work is never touched.
+  - Needs migration `20261124000000_start_light_week` (one owner-only function). Until it's applied, the button says a small update is needed.
+- **Estimated indirect sets (T9).** Builder step 2 has **Show estimated indirect sets** (off by default), showing "+N" next to each muscle: ½ a set from each compound lift that also works it. It's labelled as an estimate, and targets and colours still use direct sets only.
+- **Goals (T10).**
+  - Strength is now **General strength**, and athletic is **Athleticism (experimental)**, with an explanation (shown as "Athletic*" on the button).
+  - In week 1 of a new meso, if your last sets were in a clearly different rep range, suggestions stay inside the new range and the note says what weight would match your last effort. Automatic increases are still capped at +5 lb.
+- Tests: engine (fatigue cases, indirect fixtures and fractions, goal checks and transitions), DB (`start_light_week`: owner only, first untouched week, half sets, logged work kept), and `audit170.py` (15 checks).
+
+**Rollback:** app → `release/v1.16.0`. The function can stay; older versions never call it.
+
+---
+
 ## 1.16.0 — 2026-11-23 · Training logic: audit changes (approved by the owner)
 
 From the OpenAI audit's training-engine findings. **Mesos already running keep their sets, RIR and exercises.** What changes: how they adjust from now on (sets), and new mesos (templates, effort style, the Maintain suggestion).

@@ -25,6 +25,7 @@ const fixtures = {
   'rpc:lift_recent': [...mk('e5', 'Hack Squat', [300, 310, 311, 309, 310.5]), ...mk('e1', 'Incline Dumbbell Press', [100, 110, 105, 106])],
   exercise_prefs: [], app_feedback: [],
   'rpc:create_mesocycle': 'm1',
+  'rpc:start_light_week': 4,
   'rpc:dashboard_stats': { tz: 'UTC', weeks: { [wkKey]: 42 }, workouts: 3, sets: 9, prs: [{ name: 'Hack Squat', pct: 2.4, date: now }], movers: [{ name: 'Hack Squat', pct: 5.4 }, { name: 'Leg Extension', pct: -1.2 }] },
   'rpc:strength_summary': [{ exercise_id: 'e5', name: 'Hack Squat', muscle_group: 'Quads', sessions: 3, first_e1rm: 245, last_e1rm: 258, last_at: now }],
   'rpc:lift_sessions': [1,2,3,4,5].map(i => ({ exercise_id: 'e5', name: 'Hack Squat', muscle_group: 'Quads', session_id: 'x'+i, done_at: `2026-11-0${i}T10:00:00Z`, best_e1rm: 240+i*5, top_weight: 180+i*5, top_reps: 10, n_sets: 3 })),
@@ -43,6 +44,8 @@ function builder(table) {
       let data = fixtures[table] || [];
       if (table === 'mesocycles' && window.__MESOS) data = window.__MESOS;   // test hook
       if (table === 'profiles' && window.__PROFILE) data = data.map(x => ({ ...x, ...window.__PROFILE }));   // test hook
+      if (table === 'muscle_feedback' && window.__FB) data = window.__FB;   // test hook
+      if (table === 'workout_days' && window.__DONE_THROUGH) data = data.map(d => d.week <= window.__DONE_THROUGH ? { ...d, started_at: '2026-11-10', completed_at: '2026-11-10T18:00:00Z' } : d);   // test hook
       if (table === 'mesocycles' && statusIn) data = data.filter(m => statusIn.includes(m.status));
       if (table === 'mesocycles' && lim) data = data.slice(0, lim);
       if (table === 'workout_exercises' && inIds && inIds.some(id => /s\d+$/.test(id))) data = inIds.map(id => ({ id, exercises: { load_type: 'weighted' }, workout_days: { week: +id.match(/s(\d+)$/)[1] + 1, mesocycle_id: 'm0', mesocycles: { name: 'Test Meso', weeks: 8 } } }));
@@ -70,6 +73,6 @@ function builder(table) {
   return b;
 }
 export function createClient() {
-  return { from: builder, rpc: (fn, args) => { window.__lastRpc = { fn, args }; if (fn === 'create_mesocycle') (window.__creates = window.__creates || []).push(args); return builder('rpc:' + fn); }, auth: { getSession: async () => ({ data: { session: { user: { id: 'u1', email: 'alex@example.com' } } } }),
+  return { from: builder, rpc: (fn, args) => { window.__lastRpc = { fn, args }; (window.__rpcs = window.__rpcs || []).push({ fn, args }); if (fn === 'create_mesocycle') (window.__creates = window.__creates || []).push(args); return builder('rpc:' + fn); }, auth: { getSession: async () => ({ data: { session: { user: { id: 'u1', email: 'alex@example.com' } } } }),
     onAuthStateChange() {}, signOut: async () => {} } };
 }

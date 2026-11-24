@@ -490,3 +490,5 @@ input[type=checkbox], input[type=radio] { -webkit-appearance: auto; appearance: 
 .stars button[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
 .fb-item { padding: 8px 0; border-top: 1px solid var(--border); } .fb-item:first-of-type { border-top: 0; }
 .sync-badge.risk { background: var(--warn-bg); color: var(--warn); border-color: var(--warn-border); }
+.chip .ind { opacity: .75; font-weight: 400; }
+.chk { display: flex; gap: 8px; align-items: flex-start; } .chk input { margin-top: 3px; flex: none; }

@@ -834,3 +834,60 @@ console.log('GUARDRAIL TESTS PASSED');
   assert.ok(r2.demoted.length > 0, 'the proposal still exists when time is short');
   console.log('V1.16.0 TRAINING-LOGIC TESTS PASSED (stalls, cooldown, 1× templates, effort modes, demotion consent)');
 }
+
+// --- v1.17.0: the three remaining audit items (T4 deload by trend, T9 indirect sets, T10 goals) ---
+{
+  // T4: fatigue check — suggests only, needs broad + repeated signs, never weeks 1–2 or when the light week is next
+  const r = (week, muscle, recovery, joint_pain = 0, performance = 0) => ({ week, muscle, recovery, joint_pain, performance });
+  const ok = [r(2, 'Chest', 1), r(2, 'Back', 1), r(3, 'Chest', 1), r(3, 'Back', 2)];
+  assert.equal(L.fatigueCheck(ok, { week: 4, weeks: 6 }).suggest, false, 'normal ratings → no');
+  const rough1 = [r(2, 'Chest', 1), r(3, 'Chest', 3), r(3, 'Back', 3), r(3, 'Quads', 1)];
+  assert.equal(L.fatigueCheck(rough1, { week: 4, weeks: 6 }).suggest, false, 'one rough week → no');
+  const rough2 = [r(2, 'Quads', 3), r(3, 'Chest', 3), r(3, 'Back', 1, 2), r(3, 'Quads', 1)];
+  const f = L.fatigueCheck(rough2, { week: 4, weeks: 6 });
+  assert.equal(f.suggest, true, 'two muscles now + one before → suggest'); assert.deepEqual(f.muscles.sort(), ['Back', 'Chest']); assert.match(f.why, /week 3/);
+  assert.equal(L.fatigueCheck([r(2, 'Chest', 3), r(3, 'Chest', 3)], { week: 4, weeks: 6 }).suggest, false, 'one muscle only → no');
+  assert.equal(L.fatigueCheck([r(2, 'Chest', 2, 0, -1), r(3, 'Chest', 2, 0, -1), r(3, 'Back', 3)], { week: 4, weeks: 6 }).suggest, true, 'performance down + slow recovery counts');
+  assert.equal(L.fatigueCheck([r(2, 'Chest', 1, 0, -1), r(3, 'Chest', 1, 0, -1), r(3, 'Back', 1, 0, -1)], { week: 4, weeks: 6 }).suggest, false, 'down with good recovery alone → no');
+  assert.equal(L.fatigueCheck(rough2, { week: 2, weeks: 6 }).suggest, false, 'never in weeks 1–2');
+  assert.equal(L.fatigueCheck(rough2, { week: 5, weeks: 6 }).suggest, false, 'light week already next');
+  assert.equal(L.fatigueCheck(rough2, { week: 3, weeks: 3 }).suggest, false, 'short meso');
+  // T9: indirect sets — fixtures, tunable fraction, never double counted
+  const lib = new Map([
+    ['bench', { id: 'bench', name: 'Barbell Bench Press', muscle_group: 'Chest', kind: 'compound', load_type: 'weighted' }],
+    ['pd', { id: 'pd', name: 'Lat Pulldown', muscle_group: 'Back', kind: 'compound', load_type: 'weighted' }],
+    ['sq', { id: 'sq', name: 'Back Squat', muscle_group: 'Quads', kind: 'compound', load_type: 'weighted' }],
+    ['fly', { id: 'fly', name: 'Cable Fly', muscle_group: 'Chest', kind: 'isolation', load_type: 'weighted' }],
+    ['tri', { id: 'tri', name: 'Triceps Pushdown', muscle_group: 'Triceps', kind: 'isolation', load_type: 'weighted' }],
+  ]);
+  assert.deepEqual(L.indirectShares(lib.get('bench')), { Triceps: 1, Shoulders: 1 });
+  assert.deepEqual(L.indirectShares(lib.get('pd')), { Biceps: 1 });
+  assert.deepEqual(L.indirectShares(lib.get('sq')), { Glutes: 1 });
+  assert.deepEqual(L.indirectShares(lib.get('fly')), {}, 'isolation → no indirect');
+  const plan = [{ slots: [{ muscle: 'Chest', exerciseId: 'bench', sets: 4 }, { muscle: 'Triceps', exerciseId: 'tri', sets: 3 }, { muscle: 'Back', exerciseId: 'pd', sets: 4 }] },
+                { slots: [{ muscle: 'Quads', exerciseId: 'sq', sets: 3 }, { muscle: 'Chest', exerciseId: 'fly', sets: 2 }] }];
+  const half = L.setBreakdown(plan, lib), none = L.setBreakdown(plan, lib, 0), full = L.setBreakdown(plan, lib, 1);
+  assert.equal(half.Triceps.direct, 3); assert.equal(half.Triceps.indirect, 2); assert.equal(full.Triceps.indirect, 4); assert.equal(none.Triceps.indirect, 0);
+  assert.equal(half.Biceps.indirect, 2); assert.equal(half.Glutes.indirect, 1.5); assert.equal(half.Chest.direct, 6);
+  assert.deepEqual(Object.fromEntries(L.MUSCLES.map(m => [m, half[m].direct])), L.placedSets(plan), 'direct = the plan’s own counts (unchanged)');
+  const tot = o => L.MUSCLES.reduce((a, m) => a + o[m].direct, 0);
+  assert.equal(tot(half), 16, 'each set counted once as direct');
+  // T10: goals — strength load specificity, athletic far from failure, transitions
+  const S = L.GOALS.strength, A = L.GOALS.athletic;
+  assert.ok(S.reps.compound[1] <= 6 && L.repRange({ kind: 'compound' }, 'strength').rep_max <= 6, 'strength: main lifts heavy (≤6 reps)');
+  for (let w = 1; w <= 4; w++) { assert.ok(L.effortRir(w, 5, 'strength', 'compound', 'standard').rir >= 1, 'strength never to failure');
+    assert.ok(L.effortRir(w, 5, 'athletic', 'compound', 'standard').rir >= 3, 'athletic main lifts far from failure');
+    assert.ok(L.effortRir(w, 5, 'athletic', 'isolation', 'standard').rir >= 2); }
+  assert.ok(A.experimental && /experimental/i.test(A.name), 'athletic marked experimental');
+  assert.ok(L.GOALS.hypertrophy.volume > S.volume && S.volume > A.volume, 'volume: hypertrophy > strength > athletic');
+  const bench = { name: 'Barbell Bench Press', muscle_group: 'Chest', kind: 'compound', load_type: 'weighted', equipment: 'Barbell', ...L.repRange({ kind: 'compound' }, 'strength') };
+  const t1 = L.suggestSet({ prev: { weight: 185, reps: 10, rir: 2 }, ex: bench, unit: 'lb', targetRir: 2, firstWeek: true });
+  assert.ok(t1.reps <= 6 && t1.weight - 185 <= 5, `hyp→strength week 1 stays in range, ≤ +5 lb: ${JSON.stringify(t1)}`);
+  assert.match(t1.note, /new 3–6 rep range/); assert.match(t1.note, /match your last effort/);
+  const t2 = L.suggestSet({ prev: { weight: 185, reps: 10, rir: 2 }, ex: bench, unit: 'lb', targetRir: 2 });
+  assert.ok(t2.reps >= 10, 'mid-meso the v1.11.1 rule still holds (reps not cut at a heavier weight)');
+  const hyp = { ...bench, rep_min: 8, rep_max: 12 };
+  const t3 = L.suggestSet({ prev: { weight: 225, reps: 4, rir: 2 }, ex: hyp, unit: 'lb', targetRir: 2, firstWeek: true });
+  assert.ok(t3.weight < 225 && t3.reps >= 8 && t3.reps <= 12, `strength→hyp re-sets lighter into range: ${JSON.stringify(t3)}`);
+  console.log('V1.17.0 AUDIT TESTS PASSED (fatigue check, indirect sets, goal checks)');
+}
