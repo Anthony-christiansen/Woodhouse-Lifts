@@ -35,6 +35,13 @@ No change to anything you see or do. This only moves code between files, so it's
 - Tests: `workout200.py` (19 checks); every existing workout, offline, rating and accessibility suite passes unchanged.
 
 **Rollback:** app → `release/v1.19.0`.
+## Ops — 2026-11-24 · Backups include app feedback
+
+- `backup.take_snapshot()` (so the weekly Drive backups too) now includes `app_feedback`; the restore scripts (`restore_user_from_snapshot.sql`, `load_backup_file.mjs`) know the table.
+- The restore drill now also proves the early-light-week columns (`superseded_at`, `revision`, `light_week_undo`) and app feedback come back exactly.
+- Migration `20261124060000_snapshot_app_feedback` (function only, no data change). **Applied to production 2026-11-24 05:55 UTC with the owner's approval**; the first snapshot after it has 12 tables. App unchanged.
+
+**Rollback:** re-run the previous definition from `20261121230000_exercise_feedback.sql` (snapshots then skip `app_feedback`).
 
 ---
 

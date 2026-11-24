@@ -17,7 +17,7 @@ declare
   uid uuid := '__USER__'; ts timestamptz := '__TAKEN_AT__'; mode text := '__MODE__';
   t text; owner text; pk text; cols text; upd text; n int; total int := 0;
   tables text[] := array['profiles','exercises','templates','mesocycles','workout_days','workout_exercises','sets',
-                         'muscle_feedback','exercise_feedback','exercise_prefs','cardio_sessions'];
+                         'muscle_feedback','exercise_feedback','exercise_prefs','cardio_sessions','app_feedback'];
 begin
   if mode not in ('missing', 'overwrite') then raise exception 'mode must be missing or overwrite'; end if;
   if not exists (select 1 from backup.snapshot where taken_at = ts) then raise exception 'no snapshot at %', ts; end if;

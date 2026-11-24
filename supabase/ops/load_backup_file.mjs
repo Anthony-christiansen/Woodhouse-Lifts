@@ -11,7 +11,7 @@ import { readFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 
 export const ORDER = ['profiles', 'exercises', 'templates', 'mesocycles', 'workout_days', 'workout_exercises', 'sets',
-  'muscle_feedback', 'exercise_feedback', 'exercise_prefs', 'cardio_sessions'];
+  'muscle_feedback', 'exercise_feedback', 'exercise_prefs', 'cardio_sessions', 'app_feedback'];
 const q = s => `'${String(s).replaceAll("'", "''")}'`;
 
 export function readBackup(path) {
