@@ -1,11 +1,11 @@
 // Woodhouse Lifts — home (dashboard), explore, post-workout summary (v1.19.0, audit U5), feedback (v1.15.0), Home drill-downs (#/stats/<kind>/<arg>) (moved out of app.js in 1.20.3, code unchanged).
-import * as L from '../logic.js?v=56';
-import { ic } from '../icons.js?v=56';
-import { esc, fmt, dayName, weekStart, isoDay } from '../format.js?v=56';
-import { toast, openSheet, closeSheet } from '../ui.js?v=56';
-import { profile } from '../state.js?v=56';
-import { sb } from '../net.js?v=56';
-import { $, $$, APP_VERSION, STATUS_ORDER, W, activeMeso, app, cardioItems, cardioSince, check, effortText, fatigueFor, fatigueKey, fetchAll, go, lastScreen, lateCard, lateSets, liftInsights, mesoDays, openDays, pendingHere, setHeader, slipFor, startLightWeek, statusPill, wireLate, workoutCardioSince } from '../app.js?v=56';
+import * as L from '../logic.js?v=57';
+import { ic } from '../icons.js?v=57';
+import { esc, fmt, dayName, weekStart, isoDay } from '../format.js?v=57';
+import { toast, openSheet, closeSheet } from '../ui.js?v=57';
+import { profile } from '../state.js?v=57';
+import { sb } from '../net.js?v=57';
+import { $, $$, APP_VERSION, STATUS_ORDER, W, activeMeso, app, cardioItems, cardioSince, check, effortText, fatigueFor, fatigueKey, fetchAll, go, lastScreen, lateCard, lateSets, liftInsights, mesoDays, openDays, pendingHere, setHeader, slipFor, startLightWeek, statusPill, wireLate, workoutCardioSince } from '../app.js?v=57';
 
 // ---------- home (dashboard) ----------
 export async function renderHome() {
@@ -104,7 +104,11 @@ export async function renderHome() {
       return chart('Working sets per week', setsPerWeek, maxSets, 'var(--accent)', 'sets', 'Your weekly set totals show up here once you log a workout.')
         + chart('Cardio minutes per week', cardioPerWeek, maxC, 'var(--info)', 'cardio', 'No cardio in the last 8 weeks. Log it inside a workout or with “Log cardio” below.'); })()}
     ${meso && lifts.length ? `<div class="card"><div class="row"><b class="grow">This meso’s lifts</b><span class="muted tiny">tap a lift for its chart</span></div>
-        ${lifts.filter(x => ['regressing', 'stalled'].includes(x.status.status)).length ? `<div class="muted small my4-2">${lifts.filter(x => ['regressing', 'stalled'].includes(x.status.status)).length} need attention — you’ll see what to do on that lift in your next workout.</div>` : ''}
+        ${(() => { const n = k => lifts.filter(x => k.includes(x.status.status)).length, prs = n(['pr']), up = n(['progressing']), held = n(['steady']), watch = n(['regressing', 'stalled']);
+          // v1.20.6: lead with what's going well; the lifts to watch are still counted and listed, with what to do next.
+          const wins = [prs && `${ic('trophy', 'pr')} ${prs} at a new best`, up && `${up} on track`, held && `${held} holding`].filter(Boolean);
+          return (wins.length ? `<div class="lift-tally small">${wins.join(' · ')}</div>` : '')
+            + (watch ? `<div class="muted small my4-2">${watch} ${watch === 1 ? 'is' : 'are'} ready for a little attention — your next workout shows exactly what to do.</div>` : ''); })()}
         ${lifts.map((x, i) => `<button class="mover lift-row ${i >= 8 ? 'more' : ''}" data-go="#/progress/${x.id}" ${i >= 8 ? 'hidden' : ''}><span>${esc(x.name)}</span>${statusPill(x.status)}<span class="chev">›</span></button>`).join('')}
         ${lifts.length > 8 ? `<button class="ghost sm" id="moreLifts">Show all ${lifts.length}</button>` : ''}</div>` : ''}
     ${mesoPrs.length ? `<div class="card"><b>PRs this meso ${ic('trophy', 'pr')}</b>${mesoPrs.slice(0, 5).map(p => `<button class="mover lift-row" data-go="#/progress/${p.id}"><span>${esc(p.name)}${p.n > 1 ? ` <span class="muted tiny">×${p.n}</span>` : ''}</span><span class="pill on">+${p.pct.toFixed(1)}%</span><span class="chev">›</span></button>`).join('')}</div>` : ''}

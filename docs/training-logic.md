@@ -714,6 +714,8 @@ Rules, checked in this order:
 | On track | Latest week beat last week (any added rep or weight) | Keep going. |
 | Held / New | Same as last week, or first week of the meso | Aim for +1 rep. Week 1 shows the comparison to the last meso. |
 
+**What the app shows (v1.20.6).** The statuses above are unchanged; the words on screen say what to do next, and Home lists wins first: PR → **PR**, On track → **On track**, Held → **Holding**, Dipped → **Off week**, Stalled → **Ready for +1 rep**, Down → **Recover first** (amber, not red). The percentage stays wherever there is one, so nothing is hidden — the app reports dips honestly but frames them as the normal ups and downs of training, with the next step.
+
 **Meso B check (Nov 21, 2026).** Under the old rule 6 lifts read Stalled (bent-over row, overhead triceps extension, lying curl, preacher curl, Pallof press, pec dec) — all of them were +1 rep/week exactly on plan. Under the new rule they're On track, and each is ahead of Meso A's same week (e.g. preacher curl 35×10 vs 35×9, Pallof 25×24 vs 25×23). Leg extension (200×8 → 205×5) and machine lateral raise (105×7 → 105×5) show **Dipped** for week 4.
 
 **Chart page** has two views: **Performance** (default; what you lifted, rises through each meso and resets a little at each easier week 1) and **Strength estimate** (with RIR credit; flat when you hit the plan, steps up meso to meso).

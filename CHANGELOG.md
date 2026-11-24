@@ -12,6 +12,30 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.20.6 — 2026-11-24 · Home leads with your wins; lifts to watch say what to do next
+
+The owner: "we want to report stuff but we want to keep people excited to see the progress."
+
+**For people using the app**
+- **This meso's lifts** now lists new bests and on-track lifts first, then the ones to keep an eye on. Every lift is still listed.
+- A line at the top counts the good news: "🏆 7 at a new best · 9 on track · 3 holding".
+- Lifts to watch use words that say what to do next. Each keeps its honest percentage where it has one.
+
+| Was | Now |
+|---|---|
+| Dipped −6.0% | **Off week −6.0%** |
+| Flat 2 wks | **Ready for +1 rep** |
+| Down −3.8% (red) | **Recover first −3.8%** (amber) |
+| Held | **Holding** |
+
+- "2 need attention" became "2 are ready for a little attention — your next workout shows exactly what to do."
+- The same labels appear on each lift's page and in the workout's trend sheet.
+
+**Underneath**
+- Display only: `PILL_LABEL`, `STATUS_ORDER` (Home sort) and pill colours. The engine's statuses, thresholds and advice are unchanged.
+- Tests: `insights.py` updated. The render snapshot was re-baselined for exactly two screens (Home, the lift page), and the diff was reviewed: wording and order only.
+- Rollback: `release/v1.20.5`.
+
 ## 1.20.5 — 2026-11-24 · The workout summary says "On plan" too, and counts your sets right
 
 **For people using the app**

@@ -286,7 +286,7 @@ table.warm td, table.warm th { padding: 6px 6px 6px 0; text-align: left; }
 /* lift status */
 .pill.st-pr, .pill.st-progressing { background: var(--good-fill); color: var(--accent-text); }
 .pill.st-stalled { background: var(--warn-bg); color: var(--warn); }
-.pill.st-regressing { background: var(--bad-bg); color: var(--bad); }
+.pill.st-regressing { background: var(--warn-bg); color: var(--warn); } /* v1.20.6: amber, not red — it's a cue to recover, not a failure */
 .pill.st-steady, .pill.st-new, .pill.st-dip { background: var(--surface-3); color: var(--muted); }
 button.lift-row { width: 100%; background: none; border: 0; border-top: 1px solid var(--border); border-radius: 0; color: inherit; text-align: left;
   display: flex; align-items: center; gap: 8px; padding: 10px 0; min-height: 44px; font: inherit; }
@@ -503,6 +503,7 @@ input[type=checkbox], input[type=radio] { -webkit-appearance: auto; appearance: 
 .sum-row { display: flex; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--border); } .sum-row:first-of-type { border-top: 0; }
 .sum-best { text-align: right; }
 .trend { display: inline-block; width: 1.1em; text-align: center; } .trend.up { color: var(--accent); } .trend.down { color: var(--warn); } .trend.flat, .trend.na { color: var(--muted); } .trend.plan { color: var(--accent-text); } /* v1.20.5 */
+.lift-tally { margin: 4px 0 6px; font-weight: 600; color: var(--accent-text); } .lift-tally .icon { vertical-align: -3px; } /* v1.20.6 */
 .sum-note { margin-top: 2px; font-weight: 600; } .sum-note.up, .sum-note.plan { color: var(--accent-text); } .sum-note.down { color: var(--muted); font-weight: 400; } /* v1.20.5: "Beat the plan" / "On plan · +1 rep/set" under a lift on the summary */
 h3 > .trend { display: inline; width: auto; } /* v1.20.4: the exercise-header pill moves to the next line when long, instead of overflowing a 1.1em box */
 .adv > summary { cursor: pointer; padding: 12px 0; min-height: 44px; }
