@@ -492,3 +492,6 @@ input[type=checkbox], input[type=radio] { -webkit-appearance: auto; appearance: 
 .sync-badge.risk { background: var(--warn-bg); color: var(--warn); border-color: var(--warn-border); }
 .chip .ind { opacity: .75; font-weight: 400; }
 .chk { display: flex; gap: 8px; align-items: flex-start; } .chk input { margin-top: 3px; flex: none; }
+.lw-sum { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0; }
+.lw-sum > div { background: var(--surface-2); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; }
+.lw-list { padding-left: 18px; margin: 6px 0 10px; } .lw-list li { margin: 4px 0; }

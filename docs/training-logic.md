@@ -313,6 +313,16 @@ Light weeks are unchanged in every style. Why: closer to failure can help growth
 - Taking it turns the first week with nothing logged into the light week: half the sets rounded up, at least 1, and easy effort. The meso then ends after it. Planned weeks after it that haven't been started are removed, and nothing you've logged is touched. It's one database transaction (`start_light_week`).
 - **Heuristic label:** these thresholds are a rule of thumb from your own ratings, not a diagnosis or a validated fatigue test. The evidence that a deload improves growth is limited (2024 deload RCT); the point is that you choose.
 
+**v1.17.1 — taking it early can't lose anything (audit D1–D3).**
+- **Preview first:** the confirm screen comes from the server (`light_week_preview`). It shows the meso length before and after, how many workouts become light, how many later ones are hidden, and the done/skipped/unfinished count for earlier weeks. If earlier workouts aren't finished, it says this ends the meso early rather than adding a recovery week after full training. It never blocks you.
+- **Nothing is deleted:** later planned workouts are *hidden* (`workout_days.superseded_at`), not removed.
+- **Late syncs are safe:** if another phone logs a set on one of them before it syncs, the set lands and is kept, and Home and the meso page say so with **Restore the full meso** or **Keep the light week**.
+- **Undo:** the meso page has **Undo the early light week** until you log in the light week. It puts back the length, the hidden workouts and the light week's original targets exactly.
+- **Stale screens can't act:** the request carries the preview's revision. If the meso changed in between (another device, another tab, a double tap, a retry after a timeout), the server refuses it and nothing changes.
+- **Locking:** the meso and its days are locked while the change is made, so a day finished in another tab at the same moment moves the light week after it.
+- **Testing:** proven with two real PostgreSQL connections in `test/pg.concurrency.mjs`, run in CI.
+- **This phone vs other devices:** this phone can only check its own unsynced changes. The screen says so and asks you to let other devices sync first.
+
 **Indirect sets, as an estimate (audit T9).** Builder step 2 has **Show estimated indirect sets**, off by default. When it's on, each compound lift credits **½ a set** per set to the muscles it clearly also works:
 - presses and dips → triceps and shoulders;
 - overhead press → triceps;

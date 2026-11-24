@@ -1,8 +1,8 @@
 // v1.12.1: pinned to one reviewed release, so the code users get only changes with a commit here (outside audit, finding 4).
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.2/+esm';
-import * as L from './logic.js?v=47';
-import * as LEARN from './learn.js?v=47';
-import * as MD from './md.js?v=47';
+import * as L from './logic.js?v=48';
+import * as LEARN from './learn.js?v=48';
+import * as MD from './md.js?v=48';
 
 // Public by design: access is enforced by row-level security in the database.
 const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -19,7 +19,7 @@ let authReturn = (() => {
   return null;
 })();
 let awaitingNewPassword = authReturn?.ok && authReturn.type === 'recovery'; // stay on 'new password' until it's saved
-export const APP_VERSION = '1.17.0'; // keep in sync with CHANGELOG.md
+export const APP_VERSION = '1.17.1'; // keep in sync with CHANGELOG.md
 const CHANGELOG_URL = 'https://github.com/Anthony-christiansen/Woodhouse-Lifts/blob/main/CHANGELOG.md';
 // v1.11.4: the training rules are a page inside the app (#/logic), built from this repo's docs/training-logic.md.
 // The app never links to anyone's Google Drive.
@@ -629,8 +629,11 @@ async function activeMeso() {
   return m.find(x => x.status === 'active') || m.find(x => x.status === 'planned') || null;
 }
 async function mesoDays(mesoId) {
-  return overlayDays(check(await sb.from('workout_days').select('id, week, day_index, label, started_at, completed_at, skipped_at, mesocycle_id')
-    .eq('mesocycle_id', mesoId).order('week').order('day_index')));
+  // v1.17.1: days an early light week replaced are hidden (kept in the database, never deleted).
+  const q = () => sb.from('workout_days').select('id, week, day_index, label, started_at, completed_at, skipped_at, mesocycle_id, superseded_at').eq('mesocycle_id', mesoId).order('week').order('day_index');
+  let r = await q();
+  if (r.error && /superseded_at/.test(r.error.message)) r = await sb.from('workout_days').select('id, week, day_index, label, started_at, completed_at, skipped_at, mesocycle_id').eq('mesocycle_id', mesoId).order('week').order('day_index');
+  return overlayDays(check(r).filter(d => !d.superseded_at));
 }
 const openDays = days => days.filter(d => !d.completed_at && !d.skipped_at);
 async function cardioSince(fromIso) {
@@ -676,16 +679,72 @@ async function fatigueFor(meso, week) {
 const fatigueKey = (meso, week) => `wl_fatigue_dismiss:${meso.id}:${week}`;
 // The first week from which nothing is started, finished, skipped or logged — that week becomes the light week.
 const lightWeekFrom = days => Math.max(0, ...days.filter(d => d.started_at || d.completed_at || d.skipped_at).map(d => d.week)) + 1;
-async function startLightWeek(meso, days) {
-  const t = lightWeekFrom(days);
-  if (t >= meso.weeks) return toast('The light week is already next');
-  if (t < 3) return toast('A light week can start from week 3');
-  const pend = () => Object.keys(qLoad()).length + oLoad().length;
-  if (pend()) { await syncAll(); if (pend()) return toast('Some changes are still waiting to sync — try again once they have', true); }
-  if (!confirm(`Take the light week now?\n\nWeek ${t} becomes a light week (half the sets, easy effort) and the meso ends after it.\nWeeks ${t + 1}–${meso.weeks} (not started) are removed.\nEverything you've logged stays.`)) return false;
-  const r = await sb.rpc('start_light_week', { p_meso: meso.id });
-  if (r.error) { toast(/function|does not exist|schema cache/i.test(r.error.message) ? 'This needs a small database update first — ask the app owner' : isNetErr(r.error) ? 'No signal — try again when you’re back online' : r.error.message, true); return false; }
-  toast(`Week ${r.data} is now your light week`); return true;
+const rpcMissing = e => /function|does not exist|schema cache|Could not find/i.test(e?.message || '');
+const pendingHere = () => Object.keys(qLoad()).length + oLoad().length;
+/**
+ * v1.17.1 (audit D1–D3, U1): the early light week is previewed by the server, confirmed on a screen that says exactly
+ * what changes, and sent with the preview's revision — if anything changed in between (another device or tab, a
+ * retry), the server refuses and nothing changes. Later weeks are hidden, not deleted, and it can be undone.
+ * Resolves true when the light week was set.
+ */
+async function startLightWeek(meso) {
+  if (pendingHere()) { await syncAll(); if (pendingHere()) { toast('Some changes on this phone are still waiting to sync — try again once they have', true); return false; } }
+  const pv = await sb.rpc('light_week_preview', { p_meso: meso.id });
+  if (pv.error) { toast(rpcMissing(pv.error) ? 'This needs a small database update first — ask the app owner' : isNetErr(pv.error) ? 'No signal — try again when you’re back online' : pv.error.message, true); return false; }
+  const p = pv.data;
+  if (!p.ok) { toast(p.reason === 'before week 3' ? 'A light week can start from week 3' : p.reason === 'light week already next' ? 'The light week is already next' : 'This meso isn’t running'); return false; }
+  const behind = p.not_done + p.started_unfinished;
+  return new Promise(resolve => {
+    let settled = false; const done = v => { if (!settled) { settled = true; resolve(v); } };
+    openSheet(`<h3>Take the light week now?</h3>
+      <div class="lw-sum"><div><span class="muted tiny">Meso length</span><b>${p.weeks} → ${p.light_week} weeks</b></div><div><span class="muted tiny">Light week</span><b>Week ${p.light_week}</b></div></div>
+      <ul class="small lw-list">
+        <li>Week ${p.light_week}: <b>${p.light_sessions} workout${p.light_sessions === 1 ? '' : 's'}</b> become light — half the sets, easy effort. The meso ends after it.</li>
+        <li>Weeks ${p.light_week + 1}–${p.weeks}: <b>${p.removed_sessions} planned workout${p.removed_sessions === 1 ? '' : 's'}</b> are hidden (not deleted — <b>Undo</b> on the meso page brings them back until you log in the light week).</li>
+        <li>Weeks 1–${p.light_week - 1}: ${p.done} done${p.skipped ? `, ${p.skipped} skipped` : ''}${p.started_unfinished ? `, ${p.started_unfinished} started but not finished` : ''}${p.not_done ? `, <b>${p.not_done} not done</b>` : ''}. Nothing you’ve logged changes.</li>
+      </ul>
+      ${behind ? `<div class="card warn small">${behind} earlier workout${behind > 1 ? 's aren’t' : ' isn’t'} finished, so this ends the meso early rather than adding a recovery week after full training. That’s fine if it’s what you want.</div>` : ''}
+      <div class="card small"><b>Other phones or tabs:</b> if you’ve logged anything there that hasn’t synced, open the app there and let it sync first. This phone can only check its own unsynced changes${pendingHere() ? '' : ' (none waiting here)'}. If something syncs late, it’s kept and the app offers to restore the full meso.</div>
+      <button class="primary block" id="lwGo">Start the light week</button><button class="block mt6" id="lwNo">Cancel</button>`,
+      panel => {
+        panel.querySelector('#lwNo').onclick = () => { closeSheet(); done(false); };
+        panel.querySelector('#lwGo').onclick = async e => {
+          e.target.disabled = true;
+          const r = await sb.rpc('start_light_week', { p_meso: meso.id, p_revision: p.revision });
+          if (!r.error) { closeSheet(); toast(`Week ${r.data.week} is now your light week`); return done(true); }
+          if (r.error.code === '40001' || /changed since/.test(r.error.message)) { closeSheet(); toast('This meso changed on another device or tab — nothing was changed. Have another look.', true); return done(true); }
+          if (isNetErr(r.error)) {   // the request may have gone through before the signal dropped
+            const again = await sb.rpc('light_week_preview', { p_meso: meso.id });
+            if (!again.error && again.data.revision > p.revision) { closeSheet(); toast('It went through — the light week is set'); return done(true); }
+            e.target.disabled = false; return toast('No signal — nothing changed yet. Try again when you’re back online.', true);
+          }
+          e.target.disabled = false; toast(r.error.message, true);
+        };
+      });
+    const obs = new MutationObserver(() => { if (sheet.hidden) { obs.disconnect(); done(false); } }); obs.observe(sheet, { attributes: true, attributeFilter: ['hidden'] });
+  });
+}
+async function undoLightWeek(meso) {
+  if (!confirm(`Undo the early light week?\n\nThe meso goes back to ${meso.light_week_undo.weeks} weeks, the hidden workouts come back, and this week's targets return to what they were.`)) return false;
+  const r = await sb.rpc('undo_light_week', { p_meso: meso.id, p_revision: meso.revision });
+  if (r.error) { toast(r.error.code === '40001' ? 'This meso changed on another device or tab — have another look' : isNetErr(r.error) ? 'No signal — try again when you’re back online' : r.error.message, true); return r.error.code === '40001'; }
+  toast(`Back to ${r.data.weeks} weeks`); return true;
+}
+// Sets that landed on hidden days (logged on another device before it synced) — kept; you choose what to do.
+async function lateSets(meso) {
+  if (meso.light_week_undo == null) return 0;
+  const r = await sb.from('workout_days').select('id, workout_exercises(sets(id))').eq('mesocycle_id', meso.id).not('superseded_at', 'is', null);
+  if (r.error) return 0;
+  return r.data.reduce((a, d) => a + d.workout_exercises.reduce((b, w) => b + w.sets.length, 0), 0);
+}
+const lateKey = meso => `wl_late_ok:${meso.id}:${meso.revision}`;
+const lateCard = (meso, n) => n && !(() => { try { return localStorage.getItem(lateKey(meso)); } catch { return null; } })()
+  ? `<div class="card warn" id="lateCard"><b>${n} set${n > 1 ? 's were' : ' was'} logged on workouts the light week replaced</b> — probably from another phone that synced late. ${n > 1 ? 'They’re' : 'It’s'} kept.
+     <div class="row mt6">${meso.light_week_undo ? '<button class="sm primary" id="lateRestore">Restore the full meso</button>' : ''}<button class="sm" id="lateKeep">Keep the light week</button></div></div>` : '';
+function wireLate(meso, rerender) {
+  const k = $('#lateKeep'), r = $('#lateRestore');
+  if (k) k.onclick = () => { try { localStorage.setItem(lateKey(meso), '1'); } catch {} $('#lateCard').remove(); };
+  if (r) r.onclick = async () => { if (await undoLightWeek(meso)) rerender(); };
 }
 // Plain-language effort target (v1.11): "RIR" (reps in reserve) only appears in the ⓘ and Learn pages.
 const effortText = r => r == null ? '' : r <= 0 ? 'last set to failure' : r === 1 ? 'stop 1 rep short of failure' : `stop ${r} reps short of failure`;
@@ -709,13 +768,14 @@ async function renderHome() {
   const mesoLifts = meso ? check(await sb.from('workout_exercises').select('exercise_id, exercises!inner(name, load_type), workout_days!inner(mesocycle_id)')
     .eq('workout_days.mesocycle_id', meso.id)) : [];
   const liftIds = [...new Set(mesoLifts.filter(x => x.exercises.load_type !== 'cardio').map(x => x.exercise_id))];
-  const [cSess, cSets, stats, warnings, mesoCount, insights, fatigue] = await Promise.all([
+  const [cSess, cSets, stats, warnings, mesoCount, insights, fatigue, late] = await Promise.all([
     cardioSince(isoDay(eightAgo)), workoutCardioSince(eightAgo.toISOString()),
     sb.rpc('dashboard_stats', { p_tz: tz }).then(check),
     meso ? slipFor(meso) : Promise.resolve([]),
     sb.from('mesocycles').select('id', { count: 'exact', head: true }).then(x => x.count || 0),
     liftInsights(liftIds, { meso: meso?.id || null }),
     fatigueFor(meso, curWeek),
+    meso ? lateSets(meso) : 0,
   ]);
   const showFatigue = fatigue.suggest && !live && !(() => { try { return localStorage.getItem(fatigueKey(meso, curWeek)); } catch { return null; } })();
   const lifts = Object.values(insights).sort((a, b) => STATUS_ORDER[a.status.status] - STATUS_ORDER[b.status.status] || a.name.localeCompare(b.name));
@@ -753,6 +813,7 @@ async function renderHome() {
       : `<div class="card"><h3>${meso ? `Mesocycle finished ${ic('party', 'accent')}` : 'No active mesocycle'}</h3>
         <p class="muted">Start from a base template or one of your saved ones.</p>
         <div class="grid2"><button class="primary" data-go="#/new">+ New mesocycle</button><button data-go="#/templates">Templates</button></div></div>`}
+    ${meso ? lateCard(meso, late) : ''}
     ${showFatigue ? `<div class="card warn" id="fatigueCard"><h3>${ic('alert')} Signs of fatigue — light week now?</h3>
         <div class="small">${esc(fatigue.why)}</div>
         <div class="muted tiny mt6">A light week (half the sets, easy effort) usually lets recovery catch up. This is a rule of thumb from your ratings, not a diagnosis — your call.</div>
@@ -799,8 +860,9 @@ async function renderHome() {
   $$('[data-go]').forEach(b => { b.onclick = e => { e.stopPropagation(); go(b.dataset.go); };
     if (b.tagName === 'g' || b.classList.contains('drill')) b.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(b.dataset.go); } }; });
   // Pick any open day in the current week (e.g. legs today instead of back) — doc §5.3.
+  if (meso) wireLate(meso, renderHome);
   if ($('#fatigueYes')) {
-    $('#fatigueYes').onclick = async e => { e.target.disabled = true; if (await startLightWeek(meso, days)) renderHome(); else e.target.disabled = false; };
+    $('#fatigueYes').onclick = async e => { e.target.disabled = true; if (await startLightWeek(meso)) renderHome(); else e.target.disabled = false; };
     $('#fatigueNo').onclick = () => { try { localStorage.setItem(fatigueKey(meso, curWeek), '1'); } catch {} $('#fatigueCard').remove(); toast('OK — it’ll ask again next week if the signs continue'); };
   }
   $('#pickDay') && ($('#pickDay').onclick = e => { e.stopPropagation();
@@ -1132,12 +1194,13 @@ async function renderBuilder() {
 async function renderMeso(id) {
   const meso = check(await sb.from('mesocycles').select('*').eq('id', id).single());
   setHeader(meso.name, '#/mesos', 'mesos');
-  const [days, warnings] = await Promise.all([mesoDays(id), slipFor(meso)]);
+  const [days, warnings, late] = await Promise.all([mesoDays(id), slipFor(meso), lateSets(meso)]);
   const next = openDays(days)[0];
   const weeks = [...new Set(days.map(d => d.week))];
   app.innerHTML = `
     <div class="card"><div class="row"><div class="grow muted small">${meso.source === 'rp_import' ? 'Imported from RP · ' : ''}${L.GOALS[L.goalOf(meso.goal)].name} · ${esc(L.TEMPLATES[meso.focus]?.name || '')} · ${meso.weeks} weeks · ${meso.days_per_week} days/week</div>
       <span class="pill ${meso.status === 'active' ? 'on' : ''}">${esc(meso.status)}</span></div></div>
+    ${lateCard(meso, late)}
     ${warnings.length ? `<div class="card warn"><b>Things to check</b><div class="muted tiny">Everything worth a look on this meso, in one place.</div>${warnList(warnings)}</div>` : ''}
     <div class="weeks-scroll"><div class="weeks" style="--days:${meso.days_per_week}">
       ${weeks.map(w => { const r = L.targetRir(w, meso.weeks, meso.goal, 'compound'); return `<div class="week">
@@ -1148,6 +1211,7 @@ async function renderMeso(id) {
     ${next ? '<button class="primary block" id="go">Go to next workout</button>' : `<p class="muted center">All workouts done ${ic('party', 'accent')}</p>`}
     ${(() => { const t = lightWeekFrom(days); return ['active', 'planned'].includes(meso.status) && meso.weeks >= 4 && t >= 3 && t < meso.weeks
       ? `<button class="ghost block mt6" id="lightNow">Take the light week early (week ${t})</button>` : ''; })()}
+    ${meso.light_week_undo && !days.some(d => d.week === meso.weeks && (d.started_at || d.completed_at)) ? `<button class="ghost block mt6" id="lightUndo">Undo the early light week (back to ${meso.light_week_undo.weeks} weeks)</button>` : ''}
     <div class="spacer"></div>
     <div class="grid2"><button data-go="#/volume/${id}">${ic('bars')} Volume</button><button data-go="#/history">${ic('history')} History</button>
       <button id="again">${ic('refresh')} Run it again</button><button id="tpl">${ic('star')} Save as template</button></div>
@@ -1157,7 +1221,9 @@ async function renderMeso(id) {
   $$('[data-day]').forEach(b => b.onclick = () => go('#/workout/' + b.dataset.day));
   $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
   if (next) $('#go').onclick = () => go('#/workout/' + next.id);
-  if ($('#lightNow')) $('#lightNow').onclick = async e => { e.target.disabled = true; if (await startLightWeek(meso, days)) renderMeso(id); else e.target.disabled = false; };
+  if ($('#lightNow')) $('#lightNow').onclick = async e => { e.target.disabled = true; if (await startLightWeek(meso)) renderMeso(id); else e.target.disabled = false; };
+  if ($('#lightUndo')) $('#lightUndo').onclick = async e => { e.target.disabled = true; if (await undoLightWeek(meso)) renderMeso(id); else e.target.disabled = false; };
+  wireLate(meso, () => renderMeso(id));
   const planFromMeso = async () => {
     const d1 = days.filter(d => d.week === 1);
     const wes = check(await sb.from('workout_exercises').select('workout_day_id, exercise_id, target_sets, position, exercises(muscle_group, name)')
@@ -1290,6 +1356,10 @@ async function renderWorkout(dayId, mode) {
   }
   const day = overlayDays([check(await sb.from('workout_days').select('*, mesocycles(*)').eq('id', dayId).single())])[0];
   const meso = day.mesocycles;
+  if (day.superseded_at && mode !== 'view') {   // v1.17.1: replaced by an early light week
+    toast(`Week ${day.week} was replaced by the light week — showing it read-only. Anything already logged here is kept.`, false, 5000);
+    return renderWorkout(dayId, 'view');
+  }
   setHeader(`Wk ${day.week} · ${dayName(day)}`, '#/meso/' + meso.id, 'workout');
   const all = await mesoDays(meso.id);
 

@@ -31,6 +31,9 @@ jobs:
         run: node test/restore.drill.mjs
       - name: Privacy check (no personal data in this public repo)
         run: node test/privacy.check.mjs
+      - name: Real PostgreSQL concurrency tests (early light week)
+        # PGlite is one connection; this races two connections on a throwaway PostgreSQL cluster (audit D3).
+        run: REQUIRE_PG=1 node test/pg.concurrency.mjs
       - name: Browser tests
         # v1.15.1 (audit S3): a test fails the build by its exit code, not by what its last line says.
         run: |
