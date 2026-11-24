@@ -551,6 +551,19 @@ The rules are checked in order, and the first one that matches wins:
 
 **v1.16.0 — volume needs repeated evidence (audit T3).** A single flat session no longer adds sets: performance must be flat or down for **two comparable sessions in a row** (same day of the meso, light weeks excluded), with good recovery and workload. Sets are **held** while performance is improving, when there's no earlier session to compare, and for one week after an increase (so the change can show). Zero soreness or a low pump never adds sets on their own. These thresholds (2 and 3 sessions) are **product heuristics**, chosen to damp noise in a single session's numbers and in self-rated RIR; no trial has tested them. Simulated 6-week run (flat, flat, flat, up, flat, flat) → +1 only at weeks 2 and 6, no oscillation.
 
+**v1.18.0 — what "stalled twice in a row" means (audit T1, T3).**
+- **Unit of progression: the muscle**, across *all* its sessions in the order you did them. Before 1.18 it only counted the same day of the week. So "Chest flat on Monday, flat on Thursday" is two in a row, and an improvement on *any* day resets the count. Light weeks are skipped.
+- **Each session's performance compares like with like.** It's the same exercise as last time, and the best sets must be within **5 reps** of each other. Otherwise it's "no comparison": a new or swapped lift, a jump from 15-rep to 5-rep work, or a bodyweight lift with added load and no known bodyweight.
+- **Mixed signals aren't a stall.** If one lift went up and another down, the muscle gets no rating. A session with no comparison ends the run, so it never counts as flat.
+- The ±1% band for "flat" stays. Estimated strength (Epley e1RM from reps + RIR) is a noisy estimate, which is why nothing changes on a single session.
+- **These thresholds (2 / 3 sessions, 5 reps, ±1%) are product heuristics, not validated physiology.** They're checked mechanically by a 10-profile × 8-week simulation in the tests (improving novice, plateau, high fatigue, joint issue, missed sessions, mixed lifts, maxed workload, unrated pump, slow recovery). It confirms there's no add without a repeated stall and good recovery, no add for an improving lifter, at most an add every other week, and none for Maintain. It doesn't show that the rules are optimal.
+
+**v1.18.0 — fatigue vs a sore spot (audit T2).** The early-light-week check (§2.7) now sorts signals:
+- **joint pain** belongs to that exercise (the workout already flags it with a swap option) and never counts as fatigue;
+- **one very sore muscle** is handled by that muscle's own set reduction (rule 2);
+- only **widespread** signs suggest a light week: very sore, or lifting less with slow recovery, across 2+ muscles (or half of 3+ rated), two weeks running.
+When joint pain is present the card says so separately. With pain rated "a lot" it adds that sharp or lasting pain is worth getting checked, and it makes no diagnosis.
+
 **v1.9 — volume follows the muscle's priority, with a weekly limit and a reason every time.**
 - **Emphasize:** the rules above (+1 after a repeated stall, +2 only after 3+). Mesos with no stored priorities (imported from RP) use these rules.
 - **Grow:** when recovery was good, sets are **held if performance improved** ("no extra volume is needed yet"); **+1** only after performance stalled twice in a row. Never +2. **v1.11.1 (audit):** with **no performance comparison yet** (first session of a lift, no history) sets are **held** — missing data is not a plateau.

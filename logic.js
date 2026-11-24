@@ -758,8 +758,40 @@ export function performanceTrend(cur, prev) {
 export function combineTrends(trends) {
   const t = trends.filter(x => x != null);
   if (!t.length) return null;
+  // v1.18.0 (audit T1/T3): one lift up and another down is contradictory evidence, not a plateau — no rating.
+  if (t.includes(1) && t.includes(-1)) return null;
   const s = t.reduce((a, b) => a + b, 0);
   return s > 0 ? 1 : s < 0 ? -1 : 0;
+}
+
+/**
+ * v1.18.0 (audit T3): estimated strength only compares like with like. Returns null ("insufficient comparison")
+ * unless both sessions have a completed set and their best sets are within 5 reps of each other (estimates drift
+ * apart across very different rep ranges — e.g. a 4-rep top set vs a 15-rep one).
+ * sets: [{ weight, reps, rir }] already with RIR filled in.
+ */
+export const COMPARE_MAX_REP_GAP = 5;
+export function comparableTrend(curSets, prevSets, ex, bodyweight) {
+  const best = ss => { let b = null, v = -Infinity; for (const x of ss || []) { const e = e1rm(x, ex, bodyweight); if (e != null && e > v) { v = e; b = x; } } return b ? { set: b, e: v } : null; };
+  const c = best(curSets), p = best(prevSets);
+  if (!c || !p) return null;
+  if (Math.abs(Number(c.set.reps) - Number(p.set.reps)) > COMPARE_MAX_REP_GAP) return null;
+  if (ex?.load_type === 'bodyweight' && !(bodyweight > 0) && Number(c.set.weight || 0) !== Number(p.set.weight || 0)) return null;
+  return performanceTrend(c.e, p.e);
+}
+
+/**
+ * v1.18.0 (audit T1): the unit of progression is the MUSCLE, across all its sessions in the order you did them —
+ * not "the same day of the week". Counts the run of most recent comparable sessions where performance was flat or
+ * down. A session with no comparison (new or swapped exercise, mixed signals, incomparable reps) ends the run, and
+ * so does any improvement on any day. Light (deload) weeks are skipped.
+ * sessions: [{ at (ISO completed time), performance (1/0/−1/null), deload }]; the current session must be included.
+ */
+export function stallRun(sessions) {
+  const s = [...sessions].filter(x => x.at && !x.deload).sort((a, b) => String(a.at).localeCompare(String(b.at)));
+  let n = 0;
+  for (let i = s.length - 1; i >= 0; i--) { const f = s[i].performance; if (f == null || f > 0) break; n++; }
+  return n;
 }
 
 // Doc §4 — load increments.
@@ -1076,29 +1108,34 @@ export function setAdjustment({ R, L, J, P, F, priority = 'emphasize', stalls = 
 
 /** Deload sets = half of the final accumulation week's (already adjusted) sets, rounded up (doc §1.8). */
 /**
- * v1.17.0 (audit T4): should the light week come early? A heuristic, not a diagnosis — it only ever suggests, and you
- * decide. Looks at your muscle ratings in the hard weeks so far. A muscle "shows fatigue" in a week if it was still
- * sore at the next session (recovery 3), had joint pain rated 2+, or performance dropped while recovery was slow.
- * Suggests a light week when, in the latest rated week, 2+ muscles show it (or at least half of 3+ rated muscles),
- * and at least one also did the week before — so one rough week isn't enough. Never in weeks 1–2, never when the light
- * week is already next.
+ * v1.17.0 (audit T4) / v1.18.0 (audit T2): should the light week come early? A heuristic, not a diagnosis — it only
+ * ever suggests, and you decide. Signals are sorted by what they point to:
+ *   - local joint: joint pain rated 2+ on one muscle's work → that exercise (swap or reduce it), never "fatigue";
+ *   - local muscle: one muscle still very sore (recovery 3) → that muscle's sets come down on their own (§5);
+ *   - widespread: performance down with slow recovery, or very sore, across 2+ muscles (or half of 3+ rated).
+ * A light week is suggested only for widespread signs that also showed the week before. Never in weeks 1–2, never
+ * when the light week is already next.
  * rows: [{ week, muscle, recovery (0–3 | null), joint_pain, performance (−1/0/1 | null) }]
  */
 const andList = a => a.length < 2 ? a.join('') : `${a.slice(0, -1).join(', ')} and ${a.at(-1)}`;
 export function fatigueCheck(rows, { week, weeks }) {
-  if (!(weeks >= 4) || week < 3 || week >= weeks - 1) return { suggest: false, reason: 'not in the window' };
-  const flag = r => r.recovery === 3 || (r.joint_pain ?? 0) >= 2 || (r.performance === -1 && (r.recovery ?? 0) >= 2);
-  const by = w => { const m = new Map(); for (const r of rows.filter(r => r.week === w)) m.set(r.muscle, (m.get(r.muscle) || false) || flag(r)); return m; };
+  const sys = r => r.recovery === 3 || (r.performance === -1 && (r.recovery ?? 0) >= 2);
   const latestW = Math.max(0, ...rows.filter(r => r.week < weeks).map(r => r.week));
-  if (latestW < 2) return { suggest: false, reason: 'not enough weeks rated' };
+  const inW = w => rows.filter(r => r.week === w);
+  const joint = [...new Set(inW(latestW).filter(r => (r.joint_pain ?? 0) >= 2).map(r => r.muscle))];
+  const severeJoint = [...new Set(inW(latestW).filter(r => (r.joint_pain ?? 0) >= 3).map(r => r.muscle))];
+  const by = w => { const m = new Map(); for (const r of inW(w)) m.set(r.muscle, (m.get(r.muscle) || false) || sys(r)); return m; };
   const cur = by(latestW), prev = by(latestW - 1);
   const hit = [...cur].filter(([, f]) => f).map(([m]) => m), prevHit = [...prev].filter(([, f]) => f).map(([m]) => m);
+  const local = { joint, severeJoint, muscle: hit.length === 1 ? hit : [] };
+  if (!(weeks >= 4) || week < 3 || week >= weeks - 1) return { suggest: false, reason: 'not in the window', local };
+  if (latestW < 2) return { suggest: false, reason: 'not enough weeks rated', local };
   const broad = hit.length >= 2 || (cur.size >= 3 && hit.length * 2 >= cur.size);
   const repeat = prevHit.length > 0;
   return broad && repeat
-    ? { suggest: true, muscles: hit, prevMuscles: prevHit, week: latestW,
-        why: `${andList(hit)} showed fatigue in week ${latestW} (still sore, joint pain, or performance down with slow recovery), and ${andList(prevHit)} did in week ${latestW - 1} too.` }
-    : { suggest: false, reason: broad ? 'only one rough week' : 'fatigue signs limited to one muscle', muscles: hit };
+    ? { suggest: true, muscles: hit, prevMuscles: prevHit, week: latestW, local,
+        why: `${andList(hit)} ${hit.length > 1 ? 'were' : 'was'} still very sore or lifting less with slow recovery in week ${latestW}, and ${andList(prevHit)} in week ${latestW - 1} too — a pattern across muscles and weeks.` }
+    : { suggest: false, reason: broad ? 'only one rough week' : 'signs limited to one muscle', muscles: hit, local };
 }
 
 /**
