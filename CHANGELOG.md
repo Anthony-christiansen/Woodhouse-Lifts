@@ -12,6 +12,24 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.20.10 — 2026-11-24 · A change that couldn't be applied is never counted as saved (audit 1.20.8, F01)
+
+**What could go wrong (reproduced on 1.20.8):**
+- Finishing or skipping a workout goes through the phone's queue as an UPDATE.
+- If the workout no longer existed, or wasn't on this account, the server answered "no error, 0 rows changed". The app took that as success, removed it from the queue, and the summary said **"Saved and synced."**
+
+**Fixed:**
+- Each queued update now asks for the changed row back.
+- If no row changed, it's a conflict, not a network hiccup, so it isn't retried forever. It's kept in **Settings → Sync problems** with the reason ("that workout no longer exists or isn't on this account").
+- The summary shows the problem instead of "synced". Online, Finish stays on the workout and says so.
+- A normal finish is unchanged.
+
+**Underneath:**
+- `net.js`: `opQuery` adds `.select('id')` to updates; `missedTarget()`; `flushOps` handles 0 rows.
+- The mock gained a `__MISSING` hook.
+- New `opmissing2010.py` (10 checks), 5 of which fail on 1.20.8.
+- Rollback: `release/v1.20.9`. No database change.
+
 ## 1.20.9 — 2026-11-24 · A removed set stays removed (audit 1.20.4, finding 2)
 
 **What could go wrong (reproduced on 1.20.8):**
