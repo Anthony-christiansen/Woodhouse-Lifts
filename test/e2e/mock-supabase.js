@@ -48,6 +48,7 @@ function builder(table) {
       if (table === 'profiles' && window.__PROFILE) data = data.map(x => ({ ...x, ...window.__PROFILE }));   // test hook
       if (table === 'muscle_feedback' && window.__FB) data = window.__FB;   // test hook
       if (table === 'workout_days' && window.__DONE_THROUGH) data = data.map(d => d.week <= window.__DONE_THROUGH ? { ...d, started_at: '2026-11-10', completed_at: '2026-11-10T18:00:00Z' } : d);   // test hook
+      if (table === 'workout_days' && window.__DAYS_PATCH) data = data.map(window.__DAYS_PATCH);   // test hook: change day states
       if (table === 'workout_days' && window.__SUP_AFTER) data = data.map(d => d.week > window.__SUP_AFTER ? { ...d, superseded_at: '2026-11-24T00:00:00Z' } : d);   // test hook
       if (table === 'workout_days' && notSup) data = window.__LATE_ROWS || [];   // test hook: sets on hidden days
       if (table === 'mesocycles' && window.__MESO_PATCH) data = data.map(m => ({ ...m, ...window.__MESO_PATCH }));   // test hook
@@ -69,7 +70,7 @@ function builder(table) {
         return (ms ? new Promise(r => setTimeout(r, ms)).then(land) : Promise.resolve().then(land)).then(res, rej); }
       if (table === 'workout_days' && single) data = data.find(d => d.id === (location.hash.split('/')[2] || 'd21')) || data[4];
       else if (single || maybe) data = data[0] ?? null;
-      return Promise.resolve({ data, error: null }).then(res, rej);
+      return Promise.resolve({ data, error: null, count: table === 'sets' && window.__LIVE_SETS != null ? window.__LIVE_SETS : undefined })   /* test hook: head count */.then(res, rej);
     };
     if (k === 'single') return () => { single = true; return b; };
     if (k === 'upsert' || k === 'insert' || k === 'update') return (p) => { payload = Array.isArray(p) ? p[0] : p; (window.__rows = window.__rows || []).push([table, k, p]); return b; };
