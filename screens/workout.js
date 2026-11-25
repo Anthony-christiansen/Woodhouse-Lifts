@@ -1,11 +1,11 @@
 // Woodhouse Lifts — recovery follow-ups (doc §3, §5), workout logger, cardio (moved out of app.js in 1.20.3, code unchanged).
-import * as L from '../logic.js?v=62';
-import { ic } from '../icons.js?v=62';
-import { esc, fmtNum, fmt, today, dayName, weekStart, isoDay } from '../format.js?v=62';
-import { toast, openSheet, closeSheet } from '../ui.js?v=62';
-import { profile, setBuilder } from '../state.js?v=62';
-import { sb, deleteSet, durableWrite, flushQueue, isNetErr, lastSent, overlayDays, pendingOps, qLoad, qStore, saveSet, setKey, storageAtRisk, syncBadge } from '../net.js?v=62';
-import { $, $$, OPTIONAL, RATINGS, W, activeMeso, app, bwD, cardioItems, cardioSince, check, effortShort, effortText, fetchAll, go, haptic, liftInsights, loadExercises, loadPrefs, mesoDays, needKeys, openDays, rateKeys, segHtml, setHeader, sheet, slipFor, statusPill, toLb, unit, warnList, workoutCardioSince } from '../app.js?v=62';
+import * as L from '../logic.js?v=63';
+import { ic } from '../icons.js?v=63';
+import { esc, fmtNum, fmt, today, dayName, weekStart, isoDay } from '../format.js?v=63';
+import { toast, openSheet, closeSheet } from '../ui.js?v=63';
+import { profile, setBuilder } from '../state.js?v=63';
+import { sb, deleteSet, durableWrite, flushQueue, isNetErr, lastSent, overlayDays, pendingOps, qLoad, qStore, saveSet, setKey, storageAtRisk, syncBadge } from '../net.js?v=63';
+import { $, $$, OPTIONAL, RATINGS, W, activeMeso, app, bwD, cardioItems, cardioSince, check, effortShort, effortText, fetchAll, go, haptic, liftInsights, loadExercises, loadPrefs, mesoDays, needKeys, openDays, rateKeys, segHtml, setHeader, sheet, slipFor, statusPill, toLb, unit, warnList, workoutCardioSince } from '../app.js?v=63';
 
 // ---------- recovery follow-ups (doc §3, §5) ----------
 export async function pendingRecovery(day, muscles) {
@@ -219,6 +219,13 @@ export async function renderWorkout(dayId, mode) {
     return `<span class="hist-note">${ic('pin')} ${Math.round((1 - lastE / best) * 100)}% below your all-time best estimate — for reference only; today's targets come from last week.</span>`; };
   const FLAG = { stalled: 'minus', regressing: 'trendDown', pr: 'trophy' };
   // One coach note per lift (v1.11): this week's plan, plus last weeks' trend if it needs attention. Tap → what to do.
+  // v1.21.0 (owner request): a small recommended weight range for today, under the last set (above + set / − set).
+  // Inside the automatic-increase limits; display only — suggestions, reps re-targeting and sets are unchanged.
+  const rangeLine = we => {
+    if (day.completed_at || deload || isCardio(we) || we.exercises.load_type !== 'weighted' || !prev[we.exercise_id]?.sets.length) return '';
+    const rr = L.recommendedRange({ prevWeight: baseFor(we, 0)?.weight, suggested: suggestionFor(we, 0)?.weight, window: windowFor(we), ex: we.exercises, unit: unit() });
+    return rr ? `<div class="wt-range" data-range="${we.id}">${ic('scale')} Range today <b>${fmt(rr.low)}–${fmt(rr.high)} ${unit()}</b> <span class="muted">· reps adjust</span></div>` : '';
+  };
   const coachLine = we => {
     if (day.completed_at || isCardio(we)) return we.flag && !day.completed_at ? `<div class="coach-flag">${esc(we.flag)}</div>` : '';
     const n = suggestionFor(we, 0)?.note, x = insights[we.exercise_id], st = x && FLAG[x.status.status] ? x.status : null;
@@ -318,6 +325,7 @@ export async function renderWorkout(dayId, mode) {
               <button class="check" aria-label="Set ${i + 1} done">✓</button></div>`;
           }).join('')}
         </div>
+        ${rangeLine(we)}
         <div class="row mt8"><button class="ghost sm" data-addset>+ set</button><button class="ghost sm" data-rmset>− set</button>
           ${!deload && ex.load_type !== 'cardio' ? (r1 => `<label class="rir1 tiny" title="Optional: how many reps you really had left on set 1. Left on “as planned”, the app assumes you stopped ${we.target_rir} short.">Set 1 reps left <select data-rir1 aria-label="Reps you had left on set 1">
             <option value="">as planned (${we.target_rir})</option>${[0, 1, 2, 3, 4, 5].map(v => `<option value="${v}" ${r1 != null && r1 !== we.target_rir && r1 === v ? 'selected' : ''}>${v}${v === 5 ? '+' : ''}</option>`).join('')}</select></label>`)(we.sets.find(x => x.set_index === 1)?.rir) : ''}

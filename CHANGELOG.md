@@ -12,6 +12,28 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.21.0 — 2026-11-25 · A recommended weight range on every lift (owner request)
+
+The owner: "I like the functionality of the weight and rep manual increases but can we add a small recommended range for weights … and then the volume functionality stays the same", then "it could squeeze in right above the set plus and minus buttons below the last set".
+
+**For people using the app**
+- Each weighted exercise with history shows one line under its last set, above **+ set / − set**: **"Range today 67.5–72.5 lb · reps adjust"**.
+- **Bottom:** one normal weight step below last week. A lighter day is fine, and the suggested reps go up to match.
+- **Top:** the app's own automatic-increase limit: never more than **+5 lb / +2.5 kg**, and about **+5%** a week.
+- Both ends stay inside the weights where your rep range still works, and today's suggested weight is always inside the range.
+- Examples: 100 lb last week → 97.5–105 lb; a 22.5 lb cable lift → 20–25 lb.
+- Not shown on light (deload) weeks, finished workouts, bodyweight, assisted or cardio exercises, or a lift's first time.
+- **Nothing else changes:** suggested weights, reps re-targeting when you change the weight, manual bumps, and set counts (volume) work exactly as before.
+
+**Underneath**
+- `logic.js`: `recommendedRange({ prevWeight, suggested, window, ex, unit })`, built from the existing `loadStep`, `safeMax` and `weightRange`.
+- `screens/workout.js`: `rangeLine()`.
+- Tests:
+  - engine block V1.21.0: the owner's triceps cable 22.5 → 20–25; the top is never more than +5 lb and stays within `safeMax` across loads and equipment; kg; the suggestion is always inside;
+  - new `wtrange210.py` (9 checks), including its position, one line, and nothing cut off on a 390 px phone;
+  - render snapshot: the only diff is the new line (re-baselined).
+- Rollback: `release/v1.20.11`.
+
 ## 1.20.11 — 2026-11-25 · Fix: rating pop-ups didn't appear when the workout was opened from the Workout tab (owner report)
 
 **What happened:** "Feedback stopped showing up to do."
