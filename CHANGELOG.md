@@ -12,6 +12,36 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.20.12 — 2026-11-25 · A set removed on one phone can't be brought back by another phone's old copy (audit 1.20.8, F02)
+
+1.20.9 covered this phone and its tabs. This covers a **different phone**: if it still holds an older offline copy of a set you've since removed, that copy is no longer re-created when it syncs.
+
+**How (no clocks involved):**
+- Every set save now says which server row it was edited from.
+- When a set is deleted, the server remembers that row for 30 days. A save edited from a remembered row is skipped.
+- The phone that sent it lists it in **Settings → Sync problems** ("that set was removed on another phone, so this older copy wasn't saved") and shows a short message. It's never silently lost, and never retried forever.
+- **Not affected:**
+  - Adding the set again: it starts fresh, so it's saved normally.
+  - Restoring a deleted set from a backup: the row comes back with its own id, so it's allowed.
+  - Older copies of the app: they send no row id and behave exactly as before.
+  - Saving before the database change is applied: the app retries without the new field.
+
+**Database:**
+- Migration `20261125010000_set_delete_guard`:
+  - `sets.based_on` column;
+  - `set_tombstones` table, own rows only (RLS), no foreign key so deleting a workout still cascades;
+  - two triggers.
+- Rollback: `supabase/ops/rollback_20261125010000_set_delete_guard.sql`.
+
+**Tests:**
+- DB: a stale copy of a deleted row is skipped (insert and update paths); re-add works; restore of the same row works; older-app saves are unchanged; another user can't see or write tombstones; cascades still work.
+- `rollback.guard.check.mjs` (in CI): migrate → rollback → re-apply.
+- Real PostgreSQL: still passes. The restore drill still passes.
+- New `setguard2011.py` (13 checks): based_on sent; a new set learns its id; skipped online and at an offline sync; and the fallback for a database without the column.
+- Render snapshot: rows now carry `data-sid` (re-baselined; the diff is only that attribute).
+
+Rollback (app): `release/v1.20.11`.
+
 ## 1.20.11 — 2026-11-25 · Fix: rating pop-ups didn't appear when the workout was opened from the Workout tab (owner report)
 
 **What happened:** "Feedback stopped showing up to do."

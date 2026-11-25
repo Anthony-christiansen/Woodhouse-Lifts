@@ -75,6 +75,9 @@ export function inOrder(key, fn) {           // runs fn after every earlier writ
 //  - It leaves a tombstone on the phone (shared by every tab of the app, per account). Any copy of that set edited
 //    BEFORE the delete is dropped instead of sent; editing the set again afterwards (newer version) is sent as normal.
 //  Not covered (needs a server-side guard, see the session log): a stale offline copy on ANOTHER phone.
+// v1.20.11: the server row each set on screen came from, so a save can say what it was edited from (sets.based_on).
+export const setIds = new Map();
+export const rememberSetId = (k, id) => { setIds.set(k, id); document.querySelectorAll(`.set[data-key="${CSS.escape(k)}"]`).forEach(r => { r.dataset.sid = id; }); };
 const tombKey = () => session?.user?.id ? `wl_set_tombstones_v1:${session.user.id}` : null;
 const verTime = v => parseInt(String(v || '').split('.')[0], 36) || 0;   // newVer() starts with Date.now() in base 36
 export const tombstones = () => { const k = tombKey(); if (!k) return {}; try { return JSON.parse(lsGet(k) || '{}'); } catch { return {}; } };
@@ -84,7 +87,7 @@ const setTomb = (key, at) => { const k = tombKey(); if (!k) return; const t = to
 export function deleteSet(workoutExerciseId, setIndex) {
   const qk = qKey(), k = workoutExerciseId + ':' + setIndex;
   return inOrder(qk + '|' + k, async () => {
-    const q = qLoadFor(qk), queued = q[k]; delete q[k]; qStoreFor(qk, q); lastSent.delete(k);
+    const q = qLoadFor(qk), queued = q[k]; delete q[k]; qStoreFor(qk, q); lastSent.delete(k); setIds.delete(k);
     const at = Date.now(); setTomb(k, at);
     const { error } = await sb.from('sets').delete().eq('workout_exercise_id', workoutExerciseId).eq('set_index', setIndex);
     if (error) {   // not deleted: put back what was waiting and lift the tombstone
@@ -105,7 +108,18 @@ export function sendQueued(k, qk, uid) {
       const q = qLoadFor(qk); if (sameVersion(q[k], cur)) { delete q[k]; qStoreFor(qk, q); } return 'gone';
     }
     if (session?.user?.id !== uid) return 'queued';                  // account switched: leave it for its owner
-    const { error } = await sb.from('sets').upsert(stripLocal(cur), { onConflict: 'workout_exercise_id,set_index' });
+    // v1.20.11 (audit 1.20.8 F02): ask for the row back. No row = the server's delete guard skipped it, because this copy
+    // was edited from a set that has since been removed (on another phone). That's a conflict, shown — never retried.
+    let { data, error } = await sb.from('sets').upsert(stripLocal(cur), { onConflict: 'workout_exercise_id,set_index' }).select('id');
+    if (error && /based_on/.test(error.message || '')) {   // database not upgraded yet: send without it
+      ({ data, error } = await sb.from('sets').upsert(stripLocal({ ...cur, based_on: undefined }), { onConflict: 'workout_exercise_id,set_index' }).select('id'));
+    }
+    if (!error && Array.isArray(data) && data.length === 0) {
+      const q = qLoadFor(qk); if (sameVersion(q[k], cur)) { delete q[k]; qStoreFor(qk, q); }
+      qAddFailed(stripLocal(cur), 'that set was removed on another phone, so this older copy wasn’t saved');
+      setIds.delete(k); return 'skipped';
+    }
+    if (!error && Array.isArray(data) && data[0]?.id) rememberSetId(k, data[0].id);
     if (session?.user?.id !== uid) return 'queued';
     if (!error) { const q = qLoadFor(qk); if (sameVersion(q[k], cur)) { delete q[k]; qStoreFor(qk, q); } return 'saved'; }
     if (!isPermanentErr(error)) return 'queued';                     // network or server hiccup → keep & retry
@@ -122,6 +136,7 @@ export async function saveSet(payload) {
   const res = await sendQueued(k, qk, uid);
   syncBadge();
   if (String(res) === 'failed') { toast(`Couldn’t save that set: ${res.message}`, true); return 'failed'; }
+  if (res === 'skipped') { toast('That set was removed on another phone, so this change wasn’t saved. It’s listed in Settings → Sync problems.', true, 6000); return 'failed'; }
   if (res === 'queued' && storageAtRisk) warnAtRisk();
   return res === 'queued' ? 'queued' : 'saved';
 }
