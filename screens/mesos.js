@@ -1,12 +1,12 @@
 // Woodhouse Lifts — mesocycles, mesocycle builder, mesocycle detail (moved out of app.js in 1.20.3, code unchanged).
-import * as L from '../logic.js?v=63';
-import { ic } from '../icons.js?v=63';
-import { esc, today, dayName } from '../format.js?v=63';
-import { toast, openSheet, closeSheet } from '../ui.js?v=63';
-import { profile, builder, setBuilder } from '../state.js?v=63';
-import { sb } from '../net.js?v=63';
-import { $, $$, app, check, effortShort, go, lateCard, lateSets, lightWeekFrom, loadExercises, loadPrefs, mesoDays, openDays, setHeader, slipFor, startLightWeek, undoLightWeek, warnList, wireLate } from '../app.js?v=63';
-import { areaGrid, clearAreas, myAreas, setAllowed, toggleArea } from '../screens/library.js?v=63';
+import * as L from '../logic.js?v=64';
+import { ic } from '../icons.js?v=64';
+import { esc, today, dayName } from '../format.js?v=64';
+import { toast, openSheet, closeSheet } from '../ui.js?v=64';
+import { profile, builder, setBuilder } from '../state.js?v=64';
+import { sb } from '../net.js?v=64';
+import { $, $$, app, check, effortShort, go, lateCard, lateSets, lightWeekFrom, loadExercises, loadPrefs, mesoDays, openDays, setHeader, slipFor, startLightWeek, undoLightWeek, warnList, wireLate } from '../app.js?v=64';
+import { areaGrid, clearAreas, myAreas, setAllowed, toggleArea } from '../screens/library.js?v=64';
 
 // ---------- mesocycles ----------
 export async function renderMesos() {

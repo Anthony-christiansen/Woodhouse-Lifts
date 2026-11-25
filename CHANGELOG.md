@@ -12,6 +12,18 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.21.1 — 2026-11-25 · Look at any day of the week without switching (owner request)
+
+The owner: "When I want to look at the week workouts and exercises it makes me switch. It shouldn't make you switch but you can only log exercises for one workout at a time."
+
+**For people using the app**
+- With a workout in progress, opening another day of the week now **opens it straight away to look at**: its exercises, sets, weights and the new weight range. Before, a "Workout in progress" card was in the way.
+- A banner explains: **"Just looking — Full Body A is in progress, so new sets go there. Finish or skip it to log this day."** It has **Back to Full Body A**.
+- Logging stays with the one workout in progress. If nothing is logged there yet, the banner also offers **Start Full Body B instead**, as your choice, never forced.
+- Looking never starts or changes anything.
+
+**Underneath:** `renderWorkout(dayId, 'view', { live, loggedAny })` replaces the gate card. The mock gained `__DAYS_PATCH` and `__LIVE_SETS` hooks. New `lookweek211.py` (11 checks): it opens directly, logging is off, nothing is started, Back works, and Start-instead works. Rollback: `release/v1.21.0`.
+
 ## 1.21.0 — 2026-11-25 · A recommended weight range on every lift (owner request)
 
 The owner: "I like the functionality of the weight and rep manual increases but can we add a small recommended range for weights … and then the volume functionality stays the same", then "it could squeeze in right above the set plus and minus buttons below the last set".

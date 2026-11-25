@@ -1,11 +1,11 @@
 // Woodhouse Lifts — recovery follow-ups (doc §3, §5), workout logger, cardio (moved out of app.js in 1.20.3, code unchanged).
-import * as L from '../logic.js?v=63';
-import { ic } from '../icons.js?v=63';
-import { esc, fmtNum, fmt, today, dayName, weekStart, isoDay } from '../format.js?v=63';
-import { toast, openSheet, closeSheet } from '../ui.js?v=63';
-import { profile, setBuilder } from '../state.js?v=63';
-import { sb, deleteSet, durableWrite, flushQueue, isNetErr, lastSent, overlayDays, pendingOps, qLoad, qStore, saveSet, setKey, storageAtRisk, syncBadge } from '../net.js?v=63';
-import { $, $$, OPTIONAL, RATINGS, W, activeMeso, app, bwD, cardioItems, cardioSince, check, effortShort, effortText, fetchAll, go, haptic, liftInsights, loadExercises, loadPrefs, mesoDays, needKeys, openDays, rateKeys, segHtml, setHeader, sheet, slipFor, statusPill, toLb, unit, warnList, workoutCardioSince } from '../app.js?v=63';
+import * as L from '../logic.js?v=64';
+import { ic } from '../icons.js?v=64';
+import { esc, fmtNum, fmt, today, dayName, weekStart, isoDay } from '../format.js?v=64';
+import { toast, openSheet, closeSheet } from '../ui.js?v=64';
+import { profile, setBuilder } from '../state.js?v=64';
+import { sb, deleteSet, durableWrite, flushQueue, isNetErr, lastSent, overlayDays, pendingOps, qLoad, qStore, saveSet, setKey, storageAtRisk, syncBadge } from '../net.js?v=64';
+import { $, $$, OPTIONAL, RATINGS, W, activeMeso, app, bwD, cardioItems, cardioSince, check, effortShort, effortText, fetchAll, go, haptic, liftInsights, loadExercises, loadPrefs, mesoDays, needKeys, openDays, rateKeys, segHtml, setHeader, sheet, slipFor, statusPill, toLb, unit, warnList, workoutCardioSince } from '../app.js?v=64';
 
 // ---------- recovery follow-ups (doc §3, §5) ----------
 export async function pendingRecovery(day, muscles) {
@@ -84,7 +84,8 @@ export async function applyAdjustment(fb, R, meso) {
 }
 
 // ---------- workout logger ----------
-export async function renderWorkout(dayId, mode) {
+// lookCtx (v1.21.1): set when you open another day while a workout is in progress — the day opens to look at.
+export async function renderWorkout(dayId, mode, lookCtx = null) {
   const preview = mode === 'view';
   if (!dayId) {
     setHeader('Workout', null, 'workout');
@@ -115,13 +116,9 @@ export async function renderWorkout(dayId, mode) {
         .eq('workout_exercises.workout_day_id', live.id).not('completed_at', 'is', null);
       const liveSets = cr.error ? 1 : (cr.count ?? 0);   // unsure → treat as logged (don't offer a switch)
       const loggedAny = Object.values(qLoad()).some(p => p.completed_at) || liveSets > 0;
-      app.innerHTML = `<div class="card warn"><h3>Workout in progress</h3>
-        <p class="small">Week ${live.week} · ${esc(dayName(live))} is open${loggedAny ? ' with sets logged. Finish it (or skip it) before starting another day.' : ', but nothing is logged yet — you can switch.'}</p>
-        <div class="grid2"><button class="primary" data-go="#/workout/${live.id}">Resume ${esc(dayName(live))}</button>
-        ${loggedAny ? `<button data-go="#/workout/${day.id}/view">Just look at ${esc(dayName(day))}</button>` : `<button id="switchDay">Switch to ${esc(dayName(day))}</button>`}</div></div>`;
-      $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
-      $('#switchDay') && ($('#switchDay').onclick = async () => { check(await sb.from('workout_days').update({ started_at: null }).eq('id', live.id)); renderWorkout(dayId); });
-      return;
+      // v1.21.1 (owner request): don't make you switch just to look. Another day opens straight away to look at;
+      // logging stays with the one workout in progress. With nothing logged there yet, you can start this one instead.
+      return renderWorkout(dayId, 'view', { live, loggedAny });
     }
     if (earlier.length) {
       const e = earlier[0];
@@ -290,7 +287,9 @@ export async function renderWorkout(dayId, mode) {
   };
 
   app.innerHTML = `
-    ${preview ? `<div class="card info small preview-banner"><b>${ic('eye')} Preview</b> — not started, nothing can be logged here.
+    ${preview && lookCtx?.live ? `<div class="card info small preview-banner" id="lookBanner"><b>${ic('eye')} Just looking</b> — ${esc(dayName(lookCtx.live))} is in progress${lookCtx.loggedAny ? ', so new sets go there. Finish or skip it to log this day.' : ', but nothing is logged there yet.'}
+      <div class="grid2 mt8"><button class="primary sm" data-go="#/workout/${lookCtx.live.id}">Back to ${esc(dayName(lookCtx.live))}</button>${lookCtx.loggedAny ? `<button class="sm" data-go="#/meso/${meso.id}">All days</button>` : `<button class="sm" id="startInstead">Start ${esc(dayName(day))} instead</button>`}</div></div>`
+    : preview ? `<div class="card info small preview-banner"><b>${ic('eye')} Preview</b> — not started, nothing can be logged here.
       <div class="grid2 mt8"><button class="primary sm" data-go="#/workout/${day.id}">Start this day</button><button class="sm" data-go="#/meso/${meso.id}">All days</button></div></div>` : ''}
     ${day.completed_at ? '<div class="card good small">Finished ✓ — you can still edit sets and ratings.</div>' : ''}
     ${day.completed_at ? '' : (() => { let seen = false; try { seen = localStorage.getItem('wl_warmup_seen') === '1'; } catch {}
@@ -869,6 +868,11 @@ export async function renderWorkout(dayId, mode) {
   if (preview) {   // look, don't touch: nothing can be logged until the day is started
     $$('.card[data-we] input, .card[data-we] button:not([data-info]):not(.lift-flag), #finish, #skipDay, [data-edit]').forEach(el => { el.disabled = true; });
     $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
+    // v1.21.1: nothing logged on the workout in progress → you may start this day instead (your choice, never forced)
+    $('#startInstead') && ($('#startInstead').onclick = async () => {
+      check(await sb.from('workout_days').update({ started_at: null }).eq('id', lookCtx.live.id));
+      if (location.hash !== '#/workout/' + dayId) location.hash = '#/workout/' + dayId; else renderWorkout(dayId);
+    });
     $('#finish') && ($('#finish').hidden = true);
     return;
   }
