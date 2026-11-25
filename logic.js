@@ -1103,6 +1103,25 @@ export function weightRange({ prev, ex, targetRir, prevTargetRir, bodyweight, un
 }
 
 /**
+ * v1.21.0 (owner request) — a small recommended weight range for today, shown on the exercise card.
+ * Bottom: one normal step below last week (a lighter day is fine — the suggested reps go up to match).
+ * Top: the automatic-increase guardrail (safeMax: ≤ +5 lb / 2.5 kg and about +5% a week).
+ * Both ends stay inside the weights where the rep range still works (weightRange), and today's suggestion is always
+ * inside. Display only: suggestions, reps re-targeting and set counts are unchanged.
+ * prevWeight / suggested / window are in the shown unit. Returns { low, high } or null.
+ */
+export function recommendedRange({ prevWeight, suggested, window = null, ex, unit = 'lb' }) {
+  const w0 = Number(prevWeight);
+  if (!(w0 > 0) || ex?.load_type !== 'weighted') return null;
+  const inc = increment(ex, unit), sug = Number(suggested) > 0 ? Number(suggested) : w0;
+  let low = Math.max(inc, w0 - loadStep(w0, ex, unit)), high = safeMax(w0, ex, unit);
+  if (window) { low = Math.max(low, window.light); high = Math.min(high, window.heavy); }
+  low = Math.min(low, sug); high = Math.max(high, sug);
+  const r = x => Math.round(x * 100) / 100;
+  return low < high ? { low: r(low), high: r(high) } : null;
+}
+
+/**
  * Doc §5 — next week's set change for one muscle in one session.
  * R recovery, L workload, J joint pain, P pump (0–3), F performance (−1/0/1). Missing → neutral, and never counted as
  * evidence for adding volume (v1.11.1): Grow holds without a performance comparison; +2 needs a rated pump.

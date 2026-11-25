@@ -169,7 +169,7 @@ Each release entry ends with one line, e.g.:
 | Version | Released | Merge | Rollback point | Pre-release snapshot | Smoke test |
 |---|---|---|---|---|---|
 | 1.12.1 | 2026-11-23 05:30 UTC | `037e29a` (PR #8) | `release/v1.12.0` = `aea334a` | 05:30:37 UTC (11 tables) | Migration `feedback_adjustment_scope` applied after the client deploy. Verified on prod with a rolled-back test: wrong-muscle change refused, correct call OK, total sets unchanged. Live app loads real data under the new CSP and pinned supabase-js. This check found the 1.12.2 bug. |
-| 1.12.1 – 1.20.11 | 2026-11-23 → 25 | PRs #8 – #39 | each `release/vX.Y.Z` | before every migration | Listed release by release in the private Drive doc *Start Here* §0 and in `CHANGELOG.md`. |
+| 1.12.1 – 1.21.0 | 2026-11-23 → 25 | PRs #8 – #40 | each `release/vX.Y.Z` | before every migration | Listed release by release in the private Drive doc *Start Here* §0 and in `CHANGELOG.md`. |
 | 1.12.0 | 2026-11-23 05:15 UTC | `aea334a` (PR #7) | `release/v1.11.5` = `5dbe0bc` | 05:15:10 UTC | Live files 1.12.0, `?v=36`. Note: requesting `app.js?v=36` before Pages finished deploying cached the old file under the new URL for up to ~10 min, harmless because the old files still work together. **Don't fetch the next `?v=` URL before the deploy lands; check with an extra query string.** |
 | 1.11.5 | 2026-11-23 04:48 UTC | `5dbe0bc` (PR #6) | `release/v1.11.4` = `33682ce` | 04:47 UTC (taken for the data fix below) | Live files 1.11.5, `?v=35`, `fitPlan` served; app loads with no errors. |
 | 1.11.4 | 2026-11-23 04:13 UTC | `33682ce` (PR #5) | `release/v1.11.3` = `75691c0` | not needed (tier A) | Live files 1.11.4, `?v=34`; no Google links in app code; rules page served; app loads. |

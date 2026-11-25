@@ -991,3 +991,27 @@ console.log('GUARDRAIL TESTS PASSED');
   assert.equal(L.changeLabel(L.rawChange([...cur, { weight: 22.5, reps: 9 }], prev)), '+1 rep/set');
   console.log('V1.20.4 ON-PLAN PILL TESTS PASSED');
 }
+
+// v1.21.0 — recommended weight range on the card: one step below last week … the automatic-increase limit.
+{
+  const m = { load_type: 'weighted', equipment: 'Machine' }, c = { load_type: 'weighted', equipment: 'Cable' }, b = { load_type: 'weighted', equipment: 'Barbell' };
+  assert.deepEqual(L.recommendedRange({ prevWeight: 100, suggested: 102.5, ex: m }), { low: 97.5, high: 105 });
+  assert.deepEqual(L.recommendedRange({ prevWeight: 22.5, suggested: 22.5, ex: c }), { low: 20, high: 25 }, 'owner\'s triceps cable');
+  for (const w0 of [20, 45, 100, 135, 225, 315, 405]) for (const ex of [m, c, b]) {
+    const r = L.recommendedRange({ prevWeight: w0, suggested: w0, ex });
+    assert.ok(r && r.low < w0 && r.high > w0, `range brackets last week (${w0})`);
+    assert.ok(r.high - w0 <= 5 + 1e-9, `top never more than +5 lb over last week (${w0} → ${r.high})`);
+    assert.ok(r.high <= L.safeMax(w0, ex, 'lb'), 'top within the automatic-increase guardrail');
+  }
+  // today's suggestion is always inside, even on a "faster" week (two steps)
+  const fast = L.recommendedRange({ prevWeight: 100, suggested: 110, ex: m });
+  assert.ok(fast.low <= 110 && fast.high >= 110, 'suggestion inside the range');
+  // the rep-range window narrows it, never widens it
+  assert.deepEqual(L.recommendedRange({ prevWeight: 100, suggested: 100, ex: m, window: { light: 100, heavy: 102.5 } }), { low: 100, high: 102.5 });
+  assert.equal(L.recommendedRange({ prevWeight: 100, suggested: 100, ex: m, window: { light: 100, heavy: 100 } }), null, 'no range when only one weight works');
+  assert.equal(L.recommendedRange({ prevWeight: 0, ex: m }), null, 'no history: no range');
+  assert.equal(L.recommendedRange({ prevWeight: 50, ex: { load_type: 'bodyweight' } }), null, 'weighted lifts only');
+  const kg = L.recommendedRange({ prevWeight: 60, suggested: 60, ex: m, unit: 'kg' });
+  assert.ok(kg.high - 60 <= 2.5 + 1e-9, 'kg: top within +2.5 kg');
+  console.log('V1.21.0 WEIGHT RANGE TESTS PASSED');
+}
