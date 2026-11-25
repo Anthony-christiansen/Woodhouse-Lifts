@@ -12,6 +12,25 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.20.9 — 2026-11-24 · A removed set stays removed (audit 1.20.4, finding 2)
+
+**What could go wrong (reproduced on 1.20.8):**
+- **During a sync:** right after reconnecting, the app sends sets that were saved on the phone. If you tapped **− set** on one of them while it was still being sent, the delete could reach the server first, and the save landing after it brought the set back.
+- **With a second tab:** if another tab of the app still held an older copy of that set, its next sync re-created the set.
+
+**Fixed:**
+- **− set** now waits for any save of that set that's already on its way, then deletes it.
+- The phone remembers the removal for two weeks, per account and shared by every tab. An older copy of that set is dropped instead of sent.
+- Adding the set again afterwards saves normally. Removing with no signal is still refused and keeps the row and its waiting copy, which syncs later.
+- **Not covered yet:** a stale offline copy on a *different phone*. Closing that needs a small server-side guard (a database change), proposed in the session log for the owner's approval.
+
+**Underneath:**
+- `net.js`: `deleteSet()` runs in the same per-set chain as saves (`inOrder`). `sendQueued` drops copies edited before a tombstone (`wl_set_tombstones_v1:<user>`).
+- The mock server logs what reaches it in order (`__ops`).
+- The render snapshot ignores MM-DD dates (it failed after midnight UTC).
+- New `setdelete209.py` (12 checks). Three of them fail on 1.20.8: the delete lands before the pending save, the set ends up re-created, and another tab's stale copy gets sent.
+- Rollback: `release/v1.20.8`. No database change.
+
 ## 1.20.8 — 2026-11-24 · One honest answer to "is my workout saved?" (audit 1.20.4, finding 1)
 
 **For people using the app**

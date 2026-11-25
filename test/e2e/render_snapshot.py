@@ -16,6 +16,7 @@ def norm(h):
     h=re.sub(r'lbl\d+', 'lblN', h)                      # generated label ids
     h=re.sub(r'\d{4}-\d{2}-\d{2}(T[\d:.]+Z?)?', 'DATE', h)
     h=re.sub(r'\b\d{1,2}/\d{1,2}(/\d{2,4})?\b', 'M/D', h)
+    h=re.sub(r'<td>\d{2}-\d{2}</td>', '<td>MM-DD</td>', h)   # cardio history dates (made the snapshot fail after midnight UTC)
     h=re.sub(r'\?v=\d+', '?v=N', h)
     h=re.sub(r'Woodhouse Lifts \d+\.\d+\.\d+', 'Woodhouse Lifts X.Y.Z', h)   # the version shown in Settings
     return h

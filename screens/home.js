@@ -1,11 +1,11 @@
 // Woodhouse Lifts — home (dashboard), explore, post-workout summary (v1.19.0, audit U5), feedback (v1.15.0), Home drill-downs (#/stats/<kind>/<arg>) (moved out of app.js in 1.20.3, code unchanged).
-import * as L from '../logic.js?v=59';
-import { ic } from '../icons.js?v=59';
-import { esc, fmt, dayName, weekStart, isoDay } from '../format.js?v=59';
-import { toast, openSheet, closeSheet } from '../ui.js?v=59';
-import { profile } from '../state.js?v=59';
-import { sb, saveState } from '../net.js?v=59';
-import { $, $$, APP_VERSION, STATUS_ORDER, W, activeMeso, app, cardioItems, cardioSince, check, effortText, fatigueFor, fatigueKey, fetchAll, go, lastScreen, lateCard, lateSets, liftInsights, mesoDays, openDays, pendingHere, setHeader, slipFor, startLightWeek, statusPill, wireLate, workoutCardioSince } from '../app.js?v=59';
+import * as L from '../logic.js?v=60';
+import { ic } from '../icons.js?v=60';
+import { esc, fmt, dayName, weekStart, isoDay } from '../format.js?v=60';
+import { toast, openSheet, closeSheet } from '../ui.js?v=60';
+import { profile } from '../state.js?v=60';
+import { sb, saveState } from '../net.js?v=60';
+import { $, $$, APP_VERSION, STATUS_ORDER, W, activeMeso, app, cardioItems, cardioSince, check, effortText, fatigueFor, fatigueKey, fetchAll, go, lastScreen, lateCard, lateSets, liftInsights, mesoDays, openDays, pendingHere, setHeader, slipFor, startLightWeek, statusPill, wireLate, workoutCardioSince } from '../app.js?v=60';
 
 // ---------- home (dashboard) ----------
 export async function renderHome() {
