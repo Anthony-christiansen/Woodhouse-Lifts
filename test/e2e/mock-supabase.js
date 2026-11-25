@@ -63,7 +63,9 @@ function builder(table) {
       if (table === 'app_feedback' && window.__NO_FEEDBACK) return Promise.resolve({ data: null, error: { message: 'relation "public.app_feedback" does not exist' } }).then(res, rej);
       if (payload) { (window.__writes = window.__writes || []).push([table, payload]);
         const ms = window.__DELAY ? window.__DELAY(table, payload) : 0;   // test hook: slow / out-of-order responses
-        const land = () => { (window.__landed = window.__landed || []).push([table, payload]); (window.__ops = window.__ops || []).push(['write', table, payload]); return { data: payload, error: null }; };
+        // test hook: __MISSING(table, eqs) → an UPDATE that matches no row (deleted, or hidden by RLS) returns [] — like PostgREST
+        const missing = window.__MISSING && window.__MISSING(table, eqs, payload);
+        const land = () => { (window.__landed = window.__landed || []).push([table, payload]); (window.__ops = window.__ops || []).push([missing ? 'noop' : 'write', table, payload]); return { data: missing ? [] : payload, error: null }; };
         return (ms ? new Promise(r => setTimeout(r, ms)).then(land) : Promise.resolve().then(land)).then(res, rej); }
       if (table === 'workout_days' && single) data = data.find(d => d.id === (location.hash.split('/')[2] || 'd21')) || data[4];
       else if (single || maybe) data = data[0] ?? null;

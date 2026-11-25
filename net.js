@@ -1,8 +1,8 @@
 // Woodhouse Lifts — Supabase client and the offline-safe sync queue (moved out of app.js in 1.20.2, unchanged).
 // Owns the signed-in session the queue keys on; app.js sets it with setSession() and reads it (live binding).
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.2/+esm';
-import * as L from './logic.js?v=60';
-import { toast } from './ui.js?v=60';
+import * as L from './logic.js?v=61';
+import { toast } from './ui.js?v=61';
 
 // Public by design: access is enforced by row-level security in the database.
 export const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -185,8 +185,12 @@ export function opQuery(op) {
   if (op.kind === 'upsert') return sb.from(op.table).upsert(op.values, { onConflict: op.onConflict });
   let q = sb.from(op.table).update(op.values);
   for (const [c, v] of Object.entries(op.eq || {})) q = q.eq(c, v);
-  return q;
+  // v1.20.10 (audit 1.20.8, F01): ask for the updated row back. An UPDATE that matches nothing (the workout was deleted,
+  // or isn't this account's) still returns "no error", so without this a queued finish could be counted as saved.
+  return q.select('id');
 }
+// An update that matched no row: a conflict, not a hiccup — retrying can't fix it, so it's kept aside with a reason.
+export const missedTarget = (op, data) => op.kind === 'update' && Array.isArray(data) && data.length === 0;
 export let opsFlushing = null;
 export function flushOps() {
   if (opsFlushing) return opsFlushing;
@@ -195,8 +199,14 @@ export function flushOps() {
     for (;;) {
       const op = oLoad(k)[0]; if (!op) return 'done';
       if (session?.user?.id !== uid) return 'queued';
-      const { error } = await opQuery(op);
+      const { data, error } = await opQuery(op);
       if (session?.user?.id !== uid) return 'queued';
+      if (!error && missedTarget(op, data)) {
+        oStore(k, oLoad(k).filter(x => x.id !== op.id)); opFailed.add(op.id);
+        qAddFailed({ op }, `nothing to update — that ${op.table === 'workout_days' ? 'workout' : op.table === 'mesocycles' ? 'meso' : 'item'} no longer exists or isn’t on this account`);
+        toast('A change saved on your phone couldn’t be applied — what it was for no longer exists. It’s kept in Settings → Sync problems.', true);
+        continue;
+      }
       if (!error) { oStore(k, oLoad(k).filter(x => x.id !== op.id)); continue; }
       if (!isPermanentErr(error)) return 'queued';               // no signal: keep everything, in order
       oStore(k, oLoad(k).filter(x => x.id !== op.id)); opFailed.add(op.id); qAddFailed({ op }, error.message);
