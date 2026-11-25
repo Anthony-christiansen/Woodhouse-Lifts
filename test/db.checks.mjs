@@ -192,7 +192,11 @@ export async function runChecks(db) {
     await as(db, A, 'update public.workout_days set completed_at = now() where mesocycle_id = $1 and week = 1', [mL]);
     let p = await prev();
     assert.equal(p.ok, false); assert.equal(p.reason, 'before week 3');
-    await assert.rejects(as(db, A, 'select public.start_light_week($1)', [mL]), /week 3/, 'not before week 3');
+    // audit 1.20.4 finding 3: the revision is required — missing or null is refused before anything else
+    await assert.rejects(as(db, A, 'select public.start_light_week($1)', [mL]), /does not exist|function/i, 'start: revision can\'t be left out');
+    await assert.rejects(as(db, A, 'select public.start_light_week($1, null)', [mL]), /revision is required/, 'start: null revision refused');
+    await assert.rejects(as(db, A, 'select public.undo_light_week($1, null)', [mL]), /revision is required/, 'undo: null revision refused');
+    await assert.rejects(as(db, A, 'select public.start_light_week($1, 0)', [mL]), /week 3/, 'not before week 3');
     // week 2: one done, one skipped; week 3 day 1: started with one logged set, not finished → light week is week 4
     await as(db, A, 'update public.workout_days set completed_at = now() where mesocycle_id = $1 and week = 2 and day_index = 1', [mL]);
     await as(db, A, 'update public.workout_days set skipped_at = now() where mesocycle_id = $1 and week = 2 and day_index = 2', [mL]);
@@ -237,7 +241,7 @@ export async function runChecks(db) {
     const nowRows = JSON.parse((await snapshot()).slice(0, (await snapshot()).indexOf(']') + 1));
     assert.deepEqual(nowRows.map(x => [x.we, x.target_sets, x.target_rir, x.sup]), restored.map(x => [x.we, x.target_sets, x.target_rir, false]), 'targets and days restored exactly');
     assert.equal((await as(db, A, 'select weeks, light_week_undo from public.mesocycles where id = $1', [mL]))[0].weeks, 6);
-    await assert.rejects(as(db, A, 'select public.undo_light_week($1)', [mL]), /no early light week/, 'nothing to undo twice');
+    await assert.rejects(as(db, A, 'select public.undo_light_week($1, 2)', [mL]), /no early light week/, 'nothing to undo twice');
     // undo is refused once the light week has logged work
     await as(db, A, 'delete from public.sets where workout_exercise_id = $1', [we51]);
     await as(db, A, 'select public.start_light_week($1, 2)', [mL]);
