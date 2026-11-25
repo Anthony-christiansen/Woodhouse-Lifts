@@ -26,7 +26,7 @@ jobs:
       - name: Engine tests
         run: node test/logic.test.mjs
       - name: Database tests (all migrations on a fresh database)
-        run: cd test && node db.test.mjs
+        run: cd test && node db.test.mjs && node rollback.lw.check.mjs
       - name: Restore drill
         run: node test/restore.drill.mjs
       - name: Privacy check (no personal data in this public repo)
