@@ -37,7 +37,7 @@ Versions follow **MAJOR.MINOR.PATCH**:
 - DB: a stale copy of a deleted row is skipped (insert and update paths); re-add works; restore of the same row works; older-app saves are unchanged; another user can't see or write tombstones; cascades still work.
 - `rollback.guard.check.mjs` (in CI): migrate → rollback → re-apply.
 - Real PostgreSQL: still passes. The restore drill still passes.
-- New `setguard2011.py` (13 checks): based_on sent; a new set learns its id; skipped online and at an offline sync; and the fallback for a database without the column.
+- New `setguard2012.py` (13 checks): based_on sent; a new set learns its id; skipped online and at an offline sync; and the fallback for a database without the column.
 - Render snapshot: rows now carry `data-sid` (re-baselined; the diff is only that attribute).
 
 Rollback (app): `release/v1.20.11`.

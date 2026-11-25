@@ -1,12 +1,12 @@
 # Woodhouse Lifts — Start Here (handoff for a new chat)
 
-**Current version: 1.20.11 (2026-11-25).** If you are a new chat picking this up: read this page first, then *Woodhouse Lifts — Release & Rollback Playbook* (how every change ships and how to undo it), *Woodhouse Lifts — Training Logic* (the full rules and evidence) and *Woodhouse Lifts — Changelog* (what changed, version by version). All three live in the Google Drive folder **Woodhouse Lifts**; older copies are in its **Archive — earlier versions** subfolder. The repo holds the same files under `docs/` and `CHANGELOG.md`, and the repo copy is the one that changes first.
+**Current version: 1.20.12 (2026-11-25).** If you are a new chat picking this up: read this page first, then *Woodhouse Lifts — Release & Rollback Playbook* (how every change ships and how to undo it), *Woodhouse Lifts — Training Logic* (the full rules and evidence) and *Woodhouse Lifts — Changelog* (what changed, version by version). All three live in the Google Drive folder **Woodhouse Lifts**; older copies are in its **Archive — earlier versions** subfolder. The repo holds the same files under `docs/` and `CHANGELOG.md`, and the repo copy is the one that changes first.
 
 ---
 
 ## 0. Status (2026-11-23)
 
-Live: **1.20.11** after this release (rollback points `release/v1.11.0` … `release/v1.20.10`). Database: migrations through `20261124010000_light_week_revisions` — check `supabase_migrations` in production before saying a feature is live. Security status and the sign-in review: `docs/SECURITY.md`. The app has no links to Google Drive; the training rules are the in-app page `#/logic` (from `docs/training-logic.md`). Body-area protection shipped in 1.14.0 (§2.2a of the training logic). Next: workout screen → home/library/mesos → install/offline/service worker (rehearse the kill switch first) → onboarding → code quality (module split, CI, linter, one version number, pinned supabase-js). Every release follows `docs/PLAYBOOK.md`; the release log is its §10. User-specific status (accounts, pending data fixes) lives only in the private Drive copy of this page, never in this public repo.
+Live: **1.20.12** after this release (rollback points `release/v1.11.0` … `release/v1.20.11`). Database: migrations through `20261124010000_light_week_revisions` — check `supabase_migrations` in production before saying a feature is live. Security status and the sign-in review: `docs/SECURITY.md`. The app has no links to Google Drive; the training rules are the in-app page `#/logic` (from `docs/training-logic.md`). Body-area protection shipped in 1.14.0 (§2.2a of the training logic). Next: workout screen → home/library/mesos → install/offline/service worker (rehearse the kill switch first) → onboarding → code quality (module split, CI, linter, one version number, pinned supabase-js). Every release follows `docs/PLAYBOOK.md`; the release log is its §10. User-specific status (accounts, pending data fixes) lives only in the private Drive copy of this page, never in this public repo.
 
 ## 1. What it is
 
@@ -38,8 +38,8 @@ No build step. Plain ES modules served by GitHub Pages.
 
 | File | What's in it |
 |---|---|
-| `index.html` | Shell. Loads `styles.css?v=N` and `app.js?v=N` — **bump `?v=` on every release** (now `v=62`; one number for every file, including `theme.js` and `screens/*.js` — see PLAYBOOK step 4). |
-| `app.js` (~1,900 lines) | UI + data access. Hash router (`#/`, `#/workout/<dayId>`, `#/workout/<id>/view`, `#/meso/<id>`, `#/new`, `#/templates`, `#/cardio`, settings…). Supabase client, offline save queue, workout logger, recovery gate, builder, home dashboard and drill-downs. `APP_VERSION` constant at the top (now `'1.20.11'`) must match the changelog. |
+| `index.html` | Shell. Loads `styles.css?v=N` and `app.js?v=N` — **bump `?v=` on every release** (now `v=63`; one number for every file, including `theme.js` and `screens/*.js` — see PLAYBOOK step 4). |
+| `app.js` (~1,900 lines) | UI + data access. Hash router (`#/`, `#/workout/<dayId>`, `#/workout/<id>/view`, `#/meso/<id>`, `#/new`, `#/templates`, `#/cardio`, settings…). Supabase client, offline save queue, workout logger, recovery gate, builder, home dashboard and drill-downs. `APP_VERSION` constant at the top (now `'1.20.12'`) must match the changelog. |
 | `logic.js` (~1,250 lines) | **Pure training engine, no I/O.** Everything testable lives here (see §5). |
 | `app.js` (~480 lines) | Since 1.20.3 only the core: DOM handles, helpers (`$`, `go`, `check`, `setHeader`, ratings), per-lift insights, the router + auth, shared queries and analytics. Ends with `route();`. |
 | `screens/home.js` | Home, More (explore), post-workout summary, Send feedback, Home drill-downs (`#/stats/…`). |

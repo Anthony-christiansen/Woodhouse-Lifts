@@ -1,4 +1,4 @@
-# v1.20.11 (audit 1.20.8 F02, other-device part) — each set save says which server row it was edited from (based_on);
+# v1.20.12 (audit 1.20.8 F02, other-device part) — each set save says which server row it was edited from (based_on);
 # a save the server's delete guard skips (the set was removed on another phone) is shown in Settings → Sync problems,
 # never silently lost or retried; and the app still saves normally against a database without the new column.
 import os
@@ -81,6 +81,6 @@ async def main():
     srv.terminate()
     fails=[r for r in R if r[0]=='FAIL']
     for r in R: print(*r)
-    print(f'SETGUARD2011 {"PASSED" if not fails else "FAILED"} ({len(R)-len(fails)}/{len(R)})')
+    print(f'SETGUARD2012 {"PASSED" if not fails else "FAILED"} ({len(R)-len(fails)}/{len(R)})')
     sys.exit(1 if fails else 0)
 asyncio.run(main())

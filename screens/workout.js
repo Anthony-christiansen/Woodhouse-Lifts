@@ -1,11 +1,11 @@
 // Woodhouse Lifts — recovery follow-ups (doc §3, §5), workout logger, cardio (moved out of app.js in 1.20.3, code unchanged).
-import * as L from '../logic.js?v=62';
-import { ic } from '../icons.js?v=62';
-import { esc, fmtNum, fmt, today, dayName, weekStart, isoDay } from '../format.js?v=62';
-import { toast, openSheet, closeSheet } from '../ui.js?v=62';
-import { profile, setBuilder } from '../state.js?v=62';
-import { sb, deleteSet, durableWrite, flushQueue, isNetErr, lastSent, overlayDays, pendingOps, qLoad, qStore, saveSet, setKey, storageAtRisk, syncBadge } from '../net.js?v=62';
-import { $, $$, OPTIONAL, RATINGS, W, activeMeso, app, bwD, cardioItems, cardioSince, check, effortShort, effortText, fetchAll, go, haptic, liftInsights, loadExercises, loadPrefs, mesoDays, needKeys, openDays, rateKeys, segHtml, setHeader, sheet, slipFor, statusPill, toLb, unit, warnList, workoutCardioSince } from '../app.js?v=62';
+import * as L from '../logic.js?v=63';
+import { ic } from '../icons.js?v=63';
+import { esc, fmtNum, fmt, today, dayName, weekStart, isoDay } from '../format.js?v=63';
+import { toast, openSheet, closeSheet } from '../ui.js?v=63';
+import { profile, setBuilder } from '../state.js?v=63';
+import { sb, deleteSet, durableWrite, flushQueue, isNetErr, lastSent, overlayDays, pendingOps, qLoad, qStore, saveSet, setKey, storageAtRisk, syncBadge } from '../net.js?v=63';
+import { $, $$, OPTIONAL, RATINGS, W, activeMeso, app, bwD, cardioItems, cardioSince, check, effortShort, effortText, fetchAll, go, haptic, liftInsights, loadExercises, loadPrefs, mesoDays, needKeys, openDays, rateKeys, segHtml, setHeader, sheet, slipFor, statusPill, toLb, unit, warnList, workoutCardioSince } from '../app.js?v=63';
 
 // ---------- recovery follow-ups (doc §3, §5) ----------
 export async function pendingRecovery(day, muscles) {
@@ -542,9 +542,9 @@ export async function renderWorkout(dayId, mode) {
         // Actual RIR is recorded only when you give it (set 1, optional). Otherwise null = "assumed on target",
         // and every calculation falls back to the prescribed RIR (review #2: don't present the target as measured).
         reps, rir: +row.dataset.idx === 1 && row.closest('[data-we]')?.querySelector('[data-rir1]')?.value !== '' && row.closest('[data-we]')?.querySelector('[data-rir1]') ? Number(row.closest('[data-we]').querySelector('[data-rir1]').value) : null,
-        completed_at: done ? (row.dataset.at || new Date().toISOString()) : null, based_on: row.dataset.sid || null };   // v1.20.11: the server row this edit came from
+        completed_at: done ? (row.dataset.at || new Date().toISOString()) : null, based_on: row.dataset.sid || null };   // v1.20.12: the server row this edit came from
     };
-    const sigOf = p => JSON.stringify({ ...p, based_on: undefined });   // v1.20.11: learning the row id isn't a change
+    const sigOf = p => JSON.stringify({ ...p, based_on: undefined });   // v1.20.12: learning the row id isn't a change
     if (row.classList.contains('done')) row.dataset.saved = sigOf(payloadFor(true)); // what the server already has
     const save = async markDone => {
       const wIn = row.querySelector('[data-f="weight"]'), rIn = row.querySelector('[data-f="reps"]');

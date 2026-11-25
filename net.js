@@ -1,8 +1,8 @@
 // Woodhouse Lifts — Supabase client and the offline-safe sync queue (moved out of app.js in 1.20.2, unchanged).
 // Owns the signed-in session the queue keys on; app.js sets it with setSession() and reads it (live binding).
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.2/+esm';
-import * as L from './logic.js?v=62';
-import { toast } from './ui.js?v=62';
+import * as L from './logic.js?v=63';
+import { toast } from './ui.js?v=63';
 
 // Public by design: access is enforced by row-level security in the database.
 export const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -75,7 +75,7 @@ export function inOrder(key, fn) {           // runs fn after every earlier writ
 //  - It leaves a tombstone on the phone (shared by every tab of the app, per account). Any copy of that set edited
 //    BEFORE the delete is dropped instead of sent; editing the set again afterwards (newer version) is sent as normal.
 //  Not covered (needs a server-side guard, see the session log): a stale offline copy on ANOTHER phone.
-// v1.20.11: the server row each set on screen came from, so a save can say what it was edited from (sets.based_on).
+// v1.20.12: the server row each set on screen came from, so a save can say what it was edited from (sets.based_on).
 export const setIds = new Map();
 export const rememberSetId = (k, id) => { setIds.set(k, id); document.querySelectorAll(`.set[data-key="${CSS.escape(k)}"]`).forEach(r => { r.dataset.sid = id; }); };
 const tombKey = () => session?.user?.id ? `wl_set_tombstones_v1:${session.user.id}` : null;
@@ -108,7 +108,7 @@ export function sendQueued(k, qk, uid) {
       const q = qLoadFor(qk); if (sameVersion(q[k], cur)) { delete q[k]; qStoreFor(qk, q); } return 'gone';
     }
     if (session?.user?.id !== uid) return 'queued';                  // account switched: leave it for its owner
-    // v1.20.11 (audit 1.20.8 F02): ask for the row back. No row = the server's delete guard skipped it, because this copy
+    // v1.20.12 (audit 1.20.8 F02): ask for the row back. No row = the server's delete guard skipped it, because this copy
     // was edited from a set that has since been removed (on another phone). That's a conflict, shown — never retried.
     let { data, error } = await sb.from('sets').upsert(stripLocal(cur), { onConflict: 'workout_exercise_id,set_index' }).select('id');
     if (error && /based_on/.test(error.message || '')) {   // database not upgraded yet: send without it
