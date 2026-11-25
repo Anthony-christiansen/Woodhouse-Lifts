@@ -1,8 +1,8 @@
 // Woodhouse Lifts — Supabase client and the offline-safe sync queue (moved out of app.js in 1.20.2, unchanged).
 // Owns the signed-in session the queue keys on; app.js sets it with setSession() and reads it (live binding).
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.2/+esm';
-import * as L from './logic.js?v=59';
-import { toast } from './ui.js?v=59';
+import * as L from './logic.js?v=60';
+import { toast } from './ui.js?v=60';
 
 // Public by design: access is enforced by row-level security in the database.
 export const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -69,11 +69,41 @@ export function inOrder(key, fn) {           // runs fn after every earlier writ
   next.finally(() => { if (setChains.get(key) === next) setChains.delete(key); }).catch(() => {});
   return next;
 }
+// v1.20.9 (audit 1.20.4 finding 2): a removed set must stay removed.
+//  - deleteSet runs in the SAME per-set chain as saves, so it always lands after any save already on its way
+//    (a sync after reconnecting used to be able to re-create the set right after "− set").
+//  - It leaves a tombstone on the phone (shared by every tab of the app, per account). Any copy of that set edited
+//    BEFORE the delete is dropped instead of sent; editing the set again afterwards (newer version) is sent as normal.
+//  Not covered (needs a server-side guard, see the session log): a stale offline copy on ANOTHER phone.
+const tombKey = () => session?.user?.id ? `wl_set_tombstones_v1:${session.user.id}` : null;
+const verTime = v => parseInt(String(v || '').split('.')[0], 36) || 0;   // newVer() starts with Date.now() in base 36
+export const tombstones = () => { const k = tombKey(); if (!k) return {}; try { return JSON.parse(lsGet(k) || '{}'); } catch { return {}; } };
+const setTomb = (key, at) => { const k = tombKey(); if (!k) return; const t = tombstones(), now = Date.now();
+  for (const [x, ts] of Object.entries(t)) if (now - ts > 14 * 864e5) delete t[x];   // old ones expire after 2 weeks
+  if (at == null) delete t[key]; else t[key] = at; lsSet(k, JSON.stringify(t)); };
+export function deleteSet(workoutExerciseId, setIndex) {
+  const qk = qKey(), k = workoutExerciseId + ':' + setIndex;
+  return inOrder(qk + '|' + k, async () => {
+    const q = qLoadFor(qk), queued = q[k]; delete q[k]; qStoreFor(qk, q); lastSent.delete(k);
+    const at = Date.now(); setTomb(k, at);
+    const { error } = await sb.from('sets').delete().eq('workout_exercise_id', workoutExerciseId).eq('set_index', setIndex);
+    if (error) {   // not deleted: put back what was waiting and lift the tombstone
+      setTomb(k, null);
+      if (queued) { const q2 = qLoadFor(qk); if (!q2[k]) { q2[k] = queued; qStoreFor(qk, q2); } }
+    }
+    syncBadge();
+    return error || null;
+  });
+}
 // Sends the phone copy of one set (whatever is newest when its turn comes). Result: 'saved' | 'queued' | 'failed' | 'gone'.
 export function sendQueued(k, qk, uid) {
   return inOrder(qk + '|' + k, async () => {
     const cur = qLoadFor(qk)[k];
     if (!cur) return 'gone';                                         // removed meanwhile (set deleted)
+    const dead = tombstones()[k];
+    if (dead && verTime(cur._v) <= dead) {                           // edited before it was removed (another tab): drop it
+      const q = qLoadFor(qk); if (sameVersion(q[k], cur)) { delete q[k]; qStoreFor(qk, q); } return 'gone';
+    }
     if (session?.user?.id !== uid) return 'queued';                  // account switched: leave it for its owner
     const { error } = await sb.from('sets').upsert(stripLocal(cur), { onConflict: 'workout_exercise_id,set_index' });
     if (session?.user?.id !== uid) return 'queued';

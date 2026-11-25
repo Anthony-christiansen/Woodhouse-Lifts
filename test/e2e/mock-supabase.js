@@ -58,11 +58,12 @@ function builder(table) {
       if (window.__OFFLINE) return Promise.resolve({ data: null, error: { message: 'TypeError: Failed to fetch' } }).then(res, rej);   // test hook: no signal at all
       if (payload && window.__FAIL_NET) return Promise.resolve({ data: null, error: { message: 'TypeError: Failed to fetch' } }).then(res, rej);
       if (payload && window.__REFUSE && window.__REFUSE(table, payload)) return Promise.resolve({ data: null, error: { code: '23514', message: 'new row violates check constraint "sets_reps_check"' } }).then(res, rej);   // test hook: server refuses (permanent)
-      if (del) { (window.__deletes = window.__deletes || []).push([table, eqs]); return Promise.resolve({ data: null, error: null }).then(res, rej); }
+      if (del) { if (window.__OFFLINE) return Promise.resolve({ data: null, error: { message: 'TypeError: Failed to fetch' } }).then(res, rej);
+        (window.__deletes = window.__deletes || []).push([table, eqs]); (window.__ops = window.__ops || []).push(['delete', table, eqs]); return Promise.resolve({ data: null, error: null }).then(res, rej); }   // __ops: what reached the 'server', in order
       if (table === 'app_feedback' && window.__NO_FEEDBACK) return Promise.resolve({ data: null, error: { message: 'relation "public.app_feedback" does not exist' } }).then(res, rej);
       if (payload) { (window.__writes = window.__writes || []).push([table, payload]);
         const ms = window.__DELAY ? window.__DELAY(table, payload) : 0;   // test hook: slow / out-of-order responses
-        const land = () => { (window.__landed = window.__landed || []).push([table, payload]); return { data: payload, error: null }; };
+        const land = () => { (window.__landed = window.__landed || []).push([table, payload]); (window.__ops = window.__ops || []).push(['write', table, payload]); return { data: payload, error: null }; };
         return (ms ? new Promise(r => setTimeout(r, ms)).then(land) : Promise.resolve().then(land)).then(res, rej); }
       if (table === 'workout_days' && single) data = data.find(d => d.id === (location.hash.split('/')[2] || 'd21')) || data[4];
       else if (single || maybe) data = data[0] ?? null;
