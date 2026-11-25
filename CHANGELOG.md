@@ -12,6 +12,17 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## Ops — 2026-11-25 · Light-week requests must carry the meso's revision (audit 1.20.4, finding 3)
+
+- `start_light_week` and `undo_light_week` accepted a missing revision and then skipped the "did this meso change since the preview?" check. The app always sends the revision (since 1.17.1), so app users were never affected, but a direct call or an old copy of the code could skip the check.
+- Now the revision is required: it has no default, and null is refused ("revision is required"). Nothing else in the functions changed.
+- Migration `20261125000000_light_week_revision_required`: drop and re-create both functions in one transaction, with the same grants. **Applied to production 2026-11-25 15:3x UTC with the owner's explicit approval**, after a fresh backup snapshot. Verified: both signatures require the revision, `authenticated` can execute and `anon` can't, and a rolled-back test call refuses a null revision (22023). App unchanged.
+- Tests:
+  - DB: leaving the revision out fails; null is refused for start and undo; every earlier light-week check still passes.
+  - Real PostgreSQL: the 4 races still pass.
+  - New `test/rollback.lw.check.mjs` (in CI): migrate → rollback → re-apply on a fresh database, with grants checked each time.
+- **Rollback:** `supabase/ops/rollback_20261125000000_light_week_revision_required.sql`.
+
 ## 1.20.10 — 2026-11-24 · A change that couldn't be applied is never counted as saved (audit 1.20.8, F01)
 
 **What could go wrong (reproduced on 1.20.8):**
