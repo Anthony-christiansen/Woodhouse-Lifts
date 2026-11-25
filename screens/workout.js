@@ -1,11 +1,11 @@
 // Woodhouse Lifts — recovery follow-ups (doc §3, §5), workout logger, cardio (moved out of app.js in 1.20.3, code unchanged).
-import * as L from '../logic.js?v=61';
-import { ic } from '../icons.js?v=61';
-import { esc, fmtNum, fmt, today, dayName, weekStart, isoDay } from '../format.js?v=61';
-import { toast, openSheet, closeSheet } from '../ui.js?v=61';
-import { profile, setBuilder } from '../state.js?v=61';
-import { sb, deleteSet, durableWrite, flushQueue, isNetErr, lastSent, overlayDays, pendingOps, qLoad, qStore, saveSet, setKey, storageAtRisk, syncBadge } from '../net.js?v=61';
-import { $, $$, OPTIONAL, RATINGS, W, activeMeso, app, bwD, cardioItems, cardioSince, check, effortShort, effortText, fetchAll, go, haptic, liftInsights, loadExercises, loadPrefs, mesoDays, needKeys, openDays, rateKeys, segHtml, setHeader, sheet, slipFor, statusPill, toLb, unit, warnList, workoutCardioSince } from '../app.js?v=61';
+import * as L from '../logic.js?v=62';
+import { ic } from '../icons.js?v=62';
+import { esc, fmtNum, fmt, today, dayName, weekStart, isoDay } from '../format.js?v=62';
+import { toast, openSheet, closeSheet } from '../ui.js?v=62';
+import { profile, setBuilder } from '../state.js?v=62';
+import { sb, deleteSet, durableWrite, flushQueue, isNetErr, lastSent, overlayDays, pendingOps, qLoad, qStore, saveSet, setKey, storageAtRisk, syncBadge } from '../net.js?v=62';
+import { $, $$, OPTIONAL, RATINGS, W, activeMeso, app, bwD, cardioItems, cardioSince, check, effortShort, effortText, fetchAll, go, haptic, liftInsights, loadExercises, loadPrefs, mesoDays, needKeys, openDays, rateKeys, segHtml, setHeader, sheet, slipFor, statusPill, toLb, unit, warnList, workoutCardioSince } from '../app.js?v=62';
 
 // ---------- recovery follow-ups (doc §3, §5) ----------
 export async function pendingRecovery(day, muscles) {
@@ -356,7 +356,10 @@ export async function renderWorkout(dayId, mode) {
   // an empty list counted as all done, so a save landing after you left the workout asked you to rate every muscle.
   const muscleComplete = m => { const rows = $$(`[data-muscle="${CSS.escape(m)}"] .set`); return rows.length > 0 && rows.every(r => r.classList.contains('done')); };
   // ...and rating pop-ups only open while THIS workout is the screen you're on.
-  const onThisWorkout = () => (location.hash.split('/')[2] || '') === String(dayId) && wes.some(w => app.querySelector(`[data-we="${w.id}"]`));
+  // v1.20.11 hotfix: the Workout tab opens the workout in progress at "#/workout" (no id) — that counts too. 1.20.7 only
+  // accepted "#/workout/<id>", so opened from the tab, rating pop-ups never appeared (owner report 2026-11-25).
+  const onThisWorkout = () => { const [, page, id] = location.hash.split('/');
+    return page === 'workout' && (!id || id === String(dayId)) && wes.some(w => app.querySelector(`[data-we="${w.id}"]`)); };
   // Progression indicator per exercise: best estimated strength today vs last time (doc §1.7).
   function exerciseTrend(we) {
     const card = app.querySelector(`[data-we="${we.id}"]`); if (!card) return null;

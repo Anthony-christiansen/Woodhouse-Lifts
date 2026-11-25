@@ -59,6 +59,18 @@ async def main():
         ok('workout not finished while a rating is missing', '#/summary' not in pg.url)
         await pg.context.close()
 
+        # 3) v1.20.11 hotfix: opened from the Workout tab ("#/workout", no id), the rating pop-up still opens
+        ctx=await br.new_context(viewport={'width':390,'height':844},is_mobile=True,has_touch=True)
+        await ctx.route('https://cdn.jsdelivr.net/**', lambda r: r.fulfill(status=200, content_type='application/javascript', body=MOCK))
+        pg=await ctx.new_page(); await pg.add_init_script('window.__FB = []'); pg.on('pageerror', lambda e: errs.append(str(e)))
+        await pg.goto(B+'#/workout'); await pg.wait_for_timeout(1300)
+        await finish_last_set(pg); await pg.wait_for_timeout(900)
+        ok('opened from the Workout tab: finishing an exercise asks for its rating', await sheet_open(pg)==1, pg.url)
+        # and a muscle's rating after its last exercise, from the tab too
+        if await pg.locator('#sheet #allNormal').count(): await pg.click('#sheet #allNormal'); await pg.wait_for_timeout(500)
+        ok('from the tab: the rating saves and the pop-up closes', await sheet_open(pg)==0)
+        await ctx.close()
+
         ok('no page errors', not errs, errs[:3])
         await br.close()
     srv.terminate()

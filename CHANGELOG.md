@@ -12,6 +12,20 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.20.11 — 2026-11-25 · Fix: rating pop-ups didn't appear when the workout was opened from the Workout tab (owner report)
+
+**What happened:** "Feedback stopped showing up to do."
+- The 1.20.7 fix for the stuck pop-up allowed rating pop-ups only when the address named the workout (`#/workout/<id>`).
+- The **Workout tab** opens the workout in progress at `#/workout`, with no id, so from the tab no rating pop-up ever opened.
+- The owner's Week 4 · Day 4 workout had 8 sets logged and 0 ratings.
+
+**Fixed:**
+- `#/workout` counts as being on that workout.
+- The other 1.20.7 protections stay: no pop-ups on other screens, a muscle with no sets on screen isn't "finished", and "Not now" still works.
+- Ratings missed earlier aren't lost: reopening the workout asks for finished exercises, and Finish asks for anything left.
+
+**Tests:** `stuck207.py` now also opens the workout from the Workout tab (11 checks), which fails on 1.20.10. The browser tests had always opened workouts by id, which is how this was missed. Rollback: `release/v1.20.10`.
+
 ## Ops — 2026-11-25 · Light-week requests must carry the meso's revision (audit 1.20.4, finding 3)
 
 - `start_light_week` and `undo_light_week` accepted a missing revision and then skipped the "did this meso change since the preview?" check. The app always sends the revision (since 1.17.1), so app users were never affected, but a direct call or an old copy of the code could skip the check.
