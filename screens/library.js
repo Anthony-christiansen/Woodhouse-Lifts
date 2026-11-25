@@ -1,14 +1,14 @@
 // Woodhouse Lifts — Learn, exercise library, injuries & sore spots (shared by Settings and the meso builder), settings (moved out of app.js in 1.20.3, code unchanged).
-import * as L from '../logic.js?v=58';
-import * as LEARN from '../learn.js?v=58';
-import * as MD from '../md.js?v=58';
-import { ic } from '../icons.js?v=58';
-import { esc, fmt, dayName, isoDay } from '../format.js?v=58';
-import { toast } from '../ui.js?v=58';
-import { profile, builder, setProfile, setExCache, setBuilder } from '../state.js?v=58';
-import { sb, session, isNetErr, loadIncrements } from '../net.js?v=58';
-import { $, $$, APP_VERSION, CHANGELOG_URL, W, activeMeso, app, bwD, check, fetchAll, go, liftInsights, loadExercises, loadPrefs, mesoDays, openDays, renderNewPassword, setHeader, setPref, setTheme, statusPill, themePref, toLb, unit } from '../app.js?v=58';
-import { builderFromTemplate, freshBuilder, onceNote } from '../screens/mesos.js?v=58';
+import * as L from '../logic.js?v=59';
+import * as LEARN from '../learn.js?v=59';
+import * as MD from '../md.js?v=59';
+import { ic } from '../icons.js?v=59';
+import { esc, fmt, dayName, isoDay } from '../format.js?v=59';
+import { toast } from '../ui.js?v=59';
+import { profile, builder, setProfile, setExCache, setBuilder } from '../state.js?v=59';
+import { sb, session, isNetErr, loadIncrements, qFailed, clearFailed } from '../net.js?v=59';
+import { $, $$, APP_VERSION, CHANGELOG_URL, W, activeMeso, app, bwD, check, fetchAll, go, liftInsights, loadExercises, loadPrefs, mesoDays, openDays, renderNewPassword, setHeader, setPref, setTheme, statusPill, themePref, toLb, unit } from '../app.js?v=59';
+import { builderFromTemplate, freshBuilder, onceNote } from '../screens/mesos.js?v=59';
 
 // ---------- Learn ----------
 // v1.11.4 — "How it works": the full training rules and evidence, rendered from docs/training-logic.md (same origin,
@@ -335,7 +335,14 @@ export async function renderSettings() {
   const lib = await loadExercises();
   const eq = profile?.equipment; // null = everything
   const areas = myAreas();
-  app.innerHTML = `<div class="card">
+  // v1.20.8 (audit finding 1): saves the server refused are kept aside on this phone — show them, with what to do.
+  const refused = qFailed();
+  const refusedHtml = !refused.length ? '' : `<div class="card warn" id="syncProblems"><h3>${ic('alert')} Sync problems</h3>
+      <p class="small">${refused.length} change${refused.length === 1 ? ' was' : 's were'} refused by the server, so ${refused.length === 1 ? 'it isn’t' : 'they aren’t'} in your history. ${refused.length === 1 ? 'It’s' : 'They’re'} kept here so nothing is lost silently. If ${refused.length === 1 ? 'it matters' : 'one matters'}, re-enter it in that workout, then clear the list.</p>
+      <ul class="small">${refused.slice().reverse().map(f => `<li>${f.op ? `A ${f.op.table === 'workout_days' ? 'finish / skip' : f.op.table === 'muscle_feedback' || f.op.table === 'exercise_feedback' ? 'rating' : 'change'}` : `Set ${f.set_index ?? '?'}${f.reps != null ? `: ${f.weight != null ? `${fmt(W(f.weight))} ${unit()} × ` : ''}${f.reps} reps` : ''}`}
+        <span class="muted tiny">· ${esc(String(f._at || '').slice(0, 10))} · ${esc(f._error || 'refused')}</span></li>`).join('')}</ul>
+      <button class="block" id="clearFailed">Clear the list</button></div>`;
+  app.innerHTML = `${refusedHtml}<div class="card">
       <div class="muted small">Signed in as</div><div>${esc(session.user.email)}</div>
       <label for="name">Name</label><input id="name" autocomplete="name" value="${esc(profile?.display_name || '')}">
       <div class="row"><div class="grow"><label for="unit">Units</label><select id="unit"><option ${unit() === 'lb' ? 'selected' : ''}>lb</option><option ${unit() === 'kg' ? 'selected' : ''}>kg</option></select></div>
@@ -373,6 +380,7 @@ export async function renderSettings() {
     <button class="block" id="out">Sign out</button>
     <p class="muted small center">Install: Safari → Share → Add to Home Screen.</p>
     <p class="muted tiny center">Woodhouse Lifts ${APP_VERSION} · <a href="${CHANGELOG_URL}" target="_blank" rel="noopener">What’s new</a></p>`;
+  $('#clearFailed') && ($('#clearFailed').onclick = () => { if (!confirm('Clear the list of refused changes? Re-enter anything you still need first.')) return; clearFailed(); renderSettings(); });
   $('#save').onclick = async () => {
     const bw = $('#bw').value;
     // The bodyweight box is in the unit shown when the page opened; convert with that unit, then switch.

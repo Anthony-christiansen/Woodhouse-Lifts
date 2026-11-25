@@ -1,8 +1,8 @@
 // Woodhouse Lifts — Supabase client and the offline-safe sync queue (moved out of app.js in 1.20.2, unchanged).
 // Owns the signed-in session the queue keys on; app.js sets it with setSession() and reads it (live binding).
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.2/+esm';
-import * as L from './logic.js?v=58';
-import { toast } from './ui.js?v=58';
+import * as L from './logic.js?v=59';
+import { toast } from './ui.js?v=59';
 
 // Public by design: access is enforced by row-level security in the database.
 export const sb = createClient('https://dnknmtzcmmdepwheagmq.supabase.co', 'sb_publishable_UANLQGHztac0fMLcBeUg4g_sFeKc88g',
@@ -31,7 +31,10 @@ export const qStore = q => { const k = qKey(); if (!k) return; lsSet(k, JSON.str
 // Sets the server rejected for good (not a network problem) are kept here instead of being thrown away.
 export const qFailedKey = () => session?.user?.id ? `${QKEY}:failed:${session.user.id}` : null;
 export const qFailed = () => { const k = qFailedKey(); try { return k ? JSON.parse(lsGet(k) || '[]') : []; } catch { return []; } };
-export const qAddFailed = (p, msg) => { const k = qFailedKey(); if (!k) return; lsSet(k, JSON.stringify([...qFailed(), { ...p, _error: msg, _at: new Date().toISOString() }].slice(-50))); };
+// v1.20.8: a refused set is listed once (its latest values) — a set refused on change and again on ✓ isn't two problems.
+export const qAddFailed = (p, msg) => { const k = qFailedKey(); if (!k) return;
+  const same = f => !p.op && !f.op && f.workout_exercise_id === p.workout_exercise_id && f.set_index === p.set_index;
+  lsSet(k, JSON.stringify([...qFailed().filter(f => !same(f)), { ...p, _error: msg, _at: new Date().toISOString() }].slice(-50))); };
 // One-time move of the old shared queue (before 1.8.0) into the signed-in account's queue; the database's row-level
 // security rejects anything that isn't this user's, and those land in the failed list rather than being lost.
 export function qMigrateLegacy() {
@@ -115,10 +118,29 @@ export function syncBadge() {
   document.body.classList.toggle('has-sync', !!n);   // v1.12.3: room at the bottom so the badge never covers a button
   if (!n) { b?.remove(); return; }
   if (!b) { b = document.createElement('button'); b.id = 'syncBadge'; b.className = 'sync-badge'; b.onclick = () => syncAll(); document.body.appendChild(b); }
-  b.textContent = `⟳ ${[sets ? `${sets} set${sets > 1 ? 's' : ''}` : '', ops ? `${ops} change${ops > 1 ? 's' : ''}` : ''].filter(Boolean).join(' + ')} waiting to sync${storageAtRisk ? ' — NOT saved on this phone, keep the app open' : ''} — tap to retry`;
-  b.classList.toggle('risk', storageAtRisk);
+  const memory = saveState().state === 'memory';   // v1.20.8: the same answer the summary gives
+  b.textContent = `⟳ ${[sets ? `${sets} set${sets > 1 ? 's' : ''}` : '', ops ? `${ops} change${ops > 1 ? 's' : ''}` : ''].filter(Boolean).join(' + ')} waiting to sync${memory ? ' — NOT saved on this phone, keep the app open' : ''} — tap to retry`;
+  b.classList.toggle('risk', memory);
   b.setAttribute('aria-live', 'polite');
 }
+// v1.20.8 (audit 1.20.4 finding 1): ONE answer to "is my workout safe?", used by the summary, the sync badge and
+// Settings, so they can never disagree. States, most urgent first:
+//   refused  — the server refused something since `since` (kept aside; Settings → Sync problems lists it)
+//   memory   — waiting to sync AND this phone wouldn't store the copy: closing the app loses it
+//   saving   — a save is on its way right now (not yet confirmed)
+//   device   — waiting to sync, stored on this phone; it goes out by itself
+//   synced   — nothing waiting, nothing in flight
+export function saveState({ since = null } = {}) {
+  const qk = qKey(), ok = oKey();
+  const setKeys = Object.keys(qLoad()), ops = oLoad().length;
+  const inFlight = setKeys.filter(k => setChains.has(qk + '|' + k)).length + (opsFlushing ? 1 : 0);
+  const waiting = setKeys.length + ops;
+  const inMemory = waiting > 0 && ((qk && memStore.has(qk) && setKeys.length > 0) || (ok && memStore.has(ok) && ops > 0));
+  const refused = since ? qFailed().filter(f => f._at >= since).length : 0;
+  const state = refused ? 'refused' : inMemory ? 'memory' : inFlight ? 'saving' : waiting ? 'device' : 'synced';
+  return { state, sets: setKeys.length, ops, waiting, inFlight, refused };
+}
+export const clearFailed = () => { const k = qFailedKey(); if (k) lsSet(k, '[]'); };
 // ---------- durable writes for ratings and finishing a workout (v1.12.3, outside audit finding 3) ----------
 // Each change is kept on the phone (in order) before it is sent, then sent one at a time, oldest first, after any
 // waiting sets. Every change is idempotent (an upsert on its natural key, or an update to fixed values), so a retry

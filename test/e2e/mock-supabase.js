@@ -57,6 +57,7 @@ function builder(table) {
       if (table === 'workout_exercises' && inIds && inIds.some(id => /s\d+$/.test(id))) data = inIds.map(id => ({ id, exercises: { load_type: 'weighted' }, workout_days: { week: +id.match(/s(\d+)$/)[1] + 1, mesocycle_id: 'm0', mesocycles: { name: 'Test Meso', weeks: 8 } } }));
       if (window.__OFFLINE) return Promise.resolve({ data: null, error: { message: 'TypeError: Failed to fetch' } }).then(res, rej);   // test hook: no signal at all
       if (payload && window.__FAIL_NET) return Promise.resolve({ data: null, error: { message: 'TypeError: Failed to fetch' } }).then(res, rej);
+      if (payload && window.__REFUSE && window.__REFUSE(table, payload)) return Promise.resolve({ data: null, error: { code: '23514', message: 'new row violates check constraint "sets_reps_check"' } }).then(res, rej);   // test hook: server refuses (permanent)
       if (del) { (window.__deletes = window.__deletes || []).push([table, eqs]); return Promise.resolve({ data: null, error: null }).then(res, rej); }
       if (table === 'app_feedback' && window.__NO_FEEDBACK) return Promise.resolve({ data: null, error: { message: 'relation "public.app_feedback" does not exist' } }).then(res, rej);
       if (payload) { (window.__writes = window.__writes || []).push([table, payload]);

@@ -12,6 +12,27 @@ Versions follow **MAJOR.MINOR.PATCH**:
 
 ---
 
+## 1.20.8 — 2026-11-24 · One honest answer to "is my workout saved?" (audit 1.20.4, finding 1)
+
+**For people using the app**
+- **The summary's save line now has five honest states**, and it updates by itself while you look at it:
+  - **Saved and synced.**
+  - **Saving… a copy is already on this phone.**
+  - **Saved on this phone:** it syncs by itself when you're back online.
+  - **Not saved on this phone yet:** the phone wouldn't keep an offline copy (storage full or blocked). Keep the app open until it says synced.
+  - **Refused by the server:** kept aside on this phone, not lost, with a link to fix it.
+- Before, it said "Saved on this phone" even when the copy was only in memory, and it never mentioned refused saves.
+- **The sync badge gives the same answer** as the summary, because both come from one place.
+- **Settings → Sync problems** (shown only when there are some) lists each refused change with the server's reason. It tells you to re-enter anything that matters, and has **Clear the list**. Before, refused saves went to a hidden list nothing showed.
+- A set refused twice (on change and on ✓) is listed once, with its latest values.
+- Long pop-up messages wrap in a rounded box instead of a tall oval.
+
+**Underneath**
+- `net.js`: `saveState({ since })` gives refused › memory › saving › device › synced from the per-account queues, the in-flight chains and the refused list. Also `clearFailed()`. `qAddFailed` keeps one entry per set.
+- The summary stores `since` (the workout's start), so an old refusal doesn't colour today's summary.
+- Tests: `savestate208.py` (13 checks) covers synced, in flight then landed, offline on the phone, a quota-blocked phone offline (summary and badge) then back online, refused with Settings and clear, and old refusals ignored. The mock gained a `__REFUSE` hook.
+- Rollback: `release/v1.20.7`. No database change.
+
 ## 1.20.7 — 2026-11-24 · Fix: a rating pop-up could get stuck (owner report)
 
 **What happened:** "when providing feedback live the feedback pop-up got stuck — I had to exit and reopen the app."
