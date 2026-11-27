@@ -10,7 +10,7 @@ const days = []; for (let w = 1; w <= 5; w++) for (let d = 1; d <= 4; d++) days.
   started_at: w === 1 ? '2026-11-10' : null, completed_at: w === 1 ? '2026-11-10T18:00:00Z' : null, skipped_at: null });
 const now = new Date().toISOString();
 const wes = [
-  { id: 'w1', exercise_id: 'e1', target_sets: 3, target_rir: 2, position: 1, flag: null, exercises: lib[0], sets: [{ set_index: 1, weight: 70, reps: 11, rir: 2, completed_at: now }, { set_index: 2, weight: 70, reps: 10, rir: 2, completed_at: now }] },
+  { id: 'w1', exercise_id: 'e1', target_sets: 3, target_rir: 2, position: 1, flag: null, exercises: lib[0], sets: [{ id: 's1', set_index: 1, weight: 70, reps: 11, rir: 2, completed_at: now }, { id: 's2', set_index: 2, weight: 70, reps: 10, rir: 2, completed_at: now }] },
   { id: 'w2', exercise_id: 'e4', target_sets: 3, target_rir: 2, position: 2, flag: 'Joint pain — consider swapping this exercise', exercises: lib[3], sets: [] },
   { id: 'w3', exercise_id: 'e5', target_sets: 4, target_rir: 2, position: 3, flag: null, exercises: lib[4], sets: [] },
   { id: 'w4', exercise_id: 'e17', target_sets: 2, target_rir: 2, position: 4, flag: null, exercises: lib[16], sets: [] },
@@ -62,11 +62,15 @@ function builder(table) {
       if (del) { if (window.__OFFLINE) return Promise.resolve({ data: null, error: { message: 'TypeError: Failed to fetch' } }).then(res, rej);
         (window.__deletes = window.__deletes || []).push([table, eqs]); (window.__ops = window.__ops || []).push(['delete', table, eqs]); return Promise.resolve({ data: null, error: null }).then(res, rej); }   // __ops: what reached the 'server', in order
       if (table === 'app_feedback' && window.__NO_FEEDBACK) return Promise.resolve({ data: null, error: { message: 'relation "public.app_feedback" does not exist' } }).then(res, rej);
+      if (payload && table === 'sets' && window.__NOCOL && payload.based_on !== undefined)   // test hook: database without sets.based_on yet
+        return Promise.resolve({ data: null, error: { code: '42703', message: 'column "based_on" of relation "sets" does not exist' } }).then(res, rej);
       if (payload) { (window.__writes = window.__writes || []).push([table, payload]);
         const ms = window.__DELAY ? window.__DELAY(table, payload) : 0;   // test hook: slow / out-of-order responses
         // test hook: __MISSING(table, eqs) → an UPDATE that matches no row (deleted, or hidden by RLS) returns [] — like PostgREST
         const missing = window.__MISSING && window.__MISSING(table, eqs, payload);
-        const land = () => { (window.__landed = window.__landed || []).push([table, payload]); (window.__ops = window.__ops || []).push([missing ? 'noop' : 'write', table, payload]); return { data: missing ? [] : payload, error: null }; };
+        // test hook: __GUARD(payload) → the server's set delete guard skipped this save (upsert returns no row)
+        const guarded = table === 'sets' && window.__GUARD && window.__GUARD(payload);
+        const land = () => { (window.__landed = window.__landed || []).push([table, payload]); (window.__ops = window.__ops || []).push([missing || guarded ? 'noop' : 'write', table, payload]); return { data: missing || guarded ? [] : table === 'sets' ? [{ id: payload.based_on || 'new-' + payload.set_index }] : payload, error: null }; };
         return (ms ? new Promise(r => setTimeout(r, ms)).then(land) : Promise.resolve().then(land)).then(res, rej); }
       if (table === 'workout_days' && single) data = data.find(d => d.id === (location.hash.split('/')[2] || 'd21')) || data[4];
       else if (single || maybe) data = data[0] ?? null;
