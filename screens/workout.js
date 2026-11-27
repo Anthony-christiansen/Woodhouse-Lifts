@@ -1,11 +1,11 @@
 // Woodhouse Lifts — recovery follow-ups (doc §3, §5), workout logger, cardio (moved out of app.js in 1.20.3, code unchanged).
-import * as L from '../logic.js?v=64';
-import { ic } from '../icons.js?v=64';
-import { esc, fmtNum, fmt, today, dayName, weekStart, isoDay } from '../format.js?v=64';
-import { toast, openSheet, closeSheet } from '../ui.js?v=64';
-import { profile, setBuilder } from '../state.js?v=64';
-import { sb, deleteSet, durableWrite, flushQueue, isNetErr, lastSent, overlayDays, pendingOps, qLoad, qStore, saveSet, setKey, storageAtRisk, syncBadge } from '../net.js?v=64';
-import { $, $$, OPTIONAL, RATINGS, W, activeMeso, app, bwD, cardioItems, cardioSince, check, effortShort, effortText, fetchAll, go, haptic, liftInsights, loadExercises, loadPrefs, mesoDays, needKeys, openDays, rateKeys, segHtml, setHeader, sheet, slipFor, statusPill, toLb, unit, warnList, workoutCardioSince } from '../app.js?v=64';
+import * as L from '../logic.js?v=65';
+import { ic } from '../icons.js?v=65';
+import { esc, fmtNum, fmt, today, dayName, weekStart, isoDay } from '../format.js?v=65';
+import { toast, openSheet, closeSheet } from '../ui.js?v=65';
+import { profile, setBuilder } from '../state.js?v=65';
+import { sb, deleteSet, durableWrite, flushQueue, isNetErr, lastSent, overlayDays, pendingOps, qLoad, qStore, saveSet, setKey, storageAtRisk, syncBadge } from '../net.js?v=65';
+import { $, $$, OPTIONAL, RATINGS, W, activeMeso, app, bwD, cardioItems, cardioSince, check, effortShort, effortText, fetchAll, go, haptic, liftInsights, loadExercises, loadPrefs, mesoDays, needKeys, openDays, rateKeys, segHtml, setHeader, sheet, slipFor, statusPill, toLb, unit, warnList, workoutCardioSince } from '../app.js?v=65';
 
 // ---------- recovery follow-ups (doc §3, §5) ----------
 export async function pendingRecovery(day, muscles) {
@@ -277,7 +277,7 @@ export async function renderWorkout(dayId, mode, lookCtx = null) {
         ${infoBtn(we)}</div>
       <div class="sets"><div class="set-head"><div>#</div><div>min</div><div>RPE</div><div></div></div>
         ${Array.from({ length: n }, (_, i) => { const s = we.sets.find(x => x.set_index === i + 1) || {};
-          return `<div class="set ${s.completed_at ? 'done' : ''} ${s._queued ? 'queued' : ''}" data-idx="${i + 1}" data-key="${we.id}:${i + 1}"><div class="n">${i + 1}</div>
+          return `<div class="set ${s.completed_at ? 'done' : ''} ${s._queued ? 'queued' : ''}" data-idx="${i + 1}" data-key="${we.id}:${i + 1}" data-sid="${esc(s.id || '')}"><div class="n">${i + 1}</div>
             <input type="number" inputmode="decimal" step="any" data-f="duration" value="${s.duration_min ?? ''}" placeholder="min">
             <input type="number" inputmode="numeric" min="0" max="10" data-f="rpe" value="${s.rpe ?? ''}" placeholder="0–10">
             <button class="check">✓</button></div>`; }).join('')}
@@ -317,7 +317,7 @@ export async function renderWorkout(dayId, mode, lookCtx = null) {
           ${Array.from({ length: n }, (_, i) => {
             const s = we.sets.find(x => x.set_index === i + 1) || {}; const sg = suggestionFor(we, i);
             const wVal = s.weight ?? sg?.weight ?? (ex.load_type !== 'weighted' && s.reps == null ? '' : '');
-            return `<div class="set ${s.completed_at ? 'done' : ''} ${s._queued ? 'queued' : ''}" data-idx="${i + 1}" data-key="${we.id}:${i + 1}" data-at="${s.completed_at || ''}">
+            return `<div class="set ${s.completed_at ? 'done' : ''} ${s._queued ? 'queued' : ''}" data-idx="${i + 1}" data-key="${we.id}:${i + 1}" data-sid="${esc(s.id || '')}" data-at="${s.completed_at || ''}">
               <div class="n">${i + 1}</div>
               <div class="fld"><input type="number" inputmode="decimal" step="any" data-f="weight" aria-label="Set ${i + 1} weight (${wLabel(ex)})" value="${wVal ?? ''}" class="${s.weight == null && sg?.weight != null ? 'sug' : ''}" placeholder="${ex.load_type === 'weighted' ? 'weight' : '0'}"><span class="dir" data-dir="weight"></span></div>
               <div class="fld"><input type="number" inputmode="numeric" data-f="reps" aria-label="Set ${i + 1} reps" value="${s.reps ?? ''}" placeholder="${sg?.reps != null ? (sg.note?.includes('same reps') ? `${sg.reps}–${sg.reps + 1}` : sg.reps) : ex.rep_min + '–' + ex.rep_max}" data-sug="${sg?.reps ?? ''}"><span class="dir" data-dir="reps"></span></div>
@@ -549,9 +549,10 @@ export async function renderWorkout(dayId, mode, lookCtx = null) {
         // Actual RIR is recorded only when you give it (set 1, optional). Otherwise null = "assumed on target",
         // and every calculation falls back to the prescribed RIR (review #2: don't present the target as measured).
         reps, rir: +row.dataset.idx === 1 && row.closest('[data-we]')?.querySelector('[data-rir1]')?.value !== '' && row.closest('[data-we]')?.querySelector('[data-rir1]') ? Number(row.closest('[data-we]').querySelector('[data-rir1]').value) : null,
-        completed_at: done ? (row.dataset.at || new Date().toISOString()) : null };
+        completed_at: done ? (row.dataset.at || new Date().toISOString()) : null, based_on: row.dataset.sid || null };   // v1.21.2: the server row this edit came from
     };
-    if (row.classList.contains('done')) row.dataset.saved = JSON.stringify(payloadFor(true)); // what the server already has
+    const sigOf = p => JSON.stringify({ ...p, based_on: undefined });   // v1.21.2: learning the row id isn't a change
+    if (row.classList.contains('done')) row.dataset.saved = sigOf(payloadFor(true)); // what the server already has
     const save = async markDone => {
       const wIn = row.querySelector('[data-f="weight"]'), rIn = row.querySelector('[data-f="reps"]');
       if (markDone && rIn.value === '' && rIn.dataset.sug) rIn.value = rIn.dataset.sug;
@@ -561,7 +562,7 @@ export async function renderWorkout(dayId, mode, lookCtx = null) {
       if (markDone && done && weight == null && we.exercises.load_type === 'weighted') return toast('Enter the weight first', true);
       if (!markDone && weight == null && reps == null) return;
       const payload = payloadFor(done);
-      const sig = JSON.stringify(payload);
+      const sig = sigOf(payload);
       if (!markDone && sig === row.dataset.saved) return;          // nothing changed → no request
       if (row.dataset.busy) { row.dataset.again = '1'; return; }    // a save is in flight; send the latest once it lands
       row.dataset.busy = '1'; row.dataset.key = setKey(payload); row.classList.remove('failed', 'queued'); row.classList.add('saving');
@@ -625,7 +626,7 @@ export async function renderWorkout(dayId, mode, lookCtx = null) {
       if (row.dataset.busy) { row.dataset.again = markDone ? 'done' : '1'; return; }
       row.dataset.busy = '1'; row.classList.remove('failed', 'queued'); row.classList.add('saving');
       const payload = { workout_exercise_id: we.id, set_index: +row.dataset.idx, duration_min: duration, rpe,
-        weight: null, reps: null, completed_at: done ? (row.dataset.at || new Date().toISOString()) : null };
+        weight: null, reps: null, completed_at: done ? (row.dataset.at || new Date().toISOString()) : null, based_on: row.dataset.sid || null };
       row.dataset.key = setKey(payload);
       const res = await saveSet(payload);
       delete row.dataset.busy; row.classList.remove('saving');

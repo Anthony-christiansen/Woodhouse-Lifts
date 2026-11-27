@@ -264,5 +264,35 @@ export async function runChecks(db) {
   await assert.rejects(as(db, A, `delete from public.app_feedback where id = $1`, [ida]), /permission|denied/i, 'no deletes');
   await assert.rejects(as(db, B, `insert into public.app_feedback (user_id, rating) values ($1, 1)`, [A]), /row-level|violates/i, 'B cannot post as A');
   console.log('APP FEEDBACK: own rows, insert-only OK');
+  // ---- set delete guard (audit 1.20.8 F02, other-device part): a save based on a deleted row is skipped
+  {
+    const we9 = (await as(db, A, `select we.id from public.workout_exercises we order by we.id limit 1`))[0].id;
+    const up = (based, reps) => as(db, A, `insert into public.sets (workout_exercise_id, set_index, weight, reps, based_on) values ($1, 9, 50, $2, $3)
+      on conflict (workout_exercise_id, set_index) do update set reps = excluded.reps, based_on = excluded.based_on returning id, reps`, [we9, reps, based]);
+    const row9 = async () => (await as(db, A, `select id, reps from public.sets where workout_exercise_id = $1 and set_index = 9`, [we9]))[0] || null;
+    const X = (await up(null, 10))[0].id;                                   // phone A logs set 9
+    assert.equal((await up(X, 11)).length, 1, 'an edit based on the live row is saved');
+    await as(db, A, `delete from public.sets where id = $1`, [X]);           // phone A removes it
+    assert.equal((await as(db, A, `select count(*)::int n from public.set_tombstones where row_id = $1`, [X]))[0].n, 1, 'delete remembered');
+    assert.equal((await up(X, 12)).length, 0, 'stale copy edited from the deleted row: skipped, nothing returned');
+    assert.equal(await row9(), null, '…and the set stays deleted');
+    const Y = (await up(null, 8))[0].id;                                     // re-added fresh
+    assert.ok(Y && Y !== X, 're-adding the set works (new row)');
+    assert.equal((await up(X, 13)).length, 0, 'stale copy hitting the re-added set: skipped');
+    assert.equal((await row9()).reps, 8, '…the re-added set is untouched');
+    assert.equal((await up(Y, 9))[0].reps, 9, 'an edit based on the new row is saved');
+    assert.equal((await as(db, A, `insert into public.sets (workout_exercise_id, set_index, weight, reps) values ($1, 9, 50, 7)
+      on conflict (workout_exercise_id, set_index) do update set reps = excluded.reps returning reps`, [we9]))[0].reps, 7, 'older app (no based_on): unchanged behaviour');
+    // a restore puts the deleted row itself back (same id): never blocked by its own tombstone
+    const Z = (await row9()).id; const zrow = (await as(db, A, `select * from public.sets where id = $1`, [Z]))[0];
+    await as(db, A, `delete from public.sets where id = $1`, [Z]);
+    await as(db, A, `insert into public.sets (id, workout_exercise_id, set_index, weight, reps, based_on) values ($1, $2, 9, 50, $3, $1)`, [Z, we9, zrow.reps]);
+    assert.equal((await row9())?.id, Z, 'restoring a deleted set from backup (same id) works');
+    assert.equal((await as(db, B, `select count(*)::int n from public.set_tombstones`))[0].n, 0, 'B can\'t see A\'s tombstones');
+    await assert.rejects(as(db, B, `insert into public.set_tombstones (row_id, user_id, workout_exercise_id, set_index) values (gen_random_uuid(), $1, $2, 1)`, [A, we9]), /row-level|violates/i, 'B can\'t write A\'s tombstones');
+    await as(db, A, `delete from public.workout_exercises where id = $1`, [we9]);   // cascade: sets go, tombstones don't block it
+    assert.equal((await as(db, A, `select count(*)::int n from public.sets where workout_exercise_id = $1`, [we9]))[0].n, 0, 'deleting an exercise still cascades to its sets');
+    console.log('SET DELETE GUARD: stale copy of a deleted row skipped, re-add works, own rows only, cascades OK');
+  }
   console.log('ALL DB TESTS PASSED');
 }
